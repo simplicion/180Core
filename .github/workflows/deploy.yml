@@ -151,16 +151,18 @@ jobs:
           NEXT_PUBLIC_PROFILE_URL: 'https://profile.180core.cloud'
         run: pnpm --filter 180developers-frontend build
 
-      - name: Deploy to Cloudflare Pages (180core-developers)
+      - name: Deploy to Cloudflare Pages (180workspace-developer)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "ℹ️ CLOUDFLARE_API_TOKEN secret not configured. Skipping Cloudflare Pages upload."
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] && [ -z "$CLOUDFLARE_API_KEY" ]; then
+            echo "ℹ️ Neither CLOUDFLARE_API_TOKEN nor CLOUDFLARE_API_KEY configured. Skipping Cloudflare Pages upload."
             exit 0
           fi
-          npx --yes wrangler pages deploy apps/180developers-frontend/out --project-name=180core-developers --commit-dirty=true
+          npx --yes wrangler pages deploy apps/180developers-frontend/out --project-name=180workspace-developer --commit-dirty=true
 
   deploy-profile-frontend:
     name: Deploy Profile & SSO Portal (Cloudflare Pages)
@@ -195,13 +197,15 @@ jobs:
           NEXT_PUBLIC_DEVELOPERS_URL: 'https://developer.180core.cloud'
         run: pnpm --filter 180-profile-frontend build
 
-      - name: Deploy to Cloudflare Pages (180core-profile)
+      - name: Deploy to Cloudflare Pages (180workspace-profile)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "ℹ️ CLOUDFLARE_API_TOKEN secret not configured. Skipping Cloudflare Pages upload."
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] && [ -z "$CLOUDFLARE_API_KEY" ]; then
+            echo "ℹ️ Neither CLOUDFLARE_API_TOKEN nor CLOUDFLARE_API_KEY configured. Skipping Cloudflare Pages upload."
             exit 0
           fi
-          npx --yes wrangler pages deploy apps/180-profile-frontend/out --project-name=180core-profile --commit-dirty=true
+          npx --yes wrangler pages deploy apps/180-profile-frontend/out --project-name=180workspace-profile --commit-dirty=true
