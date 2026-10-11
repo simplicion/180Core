@@ -32,30 +32,38 @@ export function OneEightyCoreLogo({
     switch (variant) {
       case 'full':
         return {
-          light: '/180-core-logo.png',
-          dark: '/180-core-logo-dark.png',
+          light: '/180-core-logo.svg',
+          dark: '/180-core-logo-dark.svg',
+          fallbackLight: '/180-core-logo.png',
+          fallbackDark: '/180-core-logo-dark.png',
           aspect: 'aspect-[932/223]',
           defaultHeight: 44,
         };
       case 'icon':
         return {
-          light: '/180-core-icon.png',
-          dark: '/180-core-icon-dark.png',
+          light: '/180-core-infinity-icon.svg',
+          dark: '/180-core-infinity-icon.svg',
+          fallbackLight: '/180-core-icon.png',
+          fallbackDark: '/180-core-icon-dark.png',
           aspect: 'aspect-square',
           defaultHeight: 32,
         };
       case 'infinity':
         return {
-          light: '/180-core-infinity-icon.png',
-          dark: '/180-core-infinity-icon-dark.png',
+          light: '/180-core-infinity-icon.svg',
+          dark: '/180-core-infinity-icon.svg',
+          fallbackLight: '/180-core-infinity-icon.png',
+          fallbackDark: '/180-core-infinity-icon-dark.png',
           aspect: 'aspect-square',
           defaultHeight: 32,
         };
       case 'compact':
       default:
         return {
-          light: '/180-core-logo-compact.png',
-          dark: '/180-core-logo-compact-dark.png',
+          light: '/180-core-logo-compact.svg',
+          dark: '/180-core-logo-compact-dark.svg',
+          fallbackLight: '/180-core-logo-compact.png',
+          fallbackDark: '/180-core-logo-compact-dark.png',
           aspect: 'aspect-[932/175]',
           defaultHeight: 36,
         };
@@ -86,6 +94,11 @@ export function OneEightyCoreLogo({
             imageClassName
           )}
           loading="eager"
+          onError={(e) => {
+            if (asset.fallbackLight && !e.currentTarget.src.endsWith(asset.fallbackLight)) {
+              e.currentTarget.src = asset.fallbackLight;
+            }
+          }}
         />
       )}
 
@@ -100,6 +113,11 @@ export function OneEightyCoreLogo({
             imageClassName
           )}
           loading="eager"
+          onError={(e) => {
+            if (asset.fallbackDark && !e.currentTarget.src.endsWith(asset.fallbackDark)) {
+              e.currentTarget.src = asset.fallbackDark;
+            }
+          }}
         />
       )}
     </div>
