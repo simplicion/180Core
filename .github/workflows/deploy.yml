@@ -152,11 +152,14 @@ jobs:
         run: pnpm --filter 180developers-frontend build
 
       - name: Deploy to Cloudflare Pages (180core-developers)
-        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "ℹ️ CLOUDFLARE_API_TOKEN secret not configured. Skipping Cloudflare Pages upload."
+            exit 0
+          fi
           npx --yes wrangler pages deploy apps/180developers-frontend/out --project-name=180core-developers --commit-dirty=true
 
   deploy-profile-frontend:
@@ -193,9 +196,12 @@ jobs:
         run: pnpm --filter 180-profile-frontend build
 
       - name: Deploy to Cloudflare Pages (180core-profile)
-        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "ℹ️ CLOUDFLARE_API_TOKEN secret not configured. Skipping Cloudflare Pages upload."
+            exit 0
+          fi
           npx --yes wrangler pages deploy apps/180-profile-frontend/out --project-name=180core-profile --commit-dirty=true
