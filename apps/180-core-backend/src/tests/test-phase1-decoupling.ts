@@ -18,7 +18,7 @@ import {
     OidcConsumer,
     CompanyResolver,
     WorkspaceSessionService,
-} from '@workspace/workspace-auth';
+} from './support/relying-party';
 
 async function runDecouplingSuite() {
     console.log('\n================================================================');

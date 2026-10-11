@@ -14,7 +14,7 @@ import {
     OidcConsumer,
     CompanyResolver,
     WorkspaceSessionService,
-} from '@workspace/workspace-auth';
+} from './support/relying-party';
 
 async function runRelyingPartyHandshakeSuite() {
     console.log('\n================================================================');

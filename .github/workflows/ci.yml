@@ -1,0 +1,79 @@
+name: 180 Core CI Pipeline
+
+on:
+  push:
+    branches: [main, master, staging, develop]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit-and-build:
+    name: Lint, Audit, Build & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+          POSTGRES_DB: 180core_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9.0.0
+
+      - name: Setup Node.js (v20)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install Monorepo Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Database Client (Prisma)
+        env:
+          CORE_DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/180core_db?schema=public
+        run: pnpm db:generate
+
+      - name: Push Database Schema (CI Validation)
+        env:
+          CORE_DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/180core_db?schema=public
+        run: pnpm db:push
+
+      - name: Build Sovereign SDK Distribution
+        run: pnpm build:sdk
+
+      - name: Run 180 Core SDK End-to-End Test Suite
+        run: pnpm test:sdk
+
+      - name: Build All Packages & Frontend Applications
+        env:
+          BUILD_STANDALONE: true
+          NODE_ENV: production
+          CORE_DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/180core_db?schema=public
+          JWT_SECRET: ci_jwt_secret_token_180_core_test_key_99999
+        run: pnpm build
+
+      - name: Seed Developer & First-Party Catalog
+        env:
+          CORE_DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/180core_db?schema=public
+        run: pnpm db:seed

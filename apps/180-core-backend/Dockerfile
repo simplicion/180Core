@@ -13,13 +13,10 @@ RUN turbo prune 180-core-backend --docker
 FROM base AS installer
 WORKDIR /app
 COPY --from=builder /app/out/json/ .
-# Copy prisma schemas to ensure postinstall (prisma generate) succeeds
-COPY --from=builder /app/packages/db/prisma ./packages/db/prisma
 COPY --from=builder /app/packages/db-180core/prisma ./packages/db-180core/prisma
 RUN pnpm install --prefer-frozen-lockfile
 COPY --from=builder /app/out/full/ .
-RUN pnpm --filter @workspace/db build || (cd packages/db && npx esbuild src/index.ts --platform=node --target=node18 --outfile=dist/index.js)
-RUN pnpm --filter @workspace/db-180core build || (cd packages/db-180core && npx esbuild src/index.ts --platform=node --target=node18 --outfile=dist/index.js)
+RUN pnpm --filter @workspace/db-180core build
 RUN pnpm turbo run build --filter=180-core-backend...
 
 FROM base AS runner

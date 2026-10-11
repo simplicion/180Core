@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: 180core-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-180core_db}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-180core_db}']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/180-core-backend/Dockerfile
+    container_name: 180core-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4003
+      CORE_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-180core_db}?schema=public
+      JWT_SECRET: ${JWT_SECRET:-sovereign_core_jwt_secret_key_production_180}
+      CORS_ALLOWED_ORIGINS: http://localhost:3008,http://localhost:3009,https://profile.180workspace.com,https://developers.180workspace.com
+    ports:
+      - '4003:4003'
+
+  profile-frontend:
+    build:
+      context: .
+      dockerfile: apps/180-profile-frontend/Dockerfile
+    container_name: 180core-profile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3009
+      NEXT_PUBLIC_CORE_API_URL: http://localhost:4003
+      NEXT_PUBLIC_PROFILE_URL: http://localhost:3009
+      NEXT_PUBLIC_DEVELOPERS_URL: http://localhost:3008
+    ports:
+      - '3009:3009'
+
+  developers-frontend:
+    build:
+      context: .
+      dockerfile: apps/180developers-frontend/Dockerfile
+    container_name: 180core-developers
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3008
+      NEXT_PUBLIC_CORE_API_URL: http://localhost:4003
+      NEXT_PUBLIC_PROFILE_URL: http://localhost:3009
+      NEXT_PUBLIC_DEVELOPERS_URL: http://localhost:3008
+    ports:
+      - '3008:3008'
+
+volumes:
+  postgres_data:

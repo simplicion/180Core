@@ -18,7 +18,8 @@
     "db:seed": "node scripts/seed-simplicion-root.mjs",
     "lint": "turbo run lint",
     "clean": "turbo run clean && rm -rf node_modules",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\""
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "test": "node scripts/test-all.mjs"
   },
   "devDependencies": {
     "prettier": "latest",
