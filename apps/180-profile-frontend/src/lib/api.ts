@@ -3,7 +3,7 @@
  * Directs all API and OAuth calls to the universal core backend (services.180workspace.com)
  */
 
-const envCoreUrl = process.env.NEXT_PUBLIC_CORE_BACKEND_URL;
+const envCoreUrl = process.env.NEXT_PUBLIC_CORE_BACKEND_URL || process.env.NEXT_PUBLIC_CORE_API_URL || process.env.NEXT_PUBLIC_API_URL;
 export const CORE_BACKEND_URL =
   (envCoreUrl && !envCoreUrl.includes(':4004'))
     ? envCoreUrl
@@ -19,6 +19,7 @@ export function isCustomDomainHost(): boolean {
     host !== 'localhost' &&
     host !== '127.0.0.1' &&
     !host.endsWith('180workspace.com') &&
+    !host.endsWith('180core.cloud') &&
     !host.endsWith('.pages.dev')
   );
 }
