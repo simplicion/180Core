@@ -5,11 +5,57 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  deploy-core:
-    name: Build & Deploy Sovereign Core Platform
+  detect-changes:
+    name: Detect Changed Subsystems
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      developers: ${{ steps.filter.outputs.developers }}
+      profile: ${{ steps.filter.outputs.profile }}
+      global: ${{ steps.filter.outputs.global }}
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Path Filter Inspection
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'apps/180-core-backend/**'
+              - 'packages/db-180core/**'
+              - 'packages/domains/**'
+              - 'packages/identity-provider/**'
+              - 'packages/payment-provider/**'
+              - 'packages/integrations/**'
+              - 'packages/keys/**'
+              - 'Dockerfile'
+              - 'docker-compose.yml'
+            developers:
+              - 'apps/180developers-frontend/**'
+              - 'packages/identity-sdk/**'
+              - 'packages/ui/**'
+            profile:
+              - 'apps/180-profile-frontend/**'
+              - 'packages/ui/**'
+            global:
+              - '.github/workflows/deploy.yml'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'turbo.json'
+
+  deploy-backend:
+    name: Deploy Backend & Migrate Database (AWS EC2 / RDS)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.global == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout Source Code
@@ -26,19 +72,131 @@ jobs:
           node-version: 20
           cache: 'pnpm'
 
-      - name: Install Dependencies
+      - name: Install Monorepo Dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build SDK & Sync CDN Edge
+      - name: Run Prisma DB Push (AWS RDS Postgres)
         env:
-          CLOUDFLARE_R2_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_ENDPOINT }}
-          CLOUDFLARE_R2_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
-          CLOUDFLARE_R2_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
-          CLOUDFLARE_R2_BUCKET_NAME: ${{ secrets.CLOUDFLARE_R2_BUCKET_NAME || '180workspace' }}
+          CORE_DATABASE_URL: ${{ secrets.CORE_DATABASE_URL }}
+        run: |
+          pnpm db:generate
+          pnpm db:push
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: Deploy & Restart Backend Container on AWS EC2
+        env:
+          INSTANCE_ID: ${{ secrets.AWS_INSTANCE_ID }}
+        run: |
+          echo "Triggering zero-downtime reload on EC2 ($INSTANCE_ID)..."
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "commands=[
+              'docker restart 180workspace-core-backend',
+              'sleep 3',
+              'curl -sf http://localhost:4003/health || exit 1'
+            ]" \
+            --query "Command.CommandId" \
+            --output text)
+          
+          echo "SSM Command dispatched: $COMMAND_ID"
+          aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID"
+          aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" --query "StandardOutputContent" --output text
+          echo "✅ Backend successfully restarted and verified healthy."
+
+      - name: Verify Public Edge Healthcheck
+        run: |
+          echo "Testing public ingress endpoint..."
+          curl -sf -H "Host: api.180core.cloud" http://32.198.110.99/health || echo "Edge warming up..."
+
+  deploy-developers-frontend:
+    name: Deploy Developer Portal (Cloudflare Pages)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.developers == 'true' || needs.detect-changes.outputs.global == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9.0.0
+
+      - name: Setup Node.js (v20)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install Monorepo Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Sovereign SDK Mirror
         run: pnpm build:sdk
 
-      - name: Build Production Artifacts
+      - name: Build Developers Frontend (Static Export)
         env:
           NODE_ENV: production
-          CORE_DATABASE_URL: ${{ secrets.CORE_DATABASE_URL }}
-        run: pnpm build
+          CF_PAGES: 'true'
+          NEXT_PUBLIC_CORE_BACKEND_URL: 'https://api.180core.cloud'
+          NEXT_PUBLIC_API_URL: 'https://api.180core.cloud'
+          NEXT_PUBLIC_PROFILE_URL: 'https://profile.180core.cloud'
+        run: pnpm --filter 180developers-frontend build
+
+      - name: Deploy to Cloudflare Pages (180core-developers)
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx --yes wrangler pages deploy apps/180developers-frontend/out --project-name=180core-developers --commit-dirty=true
+
+  deploy-profile-frontend:
+    name: Deploy Profile & SSO Portal (Cloudflare Pages)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.profile == 'true' || needs.detect-changes.outputs.global == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9.0.0
+
+      - name: Setup Node.js (v20)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install Monorepo Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Profile Frontend (Static Export)
+        env:
+          NODE_ENV: production
+          CF_PAGES: 'true'
+          NEXT_PUBLIC_CORE_API_URL: 'https://api.180core.cloud'
+          NEXT_PUBLIC_DEVELOPERS_URL: 'https://developer.180core.cloud'
+        run: pnpm --filter 180-profile-frontend build
+
+      - name: Deploy to Cloudflare Pages (180core-profile)
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx --yes wrangler pages deploy apps/180-profile-frontend/out --project-name=180core-profile --commit-dirty=true

@@ -54,13 +54,17 @@ const allowedOrigins = [
   'https://profile.180workspace.com',
   'https://developers.180workspace.com',
   'https://auth.180workspace.com',
+  'https://180core.cloud',
+  'https://profile.180core.cloud',
+  'https://developer.180core.cloud',
+  'https://api.180core.cloud',
 ];
 
 app.use(
   cors({
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps, curl, server-to-server) or matching allowed
-      if (!origin || allowedOrigins.includes(origin) || origin.endsWith('180workspace.com')) {
+      if (!origin || allowedOrigins.includes(origin) || origin.endsWith('180workspace.com') || origin.endsWith('180core.cloud')) {
         callback(null, true);
       } else {
         callback(null, true); // Allow all for 3rd-party checkout and OAuth integrations
@@ -86,6 +90,67 @@ app.use(
     ],
   })
 );
+
+// Root & Healthcheck
+app.get('/', (req, res) => {
+  if (req.accepts('html')) {
+    res.send(`
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>180 Core Backend API</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #09090b; color: #f4f4f5; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 24px; box-sizing: border-box; }
+          .card { background: #18181b; border: 1px solid #27272a; border-radius: 14px; padding: 32px; max-width: 520px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }
+          .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 9999px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 16px; }
+          .dot { width: 6px; height: 6px; background: #10b981; border-radius: 50%; }
+          h1 { margin: 0 0 8px; font-size: 22px; font-weight: 700; color: #fafafa; }
+          p { margin: 0 0 20px; color: #a1a1aa; font-size: 14px; line-height: 1.6; }
+          .links { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+          .btn { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; background: #27272a; color: #fafafa; text-decoration: none; border-radius: 10px; font-size: 14px; font-weight: 500; transition: all 0.2s; border: 1px solid #3f3f46; }
+          .btn:hover { background: #3f3f46; border-color: #52525b; transform: translateY(-1px); }
+          .btn span.sub { color: #a1a1aa; font-size: 12px; font-mono: monospace; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div class="badge"><span class="dot"></span> Online &bull; Port 4003</div>
+          <h1>180 Core Backend API</h1>
+          <p>This port hosts the <strong>180 Core REST &amp; OIDC API</strong>. If you are looking for the web applications, launch them using the links below:</p>
+          <div class="links">
+            <a class="btn" href="http://localhost:3008" target="_blank">
+              <span><strong>180 Developer Portal</strong></span>
+              <span class="sub">localhost:3008 &rarr;</span>
+            </a>
+            <a class="btn" href="http://localhost:3009" target="_blank">
+              <span><strong>180 Profile / SSO Portal</strong></span>
+              <span class="sub">localhost:3009 &rarr;</span>
+            </a>
+            <a class="btn" href="/health">
+              <span>Healthcheck Status</span>
+              <span class="sub">/health &rarr;</span>
+            </a>
+          </div>
+        </div>
+      </body>
+      </html>
+    `);
+  } else {
+    res.json({
+      service: '180-core-backend',
+      status: 'ok',
+      version: '1.0.0',
+      description: '180 Sovereign Core Platform API',
+      frontends: {
+        developers: 'http://localhost:3008',
+        profile: 'http://localhost:3009',
+      },
+      health: '/health',
+    });
+  }
+});
 
 // Healthcheck
 app.get('/health', (req, res) => {

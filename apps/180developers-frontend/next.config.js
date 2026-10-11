@@ -6,11 +6,11 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_180_CLIENT_ID: process.env.NEXT_PUBLIC_180_CLIENT_ID || '180-developers-portal',
     NEXT_PUBLIC_IDENTITY_CLIENT_ID: process.env.NEXT_PUBLIC_IDENTITY_CLIENT_ID || '180-developers-portal',
-    NEXT_PUBLIC_IDENTITY_SERVER_URL: process.env.NEXT_PUBLIC_IDENTITY_SERVER_URL || (isDev ? 'http://localhost:4002' : 'https://identity.180workspace.com'),
-    NEXT_PUBLIC_DEVELOPERS_API_URL: process.env.NEXT_PUBLIC_DEVELOPERS_API_URL || (isDev ? 'http://localhost:4002/api/v1/developers' : 'https://identity.180workspace.com/api/v1/developers'),
-    NEXT_PUBLIC_CORE_BACKEND_URL: process.env.NEXT_PUBLIC_CORE_BACKEND_URL || (isDev ? 'http://localhost:4003' : 'https://services.180workspace.com'),
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || (isDev ? 'http://localhost:4003' : 'https://services.180workspace.com'),
-    NEXT_PUBLIC_PROFILE_URL: process.env.NEXT_PUBLIC_PROFILE_URL || (isDev ? 'http://localhost:3009' : 'https://profile.180workspace.com'),
+    NEXT_PUBLIC_IDENTITY_SERVER_URL: process.env.NEXT_PUBLIC_IDENTITY_SERVER_URL || (isDev ? 'http://localhost:4002' : 'https://api.180core.cloud'),
+    NEXT_PUBLIC_DEVELOPERS_API_URL: process.env.NEXT_PUBLIC_DEVELOPERS_API_URL || (isDev ? 'http://localhost:4002/api/v1/developers' : 'https://api.180core.cloud/api/v1/developers'),
+    NEXT_PUBLIC_CORE_BACKEND_URL: process.env.NEXT_PUBLIC_CORE_BACKEND_URL || (isDev ? 'http://localhost:4003' : 'https://api.180core.cloud'),
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || (isDev ? 'http://localhost:4003' : 'https://api.180core.cloud'),
+    NEXT_PUBLIC_PROFILE_URL: process.env.NEXT_PUBLIC_PROFILE_URL || (isDev ? 'http://localhost:3009' : 'https://profile.180core.cloud'),
   },
   ...(isExport ? { output: 'export', images: { unoptimized: true } } : {}),
   async redirects() {

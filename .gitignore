@@ -49,6 +49,9 @@ out.txt
 .DS_Store
 *.pem
 eslint-report.json
+*.png
+*.jpg
+*.jpeg
 
 # IDEs and Editors
 .vscode/

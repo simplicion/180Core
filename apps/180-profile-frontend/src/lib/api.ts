@@ -10,7 +10,7 @@ export const CORE_BACKEND_URL =
     : (typeof window !== 'undefined' &&
       (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
         ? 'http://localhost:4003'
-        : 'https://services.180workspace.com');
+        : 'https://api.180core.cloud');
 
 export function isCustomDomainHost(): boolean {
   if (typeof window === 'undefined') return false;
