@@ -53,6 +53,38 @@ export default function RootLayout({
             `,
           }}
         />
+
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                if (typeof window === 'undefined') return;
+                var KEY = '__180_chunk_auto_heal__';
+                function heal() {
+                  var last = parseInt(sessionStorage.getItem(KEY) || '0', 10);
+                  if (Date.now() - last > 8000) {
+                    sessionStorage.setItem(KEY, Date.now().toString());
+                    window.location.reload();
+                  }
+                }
+                window.addEventListener('error', function(e) {
+                  var t = e.target;
+                  if (t && t.tagName === 'SCRIPT' && t.src && (t.src.indexOf('/_next/') !== -1 || t.src.indexOf('main-app.js') !== -1)) {
+                    heal();
+                  } else if (e.message && (e.message.indexOf('Loading chunk') !== -1 || e.message.indexOf('ChunkLoadError') !== -1)) {
+                    heal();
+                  }
+                }, true);
+                window.addEventListener('unhandledrejection', function(e) {
+                  var reason = e.reason && (e.reason.message || e.reason.name || '');
+                  if (typeof reason === 'string' && (reason.indexOf('ChunkLoadError') !== -1 || reason.indexOf('Loading chunk') !== -1)) {
+                    heal();
+                  }
+                });
+              })();
+            `,
+          }}
+        />
       </head>
       <body className="bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 min-h-screen flex flex-col selection:bg-blue-600 selection:text-white antialiased transition-colors duration-200">
         <Toaster

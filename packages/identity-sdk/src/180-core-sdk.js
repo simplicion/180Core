@@ -309,14 +309,50 @@
         '<div style="font-size: 11px; font-weight: 500; color: #a1a1aa; letter-spacing: 0.02em;">Loading Secure Window...</div>'
       ].join('');
 
+      var loadTimer = setTimeout(function () {
+        if (spinner && spinner.parentNode) {
+          var isLocal = options.url && options.url.indexOf('localhost:3009') !== -1;
+          spinner.innerHTML = [
+            '<div style="width: 32px; height: 32px; border-radius: 50%; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); display: flex; align-items: center; justify-content: center; color: #ef4444; font-weight: bold;">!</div>',
+            '<div style="font-size: 13px; font-weight: 700; color: #f4f4f5;">Connection Timeout</div>',
+            '<div style="font-size: 11px; color: #94a3b8; text-align: center; max-width: 320px; line-height: 1.4;">' +
+              (isLocal
+                ? 'Unable to reach local 180 Identity server (localhost:3009). Run "pnpm dev" in 180 core, or switch to production: OneEighty.auth.signIn({ environment: "production" })'
+                : 'Unable to load 180 Sovereign Window. Check your network connection or verify Allowed Origins in Developer Console.') +
+            '</div>',
+            '<button type="button" style="margin-top: 6px; padding: 6px 14px; border-radius: 8px; background: #27272a; color: #fff; border: 1px solid #3f3f46; font-size: 11px; cursor: pointer;">Retry</button>'
+          ].join('');
+          var retryBtn = spinner.querySelector('button');
+          if (retryBtn) {
+            retryBtn.onclick = function () {
+              iframe.src = options.url;
+            };
+          }
+        }
+      }, 10000);
+
       var iframe = document.createElement('iframe');
       iframe.src = options.url;
       iframe.allow = 'clipboard-write; payment; geolocation';
       iframe.style.cssText = 'width: 100%; height: 100%; border: none; background: transparent; opacity: 0; transition: opacity 0.2s ease;';
       iframe.onload = function () {
+        if (loadTimer) clearTimeout(loadTimer);
         spinner.style.opacity = '0';
         iframe.style.opacity = '1';
         setTimeout(function () { if (spinner.parentNode) spinner.remove(); }, 200);
+      };
+      iframe.onerror = function () {
+        if (loadTimer) clearTimeout(loadTimer);
+        var isLocal = options.url && options.url.indexOf('localhost:3009') !== -1;
+        spinner.innerHTML = [
+          '<div style="width: 32px; height: 32px; border-radius: 50%; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); display: flex; align-items: center; justify-content: center; color: #ef4444; font-weight: bold;">!</div>',
+          '<div style="font-size: 13px; font-weight: 700; color: #f4f4f5;">Failed to Load Window</div>',
+          '<div style="font-size: 11px; color: #94a3b8; text-align: center; max-width: 320px; line-height: 1.4;">' +
+            (isLocal
+              ? 'Local server on port 3009 is unreachable. Start 180 core or specify environment: "production".'
+              : 'Window failed to load. Check your network connection.') +
+          '</div>'
+        ].join('');
       };
 
       iframeWrap.appendChild(spinner);
