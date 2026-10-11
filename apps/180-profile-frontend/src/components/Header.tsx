@@ -16,6 +16,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { HelpIcon } from '@workspace/ui';
+import { OneEightyCoreLogo } from './OneEightyCoreLogo';
 import toast from 'react-hot-toast';
 import { UserProfile } from '../types';
 
@@ -79,29 +80,16 @@ export function Header({ balance, user }: HeaderProps) {
           {/* Logo & Platform Name: Always visible across all screen sizes */}
           <Link
             href="/"
-            className="flex items-center gap-3 group min-h-[44px] shrink-0 cursor-pointer"
+            className="flex items-center gap-2.5 group min-h-[44px] shrink-0 cursor-pointer"
           >
-            <div className="w-9 h-9 min-w-[36px] min-h-[36px] max-w-[36px] max-h-[36px] rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200/90 dark:border-zinc-700 shadow-2xs shrink-0 flex items-center justify-center p-1.5 overflow-hidden group-hover:border-slate-300 transition-colors">
-              <img
-                src="/black-icon.svg"
-                alt="180 Logo"
-                className="w-full h-full object-contain block dark:hidden group-hover:scale-105 transition-transform"
-              />
-              <img
-                src="/white-icon.svg"
-                alt="180 Logo"
-                className="w-full h-full object-contain hidden dark:block group-hover:scale-105 transition-transform"
-              />
-            </div>
-            <div className="flex flex-col">
-              <span className="font-bold text-sm tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
-                180 Profile
-                <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded-md">
-                  Universal
-                </span>
-              </span>
-              <span className="text-[11px] text-slate-500 font-medium">Identity &amp; Universal Wallet</span>
-            </div>
+            <OneEightyCoreLogo
+              variant="compact"
+              height={30}
+              className="group-hover:scale-105 transition-transform duration-200"
+            />
+            <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60 rounded-md">
+              Universal Identity
+            </span>
           </Link>
 
           {/* Breadcrumb: Visible when navigating subpages */}

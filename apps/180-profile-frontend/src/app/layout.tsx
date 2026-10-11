@@ -8,12 +8,12 @@ export const metadata: Metadata = {
   description: 'Manage your unified 180 Profile, prepaid wallet balance, top-ups, and developer authorizations.',
   icons: {
     icon: [
-      { url: '/black-icon.svg', media: '(prefers-color-scheme: light)' },
-      { url: '/white-icon.svg', media: '(prefers-color-scheme: dark)' },
-      { url: '/black-icon.svg' },
+      { url: '/180-core-icon.png', media: '(prefers-color-scheme: light)' },
+      { url: '/180-core-icon-dark.png', media: '(prefers-color-scheme: dark)' },
+      { url: '/180-core-icon.png' },
     ],
-    shortcut: '/black-icon.svg',
-    apple: '/black-icon.svg',
+    shortcut: '/180-core-icon.png',
+    apple: '/180-core-icon.png',
   },
 };
 
@@ -25,9 +25,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <link rel="icon" href="/black-icon.svg" media="(prefers-color-scheme: light)" />
-        <link rel="icon" href="/white-icon.svg" media="(prefers-color-scheme: dark)" />
-        <link rel="apple-touch-icon" href="/black-icon.svg" />
+        <link rel="icon" href="/180-core-icon.png" media="(prefers-color-scheme: light)" />
+        <link rel="icon" href="/180-core-icon-dark.png" media="(prefers-color-scheme: dark)" />
+        <link rel="apple-touch-icon" href="/180-core-icon.png" />
         <link rel="preconnect" href="https://api.fontshare.com" />
         <link
           href="https://api.fontshare.com/v2/css?f[]=satoshi@900,700,500,300,400&display=swap"

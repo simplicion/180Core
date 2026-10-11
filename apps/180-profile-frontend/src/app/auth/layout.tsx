@@ -3,6 +3,7 @@
 import React, { Suspense } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
+import { OneEightyCoreLogo } from '@/components/OneEightyCoreLogo';
 
 function AuthWatermark() {
   const searchParams = useSearchParams();
@@ -10,11 +11,11 @@ function AuthWatermark() {
   if (clientId) return null;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center opacity-[0.02] pointer-events-none">
+    <div className="fixed inset-0 flex items-center justify-center opacity-[0.025] pointer-events-none">
       <img
-        src="/black-icon.svg"
+        src="/180-core-logo.png"
         alt=""
-        className="w-80 h-80 object-contain"
+        className="w-[480px] max-w-full object-contain"
         onError={(e) => {
           (e.currentTarget as HTMLElement).style.display = 'none';
         }}
@@ -33,19 +34,8 @@ function AuthHeader() {
   }
 
   return (
-    <header className="relative z-10 w-full pt-6 pb-2 px-6 flex items-center justify-center gap-2.5">
-      <img
-        src="/black-icon.svg"
-        alt="180 Profile"
-        className="w-7 h-7 object-contain"
-        onError={(e) => {
-          const target = e.currentTarget as HTMLImageElement;
-          if (!target.src.includes('black-icon')) target.src = '/black-icon.svg';
-        }}
-      />
-      <span className="font-bold text-base tracking-tight text-gray-900">
-        <span className="text-black font-extrabold">180</span>profile
-      </span>
+    <header className="relative z-10 w-full pt-6 pb-2 px-6 flex items-center justify-center">
+      <OneEightyCoreLogo variant="compact" height={34} />
     </header>
   );
 }

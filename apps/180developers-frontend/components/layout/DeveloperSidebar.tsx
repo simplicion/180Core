@@ -20,6 +20,7 @@ import {
   FolderGit2,
 } from 'lucide-react';
 import { Button } from '@workspace/ui';
+import { OneEightyCoreLogo, OneEightyCoreIcon } from '@/components/OneEightyCoreLogo';
 import { getDocsUrl, DOCS_LINKS } from '@/lib/docs-url';
 
 export interface DeveloperSidebarProps {
@@ -190,20 +191,15 @@ export function DeveloperSidebar({
             <Link
               href="/dashboard"
               onClick={onMobileClose}
-              className="flex items-center gap-2.5 p-1 rounded-xl group transition-all min-h-[44px] min-w-0"
+              className="flex items-center gap-2 p-1 rounded-xl group transition-all min-h-[44px] min-w-0"
             >
-              <div className="w-8 h-8 rounded-xl bg-white dark:bg-zinc-950 border border-zinc-200/80 dark:border-white/10 flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
-                <img
-                  src="/black-icon.svg"
-                  alt="180 Developers"
-                  className="w-5 h-5 object-contain dark:invert"
+              <div className="flex flex-col min-w-0">
+                <OneEightyCoreLogo
+                  variant="compact"
+                  height={28}
+                  className="group-hover:scale-105 transition-transform"
                 />
-              </div>
-              <div className="min-w-0">
-                <span className="font-extrabold text-base tracking-tight text-zinc-950 dark:text-white whitespace-nowrap block">
-                  180 Developers
-                </span>
-                <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium tracking-wide flex items-center gap-1">
+                <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium tracking-wide flex items-center gap-1.5 pl-0.5 mt-0.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                   Console
                 </span>
@@ -224,14 +220,10 @@ export function DeveloperSidebar({
           <Link
             href="/dashboard"
             onClick={onMobileClose}
-            className="w-10 h-10 rounded-xl bg-white dark:bg-zinc-950 border border-zinc-200/80 dark:border-white/10 flex items-center justify-center mx-auto hover:scale-105 transition-all shadow-xs"
-            title="180 Developers"
+            className="w-10 h-10 rounded-xl bg-white dark:bg-zinc-950 border border-zinc-200/80 dark:border-white/10 flex items-center justify-center mx-auto hover:scale-105 transition-all shadow-xs p-1.5"
+            title="180 Core Developer Console"
           >
-            <img
-              src="/black-icon.svg"
-              alt="180 Developers"
-              className="w-5 h-5 object-contain dark:invert"
-            />
+            <OneEightyCoreIcon size={24} />
           </Link>
         )}
 

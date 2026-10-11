@@ -17,6 +17,7 @@ import {
   Code2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { OneEightyCoreLogo } from './OneEightyCoreLogo';
 import { UserProfile } from '../types';
 
 interface DesktopSidebarProps {
@@ -54,27 +55,16 @@ export function DesktopSidebar({ user, balance }: DesktopSidebarProps) {
     <aside className="hidden lg:flex flex-col w-64 xl:w-72 shrink-0 border-r border-slate-200/80 dark:border-white/10 bg-white/95 dark:bg-black/95 backdrop-blur-xl h-screen sticky top-0 z-30 select-none transition-colors duration-200">
       {/* 1. Brand Header */}
       <div className="p-5 border-b border-slate-200/70 dark:border-white/10 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-3 group min-h-[44px]">
-          <div className="w-9 h-9 rounded-xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/80 dark:border-white/10 flex items-center justify-center p-1.5 shadow-xs shrink-0 group-hover:scale-105 transition-all">
-            <img
-              src="/black-icon.svg"
-              alt="180 Profile"
-              className="w-5 h-5 object-contain block dark:hidden"
-            />
-            <img
-              src="/white-icon.svg"
-              alt="180 Profile"
-              className="w-5 h-5 object-contain hidden dark:block"
-            />
-          </div>
+        <Link href="/" className="flex items-center gap-2.5 group min-h-[44px]">
           <div className="flex flex-col">
-            <span className="font-bold text-sm tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
-              180 Profile
-              <span className="px-1.5 py-0.5 text-[9px] font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white border border-zinc-200 dark:border-white/10 rounded-md">
-                Universal
-              </span>
+            <OneEightyCoreLogo
+              variant="compact"
+              height={28}
+              className="group-hover:scale-105 transition-transform"
+            />
+            <span className="text-[10px] text-slate-500 dark:text-zinc-400 font-medium pl-0.5 mt-0.5">
+              Universal Identity Protocol
             </span>
-            <span className="text-[11px] text-slate-500 dark:text-zinc-400 font-medium">Universal Identity Protocol</span>
           </div>
         </Link>
       </div>

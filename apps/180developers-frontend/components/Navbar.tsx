@@ -17,6 +17,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { AILogoIcon, Button } from '@workspace/ui';
+import { OneEightyCoreLogo } from './OneEightyCoreLogo';
 import { use180Identity } from '@workspace/identity-sdk';
 import toast from 'react-hot-toast';
 import ThemeToggle from './ThemeToggle';
@@ -145,16 +146,14 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
         {/* Left: Clean Brand Logo */}
         <div className="flex items-center gap-6 shrink-0">
-          <Link href="/" className="flex items-center gap-3 group min-h-[44px] shrink-0">
-            <div className="w-9 h-9 min-w-[36px] min-h-[36px] rounded-xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/80 dark:border-white/10 flex items-center justify-center p-1.5 shadow-xs group-hover:scale-105 transition-all duration-300 shrink-0">
-              <img
-                src="/black-icon.svg"
-                alt="180 Developers"
-                className="w-5 h-5 min-w-[20px] min-h-[20px] object-contain dark:invert group-hover:scale-110 transition-transform duration-300 shrink-0"
-              />
-            </div>
-            <span className="font-extrabold text-base tracking-tight text-zinc-950 dark:text-white flex items-center">
-              180 Developers
+          <Link href="/" className="flex items-center gap-2.5 group min-h-[44px] shrink-0">
+            <OneEightyCoreLogo
+              variant="compact"
+              height={32}
+              className="group-hover:scale-105 transition-transform duration-200"
+            />
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800/80 px-2 py-0.5 rounded-md border border-zinc-200/80 dark:border-white/10 hidden sm:inline-flex items-center">
+              Developers
             </span>
           </Link>
         </div>

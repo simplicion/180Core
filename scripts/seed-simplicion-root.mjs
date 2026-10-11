@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -59,9 +60,8 @@ async function main() {
         passwordHash,
         role: 'SUPERADMIN',
         isVerified: true,
-        emailVerified: true,
-        isActive: true,
-        isOnboardingComplete: true,
+        isEmailVerified: true,
+        isOnboarded: true,
       },
     });
     console.log(`[Identity DB] Updated root user: ${user.id} (${user.email})`);
@@ -75,9 +75,8 @@ async function main() {
         passwordHash,
         role: 'SUPERADMIN',
         isVerified: true,
-        emailVerified: true,
-        isActive: true,
-        isOnboardingComplete: true,
+        isEmailVerified: true,
+        isOnboarded: true,
       },
     });
     console.log(`[Identity DB] Created root user: ${user.id} (${user.email})`);
