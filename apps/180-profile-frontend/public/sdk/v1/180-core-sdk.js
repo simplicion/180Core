@@ -42,18 +42,18 @@
     switch (code) {
       case '180_ERR_ORIGIN_NOT_WHITELISTED':
       case 'unauthorized_client':
-        return 'Origin (' + (isBrowser ? window.location.origin : '') + ') is not whitelisted. Register your domain or localhost in https://developers.180workspace.com under Allowed Origins.';
+        return 'Origin (' + (isBrowser ? window.location.origin : '') + ') is not whitelisted. Register your domain or localhost in https://developer.180core.cloud under Allowed Origins.';
       case '180_ERR_INVALID_CLIENT_ID':
       case 'invalid_client':
-        return 'Client ID is invalid or missing. Verify NEXT_PUBLIC_180_CLIENT_ID or create an app in https://developers.180workspace.com.';
+        return 'Client ID is invalid or missing. Verify NEXT_PUBLIC_180_CLIENT_ID or create an app in https://developer.180core.cloud.';
       case '180_ERR_POPUP_BLOCKED':
         return 'Browser blocked opening popup. Trigger signIn from a direct user click or use uxMode: "bottom_sheet".';
       case '180_ERR_NETWORK_DISCONNECTED':
-        return 'Failed to reach 180 Sovereign Cloud. Verify internet connectivity or check https://status.180workspace.com.';
+        return 'Failed to reach 180 Sovereign Cloud. Verify internet connectivity or check https://developer.180core.cloud.';
       case '180_ERR_TIMEOUT':
         return 'Connection timed out waiting for 180 Identity server to respond.';
       default:
-        return 'Consult 180 Core documentation at https://docs.180workspace.com for integration guidelines.';
+        return 'Consult 180 Core documentation at https://developer.180core.cloud for integration guidelines.';
     }
   }
 
@@ -68,9 +68,9 @@
   }
 
   var activeEnv = resolveEnvironmentMode();
-  var DEFAULT_AUTH_SERVER = activeEnv === 'production' ? 'https://profile.180workspace.com' : 'http://localhost:3009';
-  var DEFAULT_PAY_SERVER = activeEnv === 'production' ? 'https://pay.180workspace.com' : 'http://localhost:3009';
-  var DEFAULT_API_SERVER = activeEnv === 'production' ? 'https://api.180workspace.com' : 'http://localhost:4002';
+  var DEFAULT_AUTH_SERVER = activeEnv === 'production' ? 'https://profile.180core.cloud' : 'http://localhost:3009';
+  var DEFAULT_PAY_SERVER = activeEnv === 'production' ? 'https://profile.180core.cloud' : 'http://localhost:3009';
+  var DEFAULT_API_SERVER = activeEnv === 'production' ? 'https://api.180core.cloud' : 'http://localhost:4003';
 
   // ─── INTELLIGENT DEVICE & VIEWPORT DETECTOR ───────────────────────────────
   function isMobileViewport() {
@@ -447,7 +447,7 @@
       options = options || {};
       var clientId = options.clientId || '180-core-client';
       var env = resolveEnvironmentMode(options.environment);
-      var authServer = options.authServerUrl || (env === 'production' ? 'https://profile.180workspace.com' : DEFAULT_AUTH_SERVER);
+      var authServer = options.authServerUrl || (env === 'production' ? 'https://profile.180core.cloud' : DEFAULT_AUTH_SERVER);
       var redirectUri = options.redirectUri || (isBrowser ? window.location.origin + '/oauth/callback' : '');
       var scope = options.scope || 'openid identity:read identity:email';
       var state = options.state || generateRandomString(16);
@@ -537,7 +537,7 @@
     checkout: function (options) {
       options = options || {};
       var env = resolveEnvironmentMode(options.environment);
-      var payServer = options.payServerUrl || (env === 'production' ? 'https://pay.180workspace.com' : DEFAULT_PAY_SERVER);
+      var payServer = options.payServerUrl || (env === 'production' ? 'https://profile.180core.cloud' : DEFAULT_PAY_SERVER);
       var sessionId = options.sessionId || 'cs_' + generateRandomString(24);
 
       var query = [

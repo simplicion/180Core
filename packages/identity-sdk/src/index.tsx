@@ -164,7 +164,7 @@ const getAuthServerUrl = (customUrl?: string, envMode?: EnvironmentMode): string
   if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_180_AUTH_URL) {
     return process.env.NEXT_PUBLIC_180_AUTH_URL;
   }
-  return 'https://profile.180workspace.com';
+  return 'https://profile.180core.cloud';
 };
 
 const getPayServerUrl = (customUrl?: string, envMode?: EnvironmentMode): string => {
@@ -182,7 +182,7 @@ const getPayServerUrl = (customUrl?: string, envMode?: EnvironmentMode): string 
   if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_180_PAY_URL) {
     return process.env.NEXT_PUBLIC_180_PAY_URL;
   }
-  return 'https://pay.180workspace.com';
+  return 'https://profile.180core.cloud';
 };
 
 /**
