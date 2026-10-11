@@ -137,8 +137,14 @@ export class OAuthController {
                     try {
                         const parsedRegistered = new URL(cleanRegistered);
                         const parsedTarget = new URL(cleanTarget);
-                        return parsedRegistered.origin.toLowerCase() === parsedTarget.origin.toLowerCase() &&
-                               parsedRegistered.pathname === parsedTarget.pathname;
+                        if (parsedRegistered.pathname !== parsedTarget.pathname) return false;
+                        if (parsedRegistered.protocol !== parsedTarget.protocol) return false;
+                        if (parsedRegistered.hostname === parsedTarget.hostname) return true;
+                        if (parsedRegistered.hostname.startsWith('*.')) {
+                            const rootDomain = parsedRegistered.hostname.slice(2);
+                            return parsedTarget.hostname.endsWith('.' + rootDomain) || parsedTarget.hostname === rootDomain;
+                        }
+                        return false;
                     } catch (e) {
                         return false;
                     }

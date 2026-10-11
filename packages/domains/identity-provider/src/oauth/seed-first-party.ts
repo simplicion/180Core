@@ -24,7 +24,22 @@ export const FIRST_PARTY_APPS = [
             'https://180workspace.com/callback',
             'https://180workspace.com/oauth/callback',
             'https://*.180workspace.com/callback',
-            'https://*.180workspace.com/oauth/callback'
+            'https://*.180workspace.com/oauth/callback',
+            'https://180core.cloud/callback',
+            'https://180core.cloud/oauth/callback',
+            'https://*.180core.cloud/callback',
+            'https://*.180core.cloud/oauth/callback',
+            'https://developer.180core.cloud/callback',
+            'https://developer.180core.cloud/oauth/callback',
+            'https://developer.180core.cloud/dashboard',
+            'https://profile.180core.cloud/callback',
+            'https://profile.180core.cloud/oauth/callback',
+            'https://profile.180core.cloud/auth/login',
+            'https://profile.180core.cloud/auth/callback',
+            'https://180workspace-developer.pages.dev/callback',
+            'https://180workspace-developer.pages.dev/oauth/callback',
+            'https://180workspace-profile.pages.dev/callback',
+            'https://180workspace-profile.pages.dev/oauth/callback'
         ],
         allowedOrigins: [
             'http://localhost:3000',
@@ -40,7 +55,14 @@ export const FIRST_PARTY_APPS = [
             'http://localhost:3009',
             'http://127.0.0.1:3009',
             'https://180workspace.com',
-            'https://*.180workspace.com'
+            'https://*.180workspace.com',
+            'https://180core.cloud',
+            'https://*.180core.cloud',
+            'https://developer.180core.cloud',
+            'https://profile.180core.cloud',
+            'https://api.180core.cloud',
+            'https://180workspace-developer.pages.dev',
+            'https://180workspace-profile.pages.dev'
         ],
         allowedScopes: [
             'openid',
@@ -302,7 +324,18 @@ export const FIRST_PARTY_APPS = [
             'https://developers.180workspace.com/dashboard',
             'https://*.180workspace.com/callback',
             'https://*.180workspace.com/oauth/callback',
-            'https://*.180workspace.com/dashboard'
+            'https://*.180workspace.com/dashboard',
+            'https://developer.180core.cloud/callback',
+            'https://developer.180core.cloud/oauth/callback',
+            'https://developer.180core.cloud/dashboard',
+            'https://profile.180core.cloud/callback',
+            'https://profile.180core.cloud/oauth/callback',
+            'https://180workspace-developer.pages.dev/callback',
+            'https://180workspace-developer.pages.dev/oauth/callback',
+            'https://180workspace-developer.pages.dev/dashboard',
+            'https://*.180core.cloud/callback',
+            'https://*.180core.cloud/oauth/callback',
+            'https://*.180core.cloud/dashboard'
         ],
         allowedOrigins: [
             'http://localhost:3000',
@@ -319,7 +352,13 @@ export const FIRST_PARTY_APPS = [
             'http://127.0.0.1:3002',
             'https://180workspace.com',
             'https://developers.180workspace.com',
-            'https://*.180workspace.com'
+            'https://*.180workspace.com',
+            'https://180core.cloud',
+            'https://*.180core.cloud',
+            'https://developer.180core.cloud',
+            'https://profile.180core.cloud',
+            'https://api.180core.cloud',
+            'https://180workspace-developer.pages.dev'
         ],
         allowedScopes: [
             'openid',
@@ -356,7 +395,18 @@ export const FIRST_PARTY_APPS = [
             'https://developers.180workspace.com/dashboard',
             'https://*.180workspace.com/callback',
             'https://*.180workspace.com/oauth/callback',
-            'https://*.180workspace.com/dashboard'
+            'https://*.180workspace.com/dashboard',
+            'https://developer.180core.cloud/callback',
+            'https://developer.180core.cloud/oauth/callback',
+            'https://developer.180core.cloud/dashboard',
+            'https://profile.180core.cloud/callback',
+            'https://profile.180core.cloud/oauth/callback',
+            'https://180workspace-developer.pages.dev/callback',
+            'https://180workspace-developer.pages.dev/oauth/callback',
+            'https://180workspace-developer.pages.dev/dashboard',
+            'https://*.180core.cloud/callback',
+            'https://*.180core.cloud/oauth/callback',
+            'https://*.180core.cloud/dashboard'
         ],
         allowedOrigins: [
             'http://localhost:3000',
@@ -373,7 +423,13 @@ export const FIRST_PARTY_APPS = [
             'http://127.0.0.1:3002',
             'https://180workspace.com',
             'https://developers.180workspace.com',
-            'https://*.180workspace.com'
+            'https://*.180workspace.com',
+            'https://180core.cloud',
+            'https://*.180core.cloud',
+            'https://developer.180core.cloud',
+            'https://profile.180core.cloud',
+            'https://api.180core.cloud',
+            'https://180workspace-developer.pages.dev'
         ],
         allowedScopes: [
             'openid',
