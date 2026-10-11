@@ -14,7 +14,7 @@ export function register180WebComponents() {
       connectedCallback() {
         const appId = this.getAttribute('app-id') || '';
         const baseAmount = parseFloat(this.getAttribute('base-amount') || '50');
-        const apiBaseUrl = this.getAttribute('api-url') || 'https://auth.180workspace.com';
+        const apiBaseUrl = this.getAttribute('api-url') || 'https://api.180core.cloud';
 
         if (!appId) return;
 

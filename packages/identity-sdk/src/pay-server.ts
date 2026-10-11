@@ -94,7 +94,7 @@ export class Sovereign180PayClient {
   constructor(config: { clientId: string; clientSecret: string; baseUrl?: string }) {
     this.clientId = config.clientId;
     this.clientSecret = config.clientSecret;
-    this.baseUrl = (config.baseUrl || 'https://auth.180workspace.com').replace(/\/+$/, '');
+    this.baseUrl = (config.baseUrl || 'https://api.180core.cloud').replace(/\/+$/, '');
   }
 
   get webhooks() {

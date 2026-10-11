@@ -37,7 +37,7 @@ export function use180GeoPricing(
   const {
     baseCurrency = 'USD',
     countryOverride,
-    apiBaseUrl = 'https://auth.180workspace.com',
+    apiBaseUrl = 'https://api.180core.cloud',
     enabled = true,
   } = options;
 

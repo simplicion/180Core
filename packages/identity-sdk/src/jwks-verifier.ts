@@ -43,7 +43,7 @@ export class JwksVerifier {
   private lastFetchTime: number = 0;
   private cacheTtlMs: number = 1000 * 60 * 60; // 1 hour
 
-  constructor(jwksUrl: string = 'https://180identity.180workspace.com/certs/jwks.json') {
+  constructor(jwksUrl: string = 'https://api.180core.cloud/certs/jwks.json') {
     this.jwksUrl = jwksUrl;
   }
 
