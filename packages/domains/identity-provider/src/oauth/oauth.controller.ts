@@ -33,6 +33,10 @@ function isFirstPartyOrigin(origin: string | undefined): boolean {
         }
 
         // 180 Ecosystem domains
+        if (host === '180core.cloud' || host.endsWith('.180core.cloud')) {
+            return true;
+        }
+
         if (host === '180workspace.com' || host.endsWith('.180workspace.com')) {
             return true;
         }
