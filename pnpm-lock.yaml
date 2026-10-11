@@ -166,6 +166,9 @@ importers:
 
   apps/180developers-frontend:
     dependencies:
+      '@types/qrcode':
+        specifier: ^1.5.5
+        version: 1.5.6
       '@workspace/identity-sdk':
         specifier: workspace:*
         version: link:../../packages/identity-sdk
@@ -181,6 +184,9 @@ importers:
       next:
         specifier: 15.5.20
         version: 15.5.20(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      qrcode:
+        specifier: ^1.5.4
+        version: 1.5.4
       react:
         specifier: ^19.2.4
         version: 19.3.0

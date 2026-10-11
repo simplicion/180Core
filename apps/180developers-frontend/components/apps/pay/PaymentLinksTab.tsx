@@ -1,4 +1,4 @@
-'use strict';
+'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
@@ -15,11 +15,13 @@ import {
   Search,
   Sparkles,
   Globe,
+  QrCode,
 } from 'lucide-react';
 import { Button } from '@workspace/ui';
 import { toast } from 'react-hot-toast';
 import { getApiBase, getPublicBase, getAuthToken } from '@/lib/api-config';
 import { MultiPricingDrawer, MultiPricingConfig } from '@/components/pay/MultiPricingDrawer';
+import { PaymentQRModal } from '@/components/pay/PaymentQRModal';
 
 interface PaymentLinkItem {
   id: string;
@@ -71,6 +73,10 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
   });
 
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
+
+  // Instant QR Modal State
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [qrSelectedLink, setQrSelectedLink] = useState<PaymentLinkItem | null>(null);
 
   const fetchLinks = useCallback(async () => {
     setLoading(true);
@@ -142,6 +148,7 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
         throw new Error(data.error || 'Failed to create payment link');
       }
 
+      const createdLink = data.link || data.data;
       toast.success('Payment Link generated successfully!');
       setShowCreateModal(false);
       setTitle('');
@@ -149,6 +156,10 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
       setCustomSlug('');
       setMultiPricingConfig({ enabled: false, mode: 'HYBRID', rules: [] });
       fetchLinks();
+      if (createdLink) {
+        setQrSelectedLink(createdLink);
+        setShowQRModal(true);
+      }
     } catch (err: any) {
       const msg = err.message === 'Failed to fetch'
         ? 'Network error: Unable to reach the API server.'
@@ -269,7 +280,7 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
           <Button
             type="button"
             variant="outline"
@@ -278,6 +289,18 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
             className="rounded-xl border-zinc-200 dark:border-white/10"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setQrSelectedLink(null);
+              setShowQRModal(true);
+            }}
+            className="rounded-xl border-zinc-200 dark:border-white/10 text-xs font-semibold flex items-center gap-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          >
+            <QrCode className="w-4 h-4 text-indigo-500" />
+            <span>Generate Payment QR</span>
           </Button>
           <Button
             type="button"
@@ -369,6 +392,17 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
                   </div>
 
                   <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQrSelectedLink(link);
+                        setShowQRModal(true);
+                      }}
+                      className="p-2 rounded-xl text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors cursor-pointer"
+                      title="Generate & View QR Code"
+                    >
+                      <QrCode className="w-4 h-4" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => handleOpenMultiPricingForExistingLink(link)}
@@ -596,6 +630,17 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
         itemName={activeEditingLink ? activeEditingLink.title : (title || 'New Payment Link')}
         value={multiPricingConfig}
         onChange={handleSaveMultiPricing}
+      />
+
+      {/* Interactive Payment QR Code Modal (Supports Link QR & Direct UPI / Standee) */}
+      <PaymentQRModal
+        isOpen={showQRModal}
+        onClose={() => {
+          setShowQRModal(false);
+          setQrSelectedLink(null);
+        }}
+        link={qrSelectedLink}
+        defaultAppId={appId}
       />
     </div>
   );

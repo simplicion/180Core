@@ -21,10 +21,12 @@ import {
   Mail,
   Phone,
   MapPin,
+  QrCode,
 } from 'lucide-react';
 import { Button, LogoLoader } from '@workspace/ui';
 import { toast } from 'react-hot-toast';
 import { CORE_BACKEND_URL } from '@/lib/api';
+import { PaymentLinkQRDialog } from '@/components/PaymentLinkQRDialog';
 
 export interface RegionalPricingData {
   isApplied: boolean;
@@ -125,6 +127,7 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
   const [isProcessing, setIsProcessing] = useState(false);
   const [fulfilledData, setFulfilledData] = useState<FulfillmentData | null>(null);
   const [copiedSecret, setCopiedSecret] = useState(false);
+  const [showQRModal, setShowQRModal] = useState(false);
 
   const getApiBase = () => {
     return CORE_BACKEND_URL;
@@ -503,9 +506,21 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
           <span className="text-sm font-semibold text-zinc-200">{link.merchant.name}</span>
         </div>
 
-        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[11px] text-zinc-400 font-medium">
-          <Lock className="w-3 h-3 text-emerald-400" />
-          <span>256-bit Encrypted Checkout</span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowQRModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-[11px] text-zinc-300 font-medium transition-all cursor-pointer"
+            title="Scan to pay on mobile"
+          >
+            <QrCode className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Scan QR</span>
+          </button>
+
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[11px] text-zinc-400 font-medium">
+            <Lock className="w-3 h-3 text-emerald-400" />
+            <span>256-bit Encrypted Checkout</span>
+          </div>
         </div>
       </header>
 
@@ -738,6 +753,16 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
       <footer className="max-w-2xl mx-auto w-full text-center pt-6 text-[11px] text-zinc-600">
         Powered by <span className="font-semibold text-zinc-400">180 Pay</span> · Developer Infrastructure
       </footer>
+
+      {/* QR Code Dialog */}
+      <PaymentLinkQRDialog
+        isOpen={showQRModal}
+        onClose={() => setShowQRModal(false)}
+        title={link.title}
+        amount={appliedCoupon ? appliedCoupon.finalAmount : link.amount}
+        currency={link.currency}
+        url={typeof window !== 'undefined' ? window.location.href : `https://profile.180core.cloud/link/${link.slug}`}
+      />
     </div>
   );
 }
