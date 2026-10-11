@@ -1,0 +1,11 @@
+/*
+  Access-Control-Allow-Origin: *
+  Content-Security-Policy: frame-ancestors *
+
+/checkout/*
+  Access-Control-Allow-Origin: *
+  Content-Security-Policy: frame-ancestors *
+
+/auth/*
+  Access-Control-Allow-Origin: *
+  Content-Security-Policy: frame-ancestors *

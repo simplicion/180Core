@@ -1,0 +1,27 @@
+{
+  "name": "@workspace/integrations",
+  "version": "1.0.0",
+  "description": "External API Integrations domain for 180workspace",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1081.0",
+    "@aws-sdk/s3-request-presigner": "^3.1081.0",
+    "googleapis": "^144.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@workspace/typescript-config": "workspace:*",
+    "typescript": "^5.0.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  }
+}

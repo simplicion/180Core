@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "moduleResolution": "Node",
+    "module": "CommonJS",
+    "target": "ES2022",
+    "skipLibCheck": true,
+    "allowJs": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "declaration": true,
+    "baseUrl": ".",
+    "paths": {
+      "@workspace/db-180core": ["../../db-180core/dist/index.d.ts"],
+      "@workspace/db-180core/*": ["../../db-180core/*"]
+    }
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}
+

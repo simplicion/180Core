@@ -1,0 +1,34 @@
+# Specific exact paths mapping directly to static entrypoints
+/checkout/manage-subscription/*.txt  /checkout/manage-subscription/default.txt  200
+/checkout/manage-subscription/*      /checkout/manage-subscription/default      200
+/checkout/*.txt                      /checkout/default.txt                      200
+/checkout/*                          /checkout/default                          200
+
+# 180 Pay Public Payment Links & Digital Fulfillment
+/link/*.txt                          /link/default.txt                          200
+/link/*                              /link/default                              200
+/pay/l/*.txt                         /pay/l/default.txt                         200
+/pay/l/*                             /pay/l/default                             200
+
+# 180 Pay Embeddable Pricing Tables
+/embed/pricing/*.txt                 /embed/pricing/default.txt                 200
+/embed/pricing/*                     /embed/pricing/default                     200
+
+# 180 Pay Customer Billing Self-Service Portal
+/portal/session/*.txt                /portal/session/default.txt                200
+/portal/session/*                    /portal/session/default                    200
+/portal/*.txt                        /portal/default.txt                        200
+/portal/*                            /portal/default                            200
+
+# 180 Auth SPA Routes
+/auth/login                          /auth/login                                200
+/auth/consent                        /auth/consent                              200
+/auth/register                       /auth/register                             200
+/auth/verify-otp                     /auth/verify-otp                           200
+/auth/*                              /auth/login                                200
+
+# 180 Profile SPA Dashboard Routes
+/wallet                              /wallet                                    200
+/security                            /security                                  200
+/activity                            /activity                                  200
+/settings                            /settings                                  200

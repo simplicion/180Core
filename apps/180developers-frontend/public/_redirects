@@ -1,0 +1,43 @@
+# Cloudflare Pages SPA Rewrites for 180 Developers dynamic routes
+
+# 1. Identity RSC payloads (.txt)
+/apps/*/identity/logs.txt       /apps/default/identity/logs.txt       200
+/apps/*/identity/security.txt   /apps/default/identity/security.txt   200
+/apps/*/identity/users.txt      /apps/default/identity/users.txt      200
+/apps/*/identity.txt            /apps/default/identity.txt            200
+
+# 2. Identity HTML pages (Canonical Pretty URLs without .html to avoid 308 redirect loops)
+/apps/*/identity/logs           /apps/default/identity/logs           200
+/apps/*/identity/security       /apps/default/identity/security       200
+/apps/*/identity/users          /apps/default/identity/users          200
+/apps/*/identity                /apps/default/identity                200
+
+# 3. Pay RSC payloads (.txt)
+/apps/*/pay/agents.txt         /apps/default/pay/agents.txt          200
+/apps/*/pay/bank.txt           /apps/default/pay/bank.txt            200
+/apps/*/pay/coupons.txt        /apps/default/pay/coupons.txt         200
+/apps/*/pay/gateways.txt       /apps/default/pay/gateways.txt        200
+/apps/*/pay/geo.txt            /apps/default/pay/geo.txt             200
+/apps/*/pay/links.txt          /apps/default/pay/links.txt           200
+/apps/*/pay/payouts.txt        /apps/default/pay/payouts.txt         200
+/apps/*/pay/pricing.txt        /apps/default/pay/pricing.txt         200
+/apps/*/pay/transactions.txt   /apps/default/pay/transactions.txt    200
+/apps/*/pay/webhooks.txt       /apps/default/pay/webhooks.txt        200
+/apps/*/pay.txt                /apps/default/pay.txt                 200
+
+# 4. Pay HTML pages (Canonical Pretty URLs without .html to avoid 308 redirect loops)
+/apps/*/pay/agents             /apps/default/pay/agents              200
+/apps/*/pay/bank               /apps/default/pay/bank                200
+/apps/*/pay/coupons            /apps/default/pay/coupons             200
+/apps/*/pay/gateways           /apps/default/pay/gateways            200
+/apps/*/pay/geo                /apps/default/pay/geo                 200
+/apps/*/pay/links              /apps/default/pay/links               200
+/apps/*/pay/payouts            /apps/default/pay/payouts             200
+/apps/*/pay/pricing            /apps/default/pay/pricing             200
+/apps/*/pay/transactions       /apps/default/pay/transactions        200
+/apps/*/pay/webhooks           /apps/default/pay/webhooks            200
+/apps/*/pay                    /apps/default/pay                     200
+
+# 5. General dynamic app root
+/apps/*.txt                    /apps/default.txt                     200
+/apps/*                        /apps/default                         200
