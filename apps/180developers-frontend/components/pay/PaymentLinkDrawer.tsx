@@ -6,21 +6,13 @@ import {
   Link as LinkIcon,
   QrCode,
   Download,
-  Printer,
   Copy,
   Check,
   Globe,
   Sparkles,
   DollarSign,
   Package,
-  Layers,
-  ArrowRight,
-  ShieldCheck,
   CheckCircle2,
-  ExternalLink,
-  Smartphone,
-  CreditCard,
-  User,
 } from 'lucide-react';
 import { PlatformDrawer, Button } from '@workspace/ui';
 import { toast } from 'react-hot-toast';
@@ -91,28 +83,35 @@ export function PaymentLinkDrawer({
   // QR Code Generation State
   const [qrTheme, setQrTheme] = useState<'clean' | 'dark' | 'brand'>('clean');
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
-  const [qrSvg, setQrSvg] = useState<string>('');
   const [generatingQr, setGeneratingQr] = useState(false);
+
+  // Active link state managed internally so new creations immediately update the QR tab
+  const [currentLink, setCurrentLink] = useState<PaymentLinkItem | null>(link || null);
+
+  useEffect(() => {
+    setCurrentLink(link || null);
+  }, [link, isOpen]);
 
   // Sync drawer form state when opened or link changed
   useEffect(() => {
     if (!isOpen) return;
     setActiveTab(initialTab);
 
-    if (link) {
-      setTitle(link.title || '');
-      setDescription(link.description || '');
-      const isCustom = Number(link.amount) === 0 || Boolean(link.metadata?.allowCustomAmount);
+    const active = currentLink || link;
+    if (active) {
+      setTitle(active.title || '');
+      setDescription(active.description || '');
+      const isCustom = Number(active.amount) === 0 || Boolean(active.metadata?.allowCustomAmount);
       setAmountType(isCustom ? 'CUSTOM' : 'FIXED');
-      setAmount(isCustom ? '500' : String(link.amount));
-      setCurrency(link.currency || 'INR');
-      setCustomSlug(link.slug || '');
-      setMaxPurchases(link.maxPurchases ? String(link.maxPurchases) : '');
-      setFulfillmentMessage(link.fulfillmentMessage || '');
-      setFulfillmentFileUrl(link.fulfillmentFileUrl || '');
-      setRedirectUrl(link.redirectUrl || '');
+      setAmount(isCustom ? '500' : String(active.amount));
+      setCurrency(active.currency || 'INR');
+      setCustomSlug(active.slug || '');
+      setMaxPurchases(active.maxPurchases ? String(active.maxPurchases) : '');
+      setFulfillmentMessage(active.fulfillmentMessage || '');
+      setFulfillmentFileUrl(active.fulfillmentFileUrl || '');
+      setRedirectUrl(active.redirectUrl || '');
 
-      const existingMp = link.metadata?.multiPricing;
+      const existingMp = active.metadata?.multiPricing;
       if (existingMp && typeof existingMp === 'object') {
         setMultiPricingConfig({
           enabled: Boolean(existingMp.enabled),
@@ -136,10 +135,11 @@ export function PaymentLinkDrawer({
       setRedirectUrl('');
       setMultiPricingConfig({ enabled: false, mode: 'HYBRID', rules: [] });
     }
-  }, [isOpen, link, initialTab]);
+  }, [isOpen, currentLink, link, initialTab]);
 
-  // Derived effective public link URL
-  const effectiveSlug = link?.slug || customSlug.trim() || 'preview-link';
+  // Derived effective public link URL & persistence status
+  const isSaved = Boolean(currentLink && currentLink.id && currentLink.slug);
+  const effectiveSlug = currentLink?.slug || customSlug.trim() || 'preview-link';
   const effectiveUrl = `${getPublicBase()}/link/${effectiveSlug}`;
 
   // Generate QR code whenever URL, theme, or amount changes
@@ -152,24 +152,15 @@ export function PaymentLinkDrawer({
     const darkColor = qrTheme === 'dark' ? '#0f172a' : qrTheme === 'brand' ? '#312e81' : '#000000';
     const lightColor = '#ffffff';
 
-    Promise.all([
-      QRCode.toDataURL(effectiveUrl, {
-        width: 600,
-        margin: 2,
-        errorCorrectionLevel: 'H',
-        color: { dark: darkColor, light: lightColor },
-      }),
-      QRCode.toString(effectiveUrl, {
-        type: 'svg',
-        margin: 2,
-        errorCorrectionLevel: 'H',
-        color: { dark: darkColor, light: lightColor },
-      }),
-    ])
-      .then(([dataUrl, svg]) => {
+    QRCode.toDataURL(effectiveUrl, {
+      width: 600,
+      margin: 2,
+      errorCorrectionLevel: 'H',
+      color: { dark: darkColor, light: lightColor },
+    })
+      .then((dataUrl) => {
         if (!isMounted) return;
         setQrDataUrl(dataUrl);
-        setQrSvg(svg);
       })
       .catch((err) => {
         console.error('[PaymentLinkDrawer] QR generation error:', err);
@@ -185,6 +176,10 @@ export function PaymentLinkDrawer({
 
   // Direct 1-Click Instant QR PNG Download
   const handleDownloadDirectQR = () => {
+    if (!isSaved) {
+      toast.error('Please save this link first to generate an active payment QR code.');
+      return;
+    }
     if (!qrDataUrl) {
       toast.error('QR code is still generating, please wait a second');
       return;
@@ -197,155 +192,13 @@ export function PaymentLinkDrawer({
     toast.success('Instant Payment QR Code downloaded!');
   };
 
-  // Download High-Resolution Counter Standee PNG
-  const handleDownloadStandee = () => {
-    if (!qrDataUrl) return;
 
-    const canvas = document.createElement('canvas');
-    canvas.width = 1200;
-    canvas.height = 1500;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Draw White Card Background
-    ctx.fillStyle = '#ffffff';
-    ctx.roundRect(0, 0, 1200, 1500, 48);
-    ctx.fill();
-
-    // Subtle Border
-    ctx.strokeStyle = '#e2e8f0';
-    ctx.lineWidth = 8;
-    ctx.stroke();
-
-    // Top Brand Pill
-    ctx.fillStyle = '#4f46e5';
-    ctx.roundRect(400, 90, 400, 60, 30);
-    ctx.fill();
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 26px system-ui, -apple-system, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('180 PAY • SCAN & PAY', 600, 132);
-
-    // Title / Item Name
-    ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 54px system-ui, -apple-system, sans-serif';
-    ctx.fillText(title || 'Scan to Pay', 600, 240);
-
-    // Amount Label
-    if (amountType === 'FIXED') {
-      const sym = currency === 'INR' ? '₹' : `${currency} `;
-      const numVal = parseFloat(amount);
-      const displayAmt = !isNaN(numVal) && numVal > 0 ? `${sym}${numVal.toFixed(2)}` : `${sym}500.00`;
-      ctx.fillStyle = '#10b981';
-      ctx.font = 'bold 44px monospace, system-ui';
-      ctx.fillText(displayAmt, 600, 320);
-    } else {
-      ctx.fillStyle = '#6366f1';
-      ctx.font = 'bold 36px system-ui, -apple-system, sans-serif';
-      ctx.fillText('Customer Chooses Amount at Checkout', 600, 320);
-    }
-
-    // Draw QR Code
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = qrDataUrl;
-    img.onload = () => {
-      const qrSize = 720;
-      const qrX = (1200 - qrSize) / 2;
-      const qrY = 380;
-      ctx.drawImage(img, qrX, qrY, qrSize, qrSize);
-
-      // Supported Apps Banner
-      ctx.fillStyle = '#64748b';
-      ctx.font = 'normal 26px system-ui, -apple-system, sans-serif';
-      ctx.fillText('Accepted via Google Pay • PhonePe • Paytm • Any UPI App • Phone Camera', 600, 1180);
-
-      // Footer
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = 'normal 22px system-ui, -apple-system, sans-serif';
-      ctx.fillText('Powered by 180 Workspace Sovereign Ledger Protocol • Instant Verification', 600, 1260);
-
-      const filename = `${effectiveSlug.toLowerCase()}-standee.png`;
-      const a = document.createElement('a');
-      a.download = filename;
-      a.href = canvas.toDataURL('image/png');
-      a.click();
-      toast.success('High-res counter standee downloaded!');
-    };
-  };
-
-  // Vector SVG Download
-  const handleDownloadSVG = () => {
-    if (!qrSvg) return;
-    const blob = new Blob([qrSvg], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${effectiveSlug.toLowerCase()}.svg`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success('Vector SVG downloaded!');
-  };
-
-  // Print Standee
-  const handlePrint = () => {
-    const printWindow = window.open('', '_blank', 'width=800,height=900');
-    if (!printWindow) {
-      toast.error('Pop-up blocked. Please allow pop-ups to print standee.');
-      return;
-    }
-
-    const titleText = title || 'Scan to Pay';
-    const amountText =
-      amountType === 'FIXED'
-        ? `${currency === 'INR' ? '₹' : currency} ${amount}`
-        : 'Customer Chooses Amount';
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Print 180 Pay QR Standee</title>
-          <style>
-            @page { size: auto; margin: 15mm; }
-            body { font-family: system-ui, -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #fafafa; }
-            .card { width: 440px; padding: 36px 28px; background: white; border-radius: 28px; border: 2px solid #e2e8f0; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.06); }
-            .badge { display: inline-block; background: #4f46e5; color: white; padding: 6px 18px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px; }
-            .title { font-size: 24px; font-weight: 900; color: #0f172a; margin-bottom: 6px; }
-            .amount { font-size: 20px; font-weight: 800; color: #10b981; font-family: monospace; margin-bottom: 20px; }
-            .qr-box { padding: 16px; background: white; border: 2px dashed #cbd5e1; border-radius: 20px; display: inline-block; margin-bottom: 20px; }
-            .qr-box img { width: 280px; height: 280px; display: block; }
-            .footer { font-size: 11px; color: #64748b; line-height: 1.6; }
-            .footer-sub { color: #94a3b8; font-size: 9.5px; margin-top: 4px; }
-          </style>
-        </head>
-        <body>
-          <div class="card">
-            <div class="badge">SCAN TO PAY WITH ANY UPI APP</div>
-            <div class="title">${titleText}</div>
-            <div class="amount">${amountText}</div>
-            <div class="qr-box">
-              <img src="${qrDataUrl}" alt="Payment QR" />
-            </div>
-            <div class="footer">
-              <strong>Accepted on Google Pay • PhonePe • Paytm • BHIM • Phone Camera</strong><br/>
-              <div class="footer-sub">Verified Instant Settlement • Secured by 180 Workspace Sovereign Ledger</div>
-            </div>
-          </div>
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(function() { window.close(); }, 500);
-            };
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-  };
 
   const copyLinkUrl = () => {
+    if (!isSaved) {
+      toast.error('Please save this link first to generate an active checkout URL.');
+      return;
+    }
     navigator.clipboard.writeText(effectiveUrl);
     setCopiedUrl(true);
     toast.success('Public Payment Link copied!');
@@ -353,10 +206,11 @@ export function PaymentLinkDrawer({
   };
 
   // Submit Handler: Create or Update Payment Link
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!title.trim()) {
       toast.error('Item Title is required');
+      setActiveTab('LINK');
       return;
     }
 
@@ -364,6 +218,7 @@ export function PaymentLinkDrawer({
     const numAmount = isCustom ? 0 : parseFloat(amount);
     if (!isCustom && (isNaN(numAmount) || numAmount <= 0)) {
       toast.error('Price amount must be greater than zero');
+      setActiveTab('LINK');
       return;
     }
 
@@ -392,10 +247,11 @@ export function PaymentLinkDrawer({
         },
       };
 
-      const url = link
-        ? `${apiBase}/api/v1/payment-links/apps/${appId}/${link.id}`
+      const activeLink = currentLink || link;
+      const url = activeLink
+        ? `${apiBase}/api/v1/payment-links/apps/${appId}/${activeLink.id}`
         : `${apiBase}/api/v1/payment-links/apps/${appId}`;
-      const method = link ? 'PUT' : 'POST';
+      const method = activeLink ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
         method,
@@ -412,7 +268,13 @@ export function PaymentLinkDrawer({
       }
 
       const savedLink = data.link || data.data;
-      toast.success(link ? 'Payment Link updated successfully!' : 'Payment Link created successfully!');
+      if (savedLink) {
+        setCurrentLink(savedLink);
+        if (savedLink.slug) {
+          setCustomSlug(savedLink.slug);
+        }
+      }
+      toast.success(activeLink ? 'Payment Link updated successfully!' : 'Payment Link created successfully!');
       if (onLinkSaved && savedLink) {
         onLinkSaved(savedLink);
       }
@@ -430,7 +292,7 @@ export function PaymentLinkDrawer({
     <PlatformDrawer
       isOpen={isOpen}
       onClose={onClose}
-      title={link ? 'Manage Payment Link & QR Code' : 'Create Payment Link & QR Code'}
+      title={currentLink ? 'Manage Payment Link & QR Code' : 'Create Payment Link & QR Code'}
       icon={activeTab === 'QR' ? QrCode : LinkIcon}
       iconColorClass="text-indigo-600 dark:text-indigo-400"
       iconBgClass="bg-indigo-500/10"
@@ -492,16 +354,25 @@ export function PaymentLinkDrawer({
             <Button type="button" variant="ghost" size="sm" onClick={onClose} className="rounded-xl">
               Close
             </Button>
-            {activeTab === 'LINK' && (
+            {activeTab === 'LINK' ? (
               <Button
                 type="button"
                 onClick={handleSubmit}
                 disabled={saving}
-                className="rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs px-4"
+                className="rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs px-4 cursor-pointer"
               >
-                {saving ? 'Saving...' : link ? 'Update Link' : 'Save & Generate QR'}
+                {saving ? 'Saving...' : currentLink ? 'Update Link' : 'Save & Generate QR'}
               </Button>
-            )}
+            ) : !isSaved ? (
+              <Button
+                type="button"
+                onClick={handleSubmit}
+                disabled={saving}
+                className="rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs px-4 cursor-pointer"
+              >
+                {saving ? 'Saving...' : 'Save & Activate'}
+              </Button>
+            ) : null}
           </div>
         </div>
       }
@@ -715,56 +586,12 @@ export function PaymentLinkDrawer({
             </div>
           </div>
 
-          {/* QR Code Quick Shortcut Banner */}
-          <div className="p-4 rounded-2xl border border-zinc-200 dark:border-white/10 bg-zinc-50 dark:bg-zinc-900/60 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center shrink-0">
-                <QrCode className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="text-xs font-bold text-zinc-900 dark:text-white">Live Payment QR Code Ready</h4>
-                <p className="text-[11px] text-zinc-500">
-                  Directly linked with this {amountType === 'CUSTOM' ? 'custom amount' : 'fixed'} link.
-                </p>
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setActiveTab('QR')}
-              className="rounded-xl text-xs font-semibold flex items-center gap-1.5 border-zinc-200 dark:border-white/10 cursor-pointer"
-            >
-              <span>View & Get QR</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Button>
-          </div>
         </form>
       )}
 
-      {/* TAB 2: INSTANT QR CODE & STANDEE DOWNLOAD */}
+      {/* TAB 2: INSTANT QR CODE */}
       {activeTab === 'QR' && (
-        <div className="space-y-6">
-          {/* Top Notice */}
-          <div className="p-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-              <div className="text-xs">
-                <span className="font-bold text-zinc-900 dark:text-white block">
-                  Gateway-Connected QR Active
-                </span>
-                <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                  {amountType === 'FIXED'
-                    ? `Pre-filled for ${currency === 'INR' ? '₹' : currency} ${amount} • Accepted via Any UPI & Cameras`
-                    : 'Customer enters custom amount at checkout • Universal Acceptance'}
-                </span>
-              </div>
-            </div>
-            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-bold tracking-wider uppercase border border-emerald-500/20">
-              Live
-            </span>
-          </div>
-
+        <div className="py-2">
           {/* QR Display Card */}
           <div className="flex flex-col items-center justify-center p-6 rounded-3xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-sm space-y-4">
             <div className="relative p-4 rounded-2xl bg-white shadow-md border border-zinc-200/80">
@@ -787,7 +614,7 @@ export function PaymentLinkDrawer({
                   : 'Customer Chooses Amount'}
               </p>
               <p className="text-[11px] text-zinc-400 font-mono truncate max-w-xs mx-auto">
-                {effectiveUrl}
+                {isSaved ? effectiveUrl : `${effectiveUrl} (Unsaved Draft)`}
               </p>
             </div>
 
@@ -798,67 +625,6 @@ export function PaymentLinkDrawer({
               <span className="px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800">Paytm</span>
               <span className="px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800">Any UPI App</span>
               <span className="px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800">Phone Camera</span>
-            </div>
-          </div>
-
-          {/* QR Action Buttons */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-              Download & Print Actions
-            </h4>
-
-            {/* Instant Download Primary CTA */}
-            <Button
-              type="button"
-              onClick={handleDownloadDirectQR}
-              className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <Download className="w-4 h-4" />
-              <span>Instant Download QR Code (PNG)</span>
-            </Button>
-
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleDownloadStandee}
-                className="py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer border-zinc-200 dark:border-white/10"
-              >
-                <Smartphone className="w-3.5 h-3.5 text-indigo-500" />
-                <span>Counter Standee PNG</span>
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handlePrint}
-                className="py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer border-zinc-200 dark:border-white/10"
-              >
-                <Printer className="w-3.5 h-3.5 text-zinc-500" />
-                <span>Print Standee</span>
-              </Button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleDownloadSVG}
-                className="py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer border-zinc-200 dark:border-white/10"
-              >
-                <Download className="w-3.5 h-3.5 text-zinc-400" />
-                <span>Vector SVG</span>
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                onClick={copyLinkUrl}
-                className="py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer border-zinc-200 dark:border-white/10"
-              >
-                {copiedUrl ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>Copy Link URL</span>
-              </Button>
             </div>
           </div>
         </div>

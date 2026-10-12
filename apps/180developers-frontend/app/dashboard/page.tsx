@@ -21,6 +21,8 @@ import {
   RefreshCw,
   CreditCard,
   ShieldCheck,
+  Sparkles,
+  AlertCircle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -491,10 +493,10 @@ function DeveloperDashboardContent() {
 
       const data = await res.json();
       if (!res.ok) {
-        if (res.status === 402 || data.code === 'PAYMENT_REQUIRED') {
+        if (res.status === 402 || data.code === 'PAYMENT_REQUIRED' || data.code === 'LIMIT_REACHED') {
           toast.error(
             data.message ||
-              'Payment required: Additional projects require an active $2.50/mo subscription. Please configure Auto-Pay.'
+              'Payment required: You have reached your project limit or trial has expired. Please visit Billing to choose a plan with 180 Pay.'
           );
           setShowCreateModal(false);
           router.push('/billing');
@@ -503,13 +505,7 @@ function DeveloperDashboardContent() {
         throw new Error(data.message || data.error || 'Failed to register application');
       }
 
-      if (data.billing?.autoPayUpdated) {
-        toast.success(
-          `Application registered! Monthly Auto-Pay aggregated to $${data.billing.monthlyTotal.toFixed(2)}/mo.`
-        );
-      } else {
-        toast.success('Application registered successfully! (First Project 100% Free Forever)');
-      }
+      toast.success('Application registered successfully!');
       setShowCreateModal(false);
 
       const resolvedClientId =
@@ -1494,41 +1490,21 @@ function DeveloperDashboardContent() {
             />
           </div>
 
-          {/* Billing & Auto-Pay Mandate Status */}
-          {apps.length >= 1 ? (
-            <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 space-y-2 text-xs">
-              <div className="flex items-center justify-between font-bold text-blue-950 dark:text-blue-200">
-                <span className="flex items-center gap-1.5">
-                  <CreditCard className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                  <span>Additional Project: $2.50 / month</span>
-                </span>
-                <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-700 dark:text-blue-300 text-[10px] font-mono">
-                  Full Features
-                </span>
-              </div>
-              <p className="text-zinc-600 dark:text-zinc-400 text-[11px] leading-relaxed">
-                Project #1 was 100% free forever. Creating this project will automatically set/adjust your recurring monthly auto-pay to <strong className="text-zinc-950 dark:text-white font-mono">${((apps.length) * 2.5).toFixed(2)}/mo</strong> total ($2.50 per billable project). Includes a 7-day pre-expiry warning and 3-day post-expiry grace period.
-              </p>
-              <label className="flex items-center gap-2 pt-1 cursor-pointer">
-                <input
-                  type="checkbox"
-                  defaultChecked
-                  required
-                  className="rounded text-blue-600 focus:ring-0 cursor-pointer"
-                />
-                <span className="text-[11px] font-semibold text-zinc-900 dark:text-zinc-200">
-                  Authorize monthly recurring auto-pay of $2.50/mo for this project
-                </span>
-              </label>
-            </div>
-          ) : (
-            <div className="p-3.5 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 text-xs text-emerald-900 dark:text-emerald-300 flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span>
-                <strong>First Project Free:</strong> Your first project is 100% free forever with full OAuth 2.0 and 180 Pay features access.
+          {/* Developer Project Quota & Access Status */}
+          <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 space-y-2 text-xs">
+            <div className="flex items-center justify-between font-bold text-blue-950 dark:text-blue-200">
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span>Project Allocation: Slot #{apps.length + 1}</span>
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-700 dark:text-blue-300 text-[10px] font-mono">
+                Full 180 Identity & 180 Pay
               </span>
             </div>
-          )}
+            <p className="text-zinc-600 dark:text-zinc-400 text-[11px] leading-relaxed">
+              Engineering developers get <strong>30 days free trial access</strong> (up to 5 projects). Afterwards, continue with Starter ($2/mo for 5 projects) or Pro ($5/mo for 10 projects) via <strong>180 Pay</strong>, or contact Enterprise for custom scale.
+            </p>
+          </div>
 
           <div className="pt-4 flex items-center justify-end gap-3">
             <Button

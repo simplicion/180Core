@@ -145,6 +145,29 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
     setLoading(true);
     setError(null);
     try {
+      if (targetSlug === 'preview-link') {
+        setLink({
+          id: 'preview',
+          slug: 'preview-link',
+          title: 'Sample Product (Checkout Preview)',
+          description: 'This is a live preview of how your payment link and checkout page look to your customers.',
+          amount: 500,
+          currency: 'INR',
+          collectPhone: true,
+          collectAddress: false,
+          allowCoupons: true,
+          allowCustomAmount: false,
+          isAvailable: true,
+          isSoldOut: false,
+          merchant: {
+            name: '180 Workspace Merchant',
+            clientId: 'preview',
+          },
+        });
+        setLoading(false);
+        return;
+      }
+
       const apiBase = getApiBase();
       const res = await fetch(`${apiBase}/api/v1/payment-links/public/${encodeURIComponent(targetSlug)}`);
       const json = await res.json();
@@ -237,6 +260,21 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
 
     if (link.collectPhone && !customerPhone.trim()) {
       toast.error('Please enter your phone number');
+      return;
+    }
+
+    // Preview Demonstration Simulation
+    if (link.id === 'preview') {
+      setIsProcessing(true);
+      setTimeout(() => {
+        toast.success('Preview checkout simulated! Real links fulfill live payments.', { id: 'preview-toast' });
+        setFulfilledData({
+          fulfillmentMessage: 'DEMO-LICENSE-KEY-180-PREVIEW-SUCCESS',
+          redirectUrl: 'https://developer.180core.cloud',
+          transactionId: 'demo_txn_preview_180',
+        });
+        setIsProcessing(false);
+      }, 700);
       return;
     }
 
@@ -583,6 +621,24 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
         <div className="rounded-t-[32px] sm:rounded-3xl border-t sm:border border-white/10 bg-zinc-900/95 sm:bg-zinc-900/80 backdrop-blur-2xl p-5 sm:p-8 shadow-2xl space-y-5 max-h-[88dvh] sm:max-h-none overflow-y-auto pb-8 sm:pb-8">
           {/* Mobile Drag Handle */}
           <div className="w-12 h-1.5 rounded-full bg-white/20 mx-auto -mt-1 mb-2 sm:hidden" />
+
+          {/* Demo Preview Notification Banner */}
+          {link.id === 'preview' && (
+            <div className="p-3 sm:p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />
+                <div>
+                  <span className="font-bold text-white">Live Checkout Preview</span>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                    This is an interactive demonstration. Complete and save your payment link in the 180 Developer Portal to start accepting live payments.
+                  </p>
+                </div>
+              </div>
+              <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-bold uppercase tracking-wider shrink-0 border border-indigo-500/30">
+                Preview Mode
+              </span>
+            </div>
+          )}
 
           {/* Mobile Sheet Header */}
           <div className="flex items-center justify-between gap-3 pb-3 border-b border-white/10 sm:hidden">

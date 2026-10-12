@@ -192,19 +192,7 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              setDrawerLink(null);
-              setDrawerInitialTab('QR');
-              setShowDrawer(true);
-            }}
-            className="rounded-xl border-zinc-200 dark:border-white/10 text-xs font-semibold flex items-center gap-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
-          >
-            <QrCode className="w-4 h-4 text-indigo-500" />
-            <span>Generate Payment QR</span>
-          </Button>
+
           <Button
             type="button"
             onClick={() => {
@@ -399,7 +387,10 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
         appId={appId}
         link={drawerLink}
         initialTab={drawerInitialTab}
-        onLinkSaved={() => {
+        onLinkSaved={(saved) => {
+          if (saved) {
+            setDrawerLink(saved);
+          }
           fetchLinks();
         }}
         onOpenMultiPricing={() => {

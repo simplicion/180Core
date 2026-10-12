@@ -24,6 +24,8 @@ router.delete('/apps/:id', protect, DeveloperApiController.deleteApp);
 
 // ─── Developer Project Billing & Recurring Auto-Pay ─────────────────────────
 router.get('/billing/status', protect, DeveloperApiController.getBillingStatus);
+router.post('/billing/checkout', protect, DeveloperApiController.createBillingCheckout);
+router.post('/billing/confirm-subscription', protect, DeveloperApiController.confirmSubscription);
 router.post('/billing/autopay', protect, DeveloperApiController.setupAutoPay);
 router.post('/billing/settle', protect, DeveloperApiController.settleManualPayment);
 router.post('/billing/dunning-cycle', protect, DeveloperApiController.runDunningCycle);

@@ -159,6 +159,30 @@ export class PaymentLinkService {
    */
   static async getPublicPaymentLink(slug: string, visitorCountry?: string): Promise<PublicPaymentLinkResult> {
     const cleanSlug = (slug || '').trim().toLowerCase();
+
+    // Gracefully handle preview demonstration link
+    if (cleanSlug === 'preview-link') {
+      return {
+        id: 'preview',
+        slug: 'preview-link',
+        title: 'Sample Product (Checkout Preview)',
+        description: 'This is a live preview of how your payment link and checkout page look to your customers.',
+        amount: 500,
+        currency: 'INR',
+        collectPhone: true,
+        collectAddress: false,
+        allowCoupons: true,
+        allowCustomAmount: false,
+        isAvailable: true,
+        isSoldOut: false,
+        merchant: {
+          name: '180 Workspace Merchant',
+          logoUrl: '',
+          clientId: 'preview',
+        },
+      };
+    }
+
     const link = await (prisma as any).paymentLink.findUnique({
       where: { slug: cleanSlug },
       include: {

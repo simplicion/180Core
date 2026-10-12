@@ -680,5 +680,52 @@ export class DeveloperController {
             return res.status(500).json({ success: false, message: err.message });
         }
     }
+
+    /**
+     * Create 180 Pay checkout session for Starter ($2/mo) or Pro ($5/mo) developer subscription
+     */
+    static async createBillingCheckout(req: any, res: any) {
+        try {
+            const userIds = await DeveloperController.resolveUserIds(req);
+            if (!userIds.length) {
+                return res.status(401).json({ success: false, message: 'Authentication required' });
+            }
+            const planTier = (req.body.planTier || 'STARTER').toUpperCase() as 'STARTER' | 'PRO';
+            const checkout = await DeveloperBillingService.createBillingCheckout(userIds[0], planTier);
+            return res.json({ success: true, ...checkout });
+        } catch (err: any) {
+            console.error('[DeveloperController] createBillingCheckout error:', err);
+            return res.status(500).json({ success: false, message: err.message });
+        }
+    }
+
+    /**
+     * Confirm 180 Pay subscription payment and activate plan tier
+     */
+    static async confirmSubscription(req: any, res: any) {
+        try {
+            const userIds = await DeveloperController.resolveUserIds(req);
+            if (!userIds.length) {
+                return res.status(401).json({ success: false, message: 'Authentication required' });
+            }
+            const { planTier = 'STARTER', sessionId, transactionId, paymentSource } = req.body;
+            const subscription = await DeveloperBillingService.confirmSubscription(userIds[0], {
+                planTier: (planTier || 'STARTER').toUpperCase() as 'STARTER' | 'PRO',
+                sessionId,
+                transactionId,
+                paymentSource,
+            });
+            const billing = await DeveloperBillingService.getBillingStatus(userIds);
+            return res.json({
+                success: true,
+                message: `Successfully subscribed to ${planTier.toUpperCase()} Plan!`,
+                subscription,
+                billing,
+            });
+        } catch (err: any) {
+            console.error('[DeveloperController] confirmSubscription error:', err);
+            return res.status(500).json({ success: false, message: err.message });
+        }
+    }
 }
 

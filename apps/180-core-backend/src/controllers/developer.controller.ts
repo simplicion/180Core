@@ -38,6 +38,8 @@ export class DeveloperApiController {
   static testWebhook = DomainDeveloperController.testWebhook;
   static deleteApp = DomainDeveloperController.deleteApp;
   static getBillingStatus = DomainDeveloperController.getBillingStatus;
+  static createBillingCheckout = DomainDeveloperController.createBillingCheckout;
+  static confirmSubscription = DomainDeveloperController.confirmSubscription;
   static setupAutoPay = DomainDeveloperController.setupAutoPay;
   static settleManualPayment = DomainDeveloperController.settleManualPayment;
   static runDunningCycle = DomainDeveloperController.runDunningCycle;
