@@ -130,6 +130,7 @@ jobs:
             --arg token "$GH_TOKEN" \
             --arg actor "$GH_ACTOR" \
             --arg coreDb "$CORE_DB_URL" \
+            --arg hostHdr "Host: api.180core.cloud" \
             '{commands: [
               "echo === 1. DOCKER LOGIN GHCR ===",
               ("echo " + ($token | @sh) + " | docker login ghcr.io -u " + ($actor | @sh) + " --password-stdin 2>&1 || true"),
@@ -154,7 +155,7 @@ jobs:
               "docker restart 180workspace-proxy",
               "sleep 3",
               "echo === 11. TEST VIA NGINX ON PORT 80 ===",
-              "curl -i -H 'Host: api.180core.cloud' http://localhost/health 2>&1 || true"
+              ("curl -i -H " + ($hostHdr | @sh) + " http://localhost/health 2>&1 || true")
             ]}')
 
           echo "Triggering zero-downtime reload on EC2..."
