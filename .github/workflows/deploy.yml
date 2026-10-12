@@ -102,13 +102,18 @@ jobs:
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
             --parameters '{"commands":[
-              "echo \"=== DOCKER CONTAINERS ===\"",
-              "docker ps -a",
-              "if docker ps -a --format \"{{.Names}}\" | grep -q \"180core-backend\"; then echo \"Restarting 180core-backend...\"; docker restart 180core-backend; elif docker ps -a --format \"{{.Names}}\" | grep -q \"180workspace-core-backend\"; then echo \"Restarting 180workspace-core-backend...\"; docker restart 180workspace-core-backend; else echo \"Checking compose files...\"; (cd /home/ubuntu/* 2>/dev/null || cd /home/ubuntu 2>/dev/null || cd /app 2>/dev/null) && (docker compose up -d 2>/dev/null || docker-compose up -d 2>/dev/null); fi",
-              "for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do if curl -sf http://localhost:4003/health >/dev/null; then echo \"Core backend is healthy\"; exit 0; fi; echo \"Waiting for Core backend ($i/20)...\"; sleep 2; done",
-              "echo \"=== CONTAINER LOGS ===\"",
-              "docker logs --tail 50 180core-backend 2>&1 || docker logs --tail 50 180workspace-core-backend 2>&1",
-              "exit 1"
+              "echo \"=== NGINX SITES ===\"",
+              "cat /etc/nginx/sites-enabled/* /etc/nginx/conf.d/* 2>/dev/null",
+              "echo \"=== LOCAL PORTS ===\"",
+              "ss -tulpn 2>/dev/null || netstat -tulpn 2>/dev/null",
+              "echo \"=== HOME DIR ===\"",
+              "ls -la /home/ubuntu 2>/dev/null",
+              "echo \"=== RESTART 180workspace-backend ===\"",
+              "docker restart 180workspace-backend 2>/dev/null || true",
+              "sleep 5",
+              "echo \"=== HEALTH CHECKS ===\"",
+              "curl -i http://localhost:4000/health 2>/dev/null || true",
+              "curl -i http://localhost:4003/health 2>/dev/null || true"
             ]}' \
             --query "Command.CommandId" \
             --output text)
