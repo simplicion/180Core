@@ -16,6 +16,7 @@ COPY --from=builder /app/out/json/ .
 COPY --from=builder /app/packages/db-180core/prisma ./packages/db-180core/prisma
 RUN pnpm install --prefer-frozen-lockfile
 COPY --from=builder /app/out/full/ .
+RUN pnpm --filter @workspace/db-180core generate
 RUN pnpm --filter @workspace/db-180core build
 RUN pnpm turbo run build --filter=180-core-backend...
 

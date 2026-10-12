@@ -9,6 +9,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   detect-changes:
     name: Detect Changed Subsystems
@@ -86,6 +90,27 @@ jobs:
           pnpm db:generate
           pnpm db:push
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Core Backend Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/180-core-backend/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/simplicion/180core-core-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -96,21 +121,40 @@ jobs:
       - name: Deploy & Restart Backend Container on AWS EC2
         env:
           INSTANCE_ID: ${{ secrets.AWS_INSTANCE_ID }}
+          GH_ACTOR: ${{ github.actor }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CORE_DB_URL: ${{ secrets.CORE_DATABASE_URL }}
         run: |
-          echo "Triggering zero-downtime reload on EC2 ($INSTANCE_ID)..."
+          echo "Preparing zero-downtime SSM parameters for EC2 ($INSTANCE_ID)..."
+          SSM_PARAMS=$(jq -n \
+            --arg token "$GH_TOKEN" \
+            --arg actor "$GH_ACTOR" \
+            --arg coreDb "$CORE_DB_URL" \
+            '{commands: [
+              "echo === 1. DOCKER LOGIN GHCR ===",
+              ("echo " + ($token | @sh) + " | docker login ghcr.io -u " + ($actor | @sh) + " --password-stdin 2>&1 || true"),
+              "echo === 2. PULL LATEST 180CORE BACKEND IMAGE ===",
+              "docker pull ghcr.io/simplicion/180core-core-backend:latest",
+              "echo === 3. STOP AND REMOVE OLD CONTAINER ===",
+              "docker stop 180workspace-core-backend 2>/dev/null || true",
+              "docker rm 180workspace-core-backend 2>/dev/null || true",
+              "echo === 4. ENSURE DOCKER NETWORK ===",
+              "docker network create 180workspace-net 2>/dev/null || true",
+              "echo === 5. LAUNCH 180CORE BACKEND CONTAINER ===",
+              ("docker run -d --name 180workspace-core-backend --restart always --network 180workspace-net --network-alias core-backend -p 4003:4003 --add-host host.docker.internal:host-gateway --env-file /home/ubuntu/app/.env -e PORT=4003 -e NODE_ENV=production -e REDIS_URL=redis://host.docker.internal:6379 -e REDIS_INTERNAL_URL=redis://host.docker.internal:6379 -e CORE_DATABASE_URL=" + ($coreDb | @sh) + " ghcr.io/simplicion/180core-core-backend:latest"),
+              "echo === 6. WAIT FOR SERVER INITIALIZATION ===",
+              "sleep 8",
+              "echo === 7. DOCKER LOGS CORE-BACKEND ===",
+              "docker logs --tail 40 180workspace-core-backend 2>&1 || true",
+              "echo === 8. TEST LOCAL PORT 4003 ===",
+              "curl -i http://localhost:4003/health 2>&1 || true"
+            ]}')
+
+          echo "Triggering zero-downtime reload on EC2..."
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --parameters '{"commands":[
-              "echo \"=== DOCKER COMPOSE STATUS IN /home/ubuntu/app ===\"",
-              "cd /home/ubuntu/app && docker compose ps -a",
-              "echo \"=== ATTEMPT UP CORE-BACKEND ===\"",
-              "cd /home/ubuntu/app && docker compose up -d core-backend 2>&1 || true",
-              "echo \"=== DOCKER LOGS CORE-BACKEND ===\"",
-              "docker logs --tail 30 180workspace-core-backend 2>&1 || true",
-              "echo \"=== TEST LOCAL 4003 ===\"",
-              "curl -i http://localhost:4003/health 2>&1 || true"
-            ]}' \
+            --parameters "$SSM_PARAMS" \
             --query "Command.CommandId" \
             --output text)
           
@@ -131,7 +175,15 @@ jobs:
       - name: Verify Public Edge Healthcheck
         run: |
           echo "Testing public ingress endpoint..."
-          curl -sf -H "Host: api.180core.cloud" http://32.198.110.99/health || echo "Edge warming up..."
+          for i in {1..6}; do
+            echo "Attempt $i: Checking http://32.198.110.99/health..."
+            if curl -sf -H "Host: api.180core.cloud" http://32.198.110.99/health; then
+              echo "✅ Public ingress endpoint responded with 200 OK!"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Edge warming up..."
 
   deploy-developers-frontend:
     name: Deploy Developer Portal (Cloudflare Pages)
