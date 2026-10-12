@@ -33,6 +33,7 @@ export class AuthApiController {
   static verifyResetOtp = DomainIdentityAuthController.verifyResetOtp;
   static resetPassword = DomainIdentityAuthController.resetPassword;
   static googleContinue = DomainIdentityAuthController.googleContinue;
+  static getGoogleConfig = DomainIdentityAuthController.getGoogleConfig;
 
   static async sendOtp(req: Request, res: Response) {
     try {

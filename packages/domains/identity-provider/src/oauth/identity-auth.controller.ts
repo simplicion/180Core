@@ -787,6 +787,20 @@ export class IdentityAuthController {
     }
 
     /**
+     * Public Google OAuth Client Configuration Endpoint
+     */
+    static async getGoogleConfig(req: any, res: any) {
+        const clientId =
+            process.env.GOOGLE_CLIENT_ID ||
+            process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
+            '188560578303-tqob33d58ednaer1ab0r2u64ouqb55mk.apps.googleusercontent.com';
+        return res.json({
+            success: true,
+            clientId
+        });
+    }
+
+    /**
      * 7. Legacy / Direct Register Endpoint (Full Single Step)
      */
     static async register(req: any, res: any) {

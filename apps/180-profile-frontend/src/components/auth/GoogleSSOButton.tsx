@@ -12,6 +12,9 @@ interface GoogleSSOButtonProps {
   onSuccess?: (user: any, token: string, meta?: any) => void;
 }
 
+const DEFAULT_GOOGLE_CLIENT_ID =
+  '188560578303-tqob33d58ednaer1ab0r2u64ouqb55mk.apps.googleusercontent.com';
+
 export function GoogleSSOButton({
   oauthParams,
   label = 'Continue with Google',
@@ -19,8 +22,9 @@ export function GoogleSSOButton({
 }: GoogleSSOButtonProps) {
   const [googleLoading, setGoogleLoading] = useState(false);
   const tokenClientRef = useRef<any>(null);
-
-  const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
+  const [googleClientId, setGoogleClientId] = useState<string>(
+    process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID
+  );
 
   // Safety timeout and window focus listener to ensure button resets if popup is closed or blocked
   useEffect(() => {
@@ -31,8 +35,6 @@ export function GoogleSSOButton({
     }, 15000);
 
     const handleFocus = () => {
-      // If user comes back to this window while loading, reset after a short delay
-      // giving time for any pending callback to run
       const focusTimer = setTimeout(() => {
         setGoogleLoading(false);
       }, 1500);
@@ -46,15 +48,42 @@ export function GoogleSSOButton({
     };
   }, [googleLoading]);
 
+  // Attempt dynamic Google OAuth config resolution from core backend if clientId isn't populated
+  useEffect(() => {
+    if (googleClientId && googleClientId !== '') return;
+
+    let isMounted = true;
+    fetch(getCoreApiUrl('/api/oauth/google-config'))
+      .then((res) => res.json())
+      .then((data) => {
+        if (isMounted && data?.clientId) {
+          setGoogleClientId(data.clientId);
+        }
+      })
+      .catch((err) => {
+        console.warn('[GoogleSSO] Dynamic config fetch skipped:', err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [googleClientId]);
+
+  const activeClientId = googleClientId || DEFAULT_GOOGLE_CLIENT_ID;
+
+  // Setup Google Identity Services Client
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (!GOOGLE_CLIENT_ID) return;
+    if (!activeClientId) return;
+
+    let isCancelled = false;
+    let pollInterval: NodeJS.Timeout | null = null;
 
     const setupGoogle = () => {
       try {
         if ((window as any).google?.accounts?.oauth2) {
           tokenClientRef.current = (window as any).google.accounts.oauth2.initTokenClient({
-            client_id: GOOGLE_CLIENT_ID,
+            client_id: activeClientId,
             scope: 'email profile openid',
             callback: async (tokenResponse: any) => {
               if (tokenResponse?.error) {
@@ -91,20 +120,41 @@ export function GoogleSSOButton({
     if ((window as any).google?.accounts?.oauth2) {
       setupGoogle();
     } else {
-      const existing = document.getElementById('google-gsi-client');
+      const existing = document.getElementById('google-gsi-client') as HTMLScriptElement | null;
       if (!existing) {
         const script = document.createElement('script');
         script.id = 'google-gsi-client';
         script.src = 'https://accounts.google.com/gsi/client';
         script.async = true;
         script.defer = true;
-        script.onload = setupGoogle;
+        script.onload = () => {
+          if (!isCancelled) setupGoogle();
+        };
         document.head.appendChild(script);
       } else {
-        existing.addEventListener('load', setupGoogle);
+        existing.addEventListener('load', () => {
+          if (!isCancelled) setupGoogle();
+        });
       }
+
+      // Interval fallback in case script already finished loading before listener attached
+      pollInterval = setInterval(() => {
+        if ((window as any).google?.accounts?.oauth2) {
+          if (pollInterval) clearInterval(pollInterval);
+          if (!isCancelled) setupGoogle();
+        }
+      }, 200);
+
+      setTimeout(() => {
+        if (pollInterval) clearInterval(pollInterval);
+      }, 5000);
     }
-  }, [GOOGLE_CLIENT_ID]);
+
+    return () => {
+      isCancelled = true;
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [activeClientId]);
 
   const handleGoogleAccessToken = async (accessToken: string) => {
     setGoogleLoading(true);
@@ -165,10 +215,7 @@ export function GoogleSSOButton({
   };
 
   const handleButtonClick = () => {
-    if (!GOOGLE_CLIENT_ID) {
-      toast.error('Google Sign-In is being initialized. Please use Email or WhatsApp OTP.');
-      return;
-    }
+    const effectiveClientId = activeClientId || DEFAULT_GOOGLE_CLIENT_ID;
 
     if (tokenClientRef.current) {
       setGoogleLoading(true);
@@ -181,7 +228,7 @@ export function GoogleSSOButton({
     } else if ((window as any).google?.accounts?.oauth2) {
       try {
         const client = (window as any).google.accounts.oauth2.initTokenClient({
-          client_id: GOOGLE_CLIENT_ID,
+          client_id: effectiveClientId,
           scope: 'email profile openid',
           callback: async (tokenResponse: any) => {
             if (tokenResponse?.access_token) {
@@ -212,7 +259,43 @@ export function GoogleSSOButton({
         }
       }
     } else {
-      toast.error('Google Sign-In script is loading. Please try again in a second.');
+      // Script is loading in background: wait gracefully
+      setGoogleLoading(true);
+      let attempts = 0;
+      const waitInterval = setInterval(() => {
+        attempts++;
+        if ((window as any).google?.accounts?.oauth2) {
+          clearInterval(waitInterval);
+          try {
+            const client = (window as any).google.accounts.oauth2.initTokenClient({
+              client_id: effectiveClientId,
+              scope: 'email profile openid',
+              callback: async (tokenResponse: any) => {
+                if (tokenResponse?.access_token) {
+                  await handleGoogleAccessToken(tokenResponse.access_token);
+                } else {
+                  setGoogleLoading(false);
+                }
+              },
+              error_callback: (error: any) => {
+                setGoogleLoading(false);
+                if (error?.type === 'popup_failed_to_open') {
+                  toast.error('Google popup was blocked. Please allow popups.');
+                }
+              },
+            });
+            tokenClientRef.current = client;
+            client.requestAccessToken({ prompt: 'select_account' });
+          } catch {
+            setGoogleLoading(false);
+            toast.error('Unable to open Google sign-in window. Please try again.');
+          }
+        } else if (attempts >= 15) {
+          clearInterval(waitInterval);
+          setGoogleLoading(false);
+          toast.error('Google Sign-In service is temporarily unavailable. Please use Email or WhatsApp OTP.');
+        }
+      }, 200);
     }
   };
 

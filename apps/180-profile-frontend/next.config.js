@@ -5,6 +5,11 @@ const isExport = process.env.NEXT_EXPORT === 'true' || process.env.CF_PAGES === 
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@workspace/ui'],
+  env: {
+    NEXT_PUBLIC_GOOGLE_CLIENT_ID:
+      process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
+      '188560578303-tqob33d58ednaer1ab0r2u64ouqb55mk.apps.googleusercontent.com',
+  },
   images: {
     unoptimized: true,
     remotePatterns: [

@@ -284,6 +284,9 @@ jobs:
           NEXT_PUBLIC_CORE_BACKEND_URL: 'https://api.180core.cloud'
           NEXT_PUBLIC_CORE_API_URL: 'https://api.180core.cloud'
           NEXT_PUBLIC_DEVELOPERS_URL: 'https://developer.180core.cloud'
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '188560578303-tqob33d58ednaer1ab0r2u64ouqb55mk.apps.googleusercontent.com' }}
+          NEXT_PUBLIC_ROOT_DOMAIN: '180core.cloud'
+          NEXT_PUBLIC_MAIN_DOMAIN: '180core.cloud'
         run: pnpm --filter 180-profile-frontend build
 
       - name: Deploy to Cloudflare Pages (180workspace-profile)
