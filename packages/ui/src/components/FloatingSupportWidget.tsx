@@ -5,23 +5,10 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   LifeBuoy,
   X,
-  Upload,
-  Image as ImageIcon,
-  Trash2,
-  CheckCircle2,
-  Monitor,
-  MapPin,
-  Clock,
-  Shield,
   Send,
-  Eye,
-  RefreshCw,
   Paperclip,
-  Plus,
-  AlertTriangle,
-  FileText,
-  Copy,
-  Terminal,
+  CheckCircle2,
+  RefreshCw,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import toast from 'react-hot-toast';
@@ -52,15 +39,14 @@ export interface FloatingSupportWidgetProps {
 
 const CATEGORIES = [
   { id: 'BUG_REPORT', label: 'Bug / Broken UI', priority: 'HIGH' },
-  { id: 'PAYMENT_ISSUE', label: '180 Pay / Checkout Issue', priority: 'HIGH' },
-  { id: 'SETTLEMENT_QUERY', label: 'Payout & Settlement Query', priority: 'MEDIUM' },
-  { id: 'INTEGRATION_HELP', label: 'SDK / Webhook Help', priority: 'MEDIUM' },
-  { id: 'FEATURE_REQUEST', label: 'Feature Request', priority: 'LOW' },
-  { id: 'OTHER', label: 'General Feedback', priority: 'LOW' },
+  { id: 'DATA_SYNC', label: 'Data & Sync', priority: 'HIGH' },
+  { id: 'SLOW_PERFORMANCE', label: 'Slow Performance', priority: 'MEDIUM' },
+  { id: 'ACCOUNT_BILLING', label: 'Account & Billing', priority: 'MEDIUM' },
+  { id: 'OTHER', label: 'Other', priority: 'LOW' },
 ];
 
 const MAX_IMAGES = 5;
-const MAX_LINES = 1000;
+const MAX_CHARS = 5000;
 const MAX_TOTAL_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 
 function formatFileSize(bytes: number): string {
@@ -79,10 +65,8 @@ export function FloatingSupportWidget({
   const [isOpen, setIsOpen] = useState(false);
   const [category, setCategory] = useState('BUG_REPORT');
   const [priority, setPriority] = useState('HIGH');
-  const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [attachments, setAttachments] = useState<FloatingSupportAttachment[]>([]);
-  const [isDragging, setIsDragging] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submittedTicket, setSubmittedTicket] = useState<{ id: string; ticketNumber: number } | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
@@ -137,8 +121,20 @@ export function FloatingSupportWidget({
         browser: detectedBrowser,
         online: navigator.onLine,
       });
+
+      // Auto-focus textarea when opened
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 100);
     }
   }, [isOpen]);
+
+  // Support programmatic event trigger
+  useEffect(() => {
+    const handleOpenEvent = () => setIsOpen(true);
+    window.addEventListener('180_OPEN_SUPPORT', handleOpenEvent);
+    return () => window.removeEventListener('180_OPEN_SUPPORT', handleOpenEvent);
+  }, []);
 
   // Process files (paste or drag or file picker)
   const processFiles = useCallback((files: FileList | File[]) => {
@@ -186,7 +182,7 @@ export function FloatingSupportWidget({
       reader.readAsDataURL(file);
     });
 
-    toast.success(`Attached ${validFiles.length} image${validFiles.length > 1 ? 's' : ''}`);
+    toast.success(`Attached ${validFiles.length} screenshot${validFiles.length > 1 ? 's' : ''}`);
   }, [attachments]);
 
   // Global Ctrl+V clipboard paste handler when modal is open
@@ -221,35 +217,53 @@ export function FloatingSupportWidget({
     setAttachments((prev) => prev.filter((a) => a.id !== id));
   };
 
-  // Line count calculator
-  const lineCount = description.split('\n').length;
-
   // Submit Handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!title.trim()) {
-      toast.error('Please enter a brief title for your query');
-      return;
-    }
     if (!description.trim()) {
-      toast.error('Please enter a description of the issue');
-      return;
-    }
-    if (lineCount > MAX_LINES) {
-      toast.error(`Description cannot exceed ${MAX_LINES} lines.`);
+      toast.error('Please describe what happened in detail');
       return;
     }
 
     setSubmitting(true);
     try {
-      const baseUrl = apiBaseUrl || backendUrl || 'http://localhost:4003';
+      const isLocal =
+        typeof window !== 'undefined' &&
+        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+      const baseUrl =
+        apiBaseUrl ||
+        (isLocal
+          ? backendUrl || 'http://localhost:4003'
+          : process.env.NEXT_PUBLIC_CORE_BACKEND_URL || 'https://api.180core.cloud');
+
+      const activeCategoryObj = CATEGORIES.find((c) => c.id === category);
+      const firstLine = description.trim().split('\n')[0].slice(0, 80);
+      const generatedTitle = `[${activeCategoryObj?.label || 'Support'}] ${firstLine}`;
+
+      // Resolve user context if stored in localStorage
+      let resolvedUserId = userContext?.id;
+      let resolvedUserName = userContext?.name;
+      let resolvedUserEmail = userContext?.email;
+
+      if (!resolvedUserId && typeof window !== 'undefined') {
+        try {
+          const storedUser = localStorage.getItem('user');
+          if (storedUser) {
+            const u = JSON.parse(storedUser);
+            resolvedUserId = u.id || u.sub;
+            resolvedUserName = u.name || u.fullName || u.username;
+            resolvedUserEmail = u.email;
+          }
+        } catch (_) {}
+      }
+
       const payload = {
-        title: title.trim(),
+        title: generatedTitle,
         description: description.trim(),
         category,
-        priority,
-        pageUrl: telemetry.pageUrl,
+        priority: activeCategoryObj?.priority || priority || 'HIGH',
+        pageUrl: telemetry.pageUrl || (typeof window !== 'undefined' ? window.location.href : ''),
         referrer: telemetry.referrer,
         deviceInfo: {
           os: telemetry.os,
@@ -263,9 +277,9 @@ export function FloatingSupportWidget({
           online: telemetry.online,
         },
         attachments: attachments.map((a) => a.dataUrl),
-        userId: userContext?.id,
-        userName: userContext?.name,
-        userEmail: userContext?.email,
+        userId: resolvedUserId,
+        userName: resolvedUserName,
+        userEmail: resolvedUserEmail,
         appId: appContext?.id,
       };
 
@@ -277,21 +291,20 @@ export function FloatingSupportWidget({
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to submit support ticket');
+        throw new Error(data.error || 'Failed to submit support report');
       }
 
       setSubmittedTicket(data.ticket);
       toast.success(`Support Ticket #${data.ticket.ticketNumber} submitted!`);
     } catch (err: any) {
       console.error('[FloatingSupportWidget] Error:', err);
-      toast.error(err.message || 'Error sending support request');
+      toast.error(err.message || 'Error sending support report');
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleReset = () => {
-    setTitle('');
     setDescription('');
     setAttachments([]);
     setSubmittedTicket(null);
@@ -302,295 +315,197 @@ export function FloatingSupportWidget({
 
   return (
     <>
-      {/* 1. Floating Pill Button in Corner */}
+      {/* 1. Floating Quick Support Trigger Button */}
       {!isOpen && (
         <button
-          type="button"
           onClick={() => setIsOpen(true)}
           className={clsx(
-            'fixed z-50 flex items-center gap-2.5 px-3.5 py-2.5 rounded-full bg-zinc-950 dark:bg-white text-white dark:text-zinc-950 text-xs font-bold shadow-2xl border border-white/20 dark:border-black/20 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer group',
+            'group fixed z-40 inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all text-xs font-semibold cursor-pointer select-none',
             defaultPosition === 'bottom-right' ? 'bottom-5 right-5' : 'bottom-5 left-5'
           )}
-          title="Need Help? Report an Issue (Ctrl+V Screenshots Supported)"
+          title="Open Quick Support"
         >
-          <span className="relative flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-purple-500" />
-          </span>
-          <LifeBuoy className="w-4 h-4 text-purple-400 dark:text-purple-600 group-hover:rotate-45 transition-transform" />
-          <span className="hidden sm:inline">Support &amp; Feedback</span>
+          <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-purple-600 via-fuchsia-600 to-indigo-500 flex items-center justify-center text-white shrink-0 shadow-sm">
+            <LifeBuoy className="w-3 h-3 text-white" />
+          </div>
+          <span>Quick Support</span>
         </button>
       )}
 
-      {/* 2. Floating Bottom-Right Drawer / Modal */}
+      {/* 2. Quick Support Modal */}
       {isOpen && (
         <div
           ref={modalRef}
           className={clsx(
-            'fixed z-50 w-[95vw] sm:w-[480px] max-h-[88vh] flex flex-col rounded-3xl border border-zinc-200 dark:border-white/10 bg-white/95 dark:bg-[#101012]/95 backdrop-blur-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-5 duration-200 select-none',
+            'fixed z-50 w-[94vw] sm:w-[440px] max-h-[85vh] flex flex-col rounded-3xl border border-zinc-200/90 dark:border-white/10 bg-white dark:bg-[#121215] shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200 select-none p-5 sm:p-6 space-y-4',
             defaultPosition === 'bottom-right' ? 'bottom-5 right-5' : 'bottom-5 left-5'
           )}
         >
-          {/* Header Bar */}
-          <div className="p-4 px-5 border-b border-zinc-200 dark:border-white/10 flex items-center justify-between gap-3 bg-zinc-50/50 dark:bg-zinc-900/40">
+          {/* Header */}
+          <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
-                <LifeBuoy className="w-4 h-4" />
+              <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-purple-600 via-fuchsia-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-purple-500/25 shrink-0">
+                <LifeBuoy className="w-4 h-4 text-white" />
               </div>
-              <div>
-                <h3 className="text-sm font-bold text-zinc-950 dark:text-white flex items-center gap-2">
-                  <span>180 Core Support Desk</span>
-                  <span className="px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 text-[10px] font-bold">
-                    Direct
-                  </span>
-                </h3>
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                  Auto-telemetry &amp; Ctrl+V screenshot recording enabled
-                </p>
-              </div>
+              <h3 className="text-base font-bold text-zinc-900 dark:text-white tracking-tight">
+                Quick Support
+              </h3>
             </div>
 
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="p-1.5 rounded-xl text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              aria-label="Close"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Body Content */}
-          <div className="p-5 overflow-y-auto space-y-4 flex-1">
-            {submittedTicket ? (
-              /* Success State */
-              <div className="py-8 text-center space-y-4">
-                <div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 flex items-center justify-center mx-auto">
-                  <CheckCircle2 className="w-8 h-8" />
-                </div>
-                <div className="space-y-1">
-                  <h4 className="text-base font-bold text-zinc-950 dark:text-white">
-                    Ticket #{submittedTicket.ticketNumber} Submitted!
-                  </h4>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-xs mx-auto">
-                    Your issue and complete device diagnostics have been logged to the 180 Core Engineering Admin.
-                  </p>
-                </div>
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={handleReset}
-                    className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md transition-all cursor-pointer"
-                  >
-                    Done &amp; Close
-                  </button>
-                </div>
+          {submittedTicket ? (
+            /* Success State */
+            <div className="py-6 text-center space-y-4">
+              <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 flex items-center justify-center mx-auto">
+                <CheckCircle2 className="w-6 h-6" />
               </div>
-            ) : (
-              /* Form State */
-              <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Category & Priority Selectors */}
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div>
-                    <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
-                      Issue Category
-                    </label>
-                    <select
-                      value={category}
-                      onChange={(e) => {
-                        const selected = CATEGORIES.find((c) => c.id === e.target.value);
-                        setCategory(e.target.value);
-                        if (selected) setPriority(selected.priority);
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-zinc-950 dark:text-white">
+                  Report #{submittedTicket.ticketNumber} Dispatched
+                </h4>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-xs mx-auto">
+                  Thank you! Our engineering team has received your report with automated diagnostic telemetry.
+                </p>
+              </div>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="px-5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 dark:bg-white dark:hover:bg-zinc-100 text-white dark:text-zinc-900 font-bold text-xs shadow-md transition-all cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Quick Support Form */
+            <form onSubmit={handleSubmit} className="space-y-3.5">
+              {/* Category Pills Bar */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                {CATEGORIES.map((c) => {
+                  const isSelected = category === c.id;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        setCategory(c.id);
+                        setPriority(c.priority);
                       }}
-                      className="w-full px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    >
-                      {CATEGORIES.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
-                      Severity Priority
-                    </label>
-                    <select
-                      value={priority}
-                      onChange={(e) => setPriority(e.target.value)}
-                      className="w-full px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-white font-medium focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    >
-                      <option value="LOW">Low (Cosmetic / Question)</option>
-                      <option value="MEDIUM">Medium (Normal)</option>
-                      <option value="HIGH">High (Blocking Flow)</option>
-                      <option value="URGENT">Urgent (Payment Critical)</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Title */}
-                <div>
-                  <label className="block text-[11px] font-bold text-zinc-600 dark:text-zinc-400 mb-1">
-                    Subject / Short Summary *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Settlement button unresponsive or QR code scan error"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-
-                {/* Description (Supports 1000 lines) */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">
-                      Issue Description &amp; Reproduction Steps *
-                    </label>
-                    <span
                       className={clsx(
-                        'text-[10px] font-mono',
-                        lineCount > MAX_LINES ? 'text-rose-500 font-bold' : 'text-zinc-400'
+                        'px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer',
+                        isSelected
+                          ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 shadow-sm'
+                          : 'bg-transparent text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-white/15 hover:border-zinc-300 dark:hover:border-white/30 hover:bg-zinc-50 dark:hover:bg-zinc-800/40'
                       )}
                     >
-                      Lines: {lineCount} / {MAX_LINES}
-                    </span>
-                  </div>
+                      {c.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Textarea Container with Red Accent Outline */}
+              <div>
+                <div className="border border-red-500 dark:border-red-500/90 rounded-2xl p-3.5 relative bg-transparent transition-all">
                   <textarea
                     ref={textareaRef}
                     required
                     rows={6}
-                    placeholder="Describe what occurred, any error messages, and reproduction steps... Tip: You can paste (Ctrl+V) screenshots directly here!"
+                    maxLength={MAX_CHARS}
+                    placeholder="Describe what happened in detail... (Tip: paste screenshot directly anywhere with Ctrl+V or Cmd+V)"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-white font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-purple-500 resize-y"
+                    className="w-full bg-transparent text-xs sm:text-[13px] text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none resize-none leading-relaxed"
                   />
                 </div>
 
-                {/* Attachments Section (Ctrl+V Paste + Upload button, max 5) */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 flex items-center gap-1.5">
-                      <ImageIcon className="w-3.5 h-3.5 text-purple-500" />
-                      <span>Screenshots ({attachments.length} / {MAX_IMAGES})</span>
-                    </span>
-                    <span className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold bg-purple-500/10 px-2 py-0.5 rounded-full">
-                      Ctrl + V to paste image
-                    </span>
-                  </div>
+                {/* Character Counter */}
+                <div className="flex justify-end pt-1.5">
+                  <span className="text-[11px] font-mono text-zinc-400 dark:text-zinc-500">
+                    {description.length} / {MAX_CHARS.toLocaleString()}
+                  </span>
+                </div>
+              </div>
 
-                  {/* Thumbnail Previews */}
-                  {attachments.length > 0 && (
-                    <div className="grid grid-cols-5 gap-2 pt-1">
-                      {attachments.map((att) => (
-                        <div
-                          key={att.id}
-                          className="relative group rounded-xl border border-zinc-200 dark:border-white/10 overflow-hidden aspect-square bg-zinc-100 dark:bg-zinc-800"
+              {/* Attached Screenshots Previews (Ctrl+V or Uploaded) */}
+              {attachments.length > 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400 font-semibold">
+                    <span>Screenshots ({attachments.length} / {MAX_IMAGES})</span>
+                    <span className="text-[10px] text-zinc-400">Ctrl+V to add more</span>
+                  </div>
+                  <div className="flex items-center gap-2 overflow-x-auto py-1 scrollbar-none">
+                    {attachments.map((att) => (
+                      <div
+                        key={att.id}
+                        className="relative group w-14 h-14 rounded-xl border border-zinc-200 dark:border-white/10 overflow-hidden shrink-0 bg-zinc-100 dark:bg-zinc-800"
+                      >
+                        <img
+                          src={att.dataUrl}
+                          alt={att.name}
+                          className="w-full h-full object-cover cursor-pointer"
+                          onClick={() => setLightboxImage(att.dataUrl)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeAttachment(att.id)}
+                          className="absolute top-1 right-1 p-0.5 rounded-full bg-black/70 text-white hover:bg-rose-600 transition-colors cursor-pointer"
+                          title="Remove screenshot"
                         >
-                          <img
-                            src={att.dataUrl}
-                            alt={att.name}
-                            className="w-full h-full object-cover cursor-pointer"
-                            onClick={() => setLightboxImage(att.dataUrl)}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeAttachment(att.id)}
-                            className="absolute top-1 right-1 p-1 rounded-md bg-black/70 text-white hover:bg-rose-600 transition-colors cursor-pointer"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Upload Box if under max */}
-                  {attachments.length < MAX_IMAGES && (
-                    <div
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        setIsDragging(true);
-                      }}
-                      onDragLeave={() => setIsDragging(false)}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        setIsDragging(false);
-                        if (e.dataTransfer.files) processFiles(e.dataTransfer.files);
-                      }}
-                      onClick={() => fileInputRef.current?.click()}
-                      className={clsx(
-                        'p-3 rounded-xl border-2 border-dashed text-center transition-all cursor-pointer flex items-center justify-center gap-2 text-xs font-semibold',
-                        isDragging
-                          ? 'border-purple-500 bg-purple-500/10 text-purple-600'
-                          : 'border-zinc-200 dark:border-white/10 hover:border-purple-500/40 text-zinc-500 dark:text-zinc-400'
-                      )}
-                    >
-                      <Upload className="w-3.5 h-3.5 text-purple-500" />
-                      <span>Click to upload or drag &amp; drop ({MAX_IMAGES - attachments.length} remaining)</span>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        onChange={(e) => {
-                          if (e.target.files) processFiles(e.target.files);
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* Auto-Captured Telemetry Summary Badge */}
-                <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-white/5 space-y-1 text-[10px] text-zinc-500 dark:text-zinc-400">
-                  <div className="flex items-center justify-between text-zinc-700 dark:text-zinc-300 font-bold">
-                    <span className="flex items-center gap-1">
-                      <Shield className="w-3 h-3 text-emerald-500" />
-                      Auto-Captured Context
-                    </span>
-                    <span className="text-[9px] text-emerald-500 font-bold uppercase">Ready</span>
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                  <p className="truncate">
-                    <span className="font-semibold">URL:</span> {telemetry.pageUrl}
-                  </p>
-                  <p>
-                    <span className="font-semibold">Environment:</span> {telemetry.os} &bull; {telemetry.browser} &bull; {telemetry.screenResolution} &bull; {telemetry.timeZone}
-                  </p>
-                  {appContext && (
-                    <p>
-                      <span className="font-semibold">App:</span> {appContext.name} ({appContext.clientId?.slice(0, 16)}...)
-                    </p>
-                  )}
                 </div>
+              )}
 
-                {/* Submit Action */}
-                <div className="pt-2 flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsOpen(false)}
-                    className="px-3.5 py-2 rounded-xl text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-purple-600/20 disabled:opacity-50 transition-all cursor-pointer"
-                  >
-                    {submitting ? (
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <Send className="w-3.5 h-3.5" />
-                    )}
-                    <span>Submit Inquiry</span>
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
+              {/* Footer Actions: [Attach Image] and [Send Report] */}
+              <div className="pt-1 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors cursor-pointer shadow-sm"
+                >
+                  <Paperclip className="w-3.5 h-3.5 text-zinc-500" />
+                  <span>Attach Image</span>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files) processFiles(e.target.files);
+                  }}
+                />
+
+                <button
+                  type="submit"
+                  disabled={submitting || !description.trim()}
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-zinc-600 hover:bg-zinc-700 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {submitting ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Send className="w-3.5 h-3.5" />
+                  )}
+                  <span>Send Report</span>
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       )}
 
