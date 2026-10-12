@@ -22,6 +22,30 @@ export function GoogleSSOButton({
 
   const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
 
+  // Safety timeout and window focus listener to ensure button resets if popup is closed or blocked
+  useEffect(() => {
+    if (!googleLoading) return;
+
+    const timeout = setTimeout(() => {
+      setGoogleLoading(false);
+    }, 15000);
+
+    const handleFocus = () => {
+      // If user comes back to this window while loading, reset after a short delay
+      // giving time for any pending callback to run
+      const focusTimer = setTimeout(() => {
+        setGoogleLoading(false);
+      }, 1500);
+      return () => clearTimeout(focusTimer);
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      clearTimeout(timeout);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [googleLoading]);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!GOOGLE_CLIENT_ID) return;
@@ -33,7 +57,7 @@ export function GoogleSSOButton({
             client_id: GOOGLE_CLIENT_ID,
             scope: 'email profile openid',
             callback: async (tokenResponse: any) => {
-              if (tokenResponse.error) {
+              if (tokenResponse?.error) {
                 setGoogleLoading(false);
                 if (tokenResponse.error !== 'access_denied') {
                   toast.error(`Google Sign-In: ${tokenResponse.error}`);
@@ -41,8 +65,20 @@ export function GoogleSSOButton({
                 return;
               }
 
-              if (tokenResponse.access_token) {
+              if (tokenResponse?.access_token) {
                 await handleGoogleAccessToken(tokenResponse.access_token);
+              } else {
+                setGoogleLoading(false);
+              }
+            },
+            error_callback: (error: any) => {
+              setGoogleLoading(false);
+              if (error?.type === 'popup_closed') {
+                console.log('[GoogleSSO] Popup closed before finishing authentication');
+              } else if (error?.type === 'popup_failed_to_open') {
+                toast.error('Google popup was blocked. Please allow popups for this site.');
+              } else {
+                console.warn('[GoogleSSO] Token client error:', error);
               }
             },
           });
@@ -136,7 +172,12 @@ export function GoogleSSOButton({
 
     if (tokenClientRef.current) {
       setGoogleLoading(true);
-      tokenClientRef.current.requestAccessToken({ prompt: 'select_account' });
+      try {
+        tokenClientRef.current.requestAccessToken({ prompt: 'select_account' });
+      } catch (err) {
+        setGoogleLoading(false);
+        toast.error('Unable to open Google sign-in window. Please try again.');
+      }
     } else if ((window as any).google?.accounts?.oauth2) {
       try {
         const client = (window as any).google.accounts.oauth2.initTokenClient({
@@ -147,6 +188,14 @@ export function GoogleSSOButton({
               await handleGoogleAccessToken(tokenResponse.access_token);
             } else {
               setGoogleLoading(false);
+            }
+          },
+          error_callback: (error: any) => {
+            setGoogleLoading(false);
+            if (error?.type === 'popup_closed') {
+              console.log('[GoogleSSO] Popup closed');
+            } else if (error?.type === 'popup_failed_to_open') {
+              toast.error('Google popup was blocked. Please allow popups.');
             }
           },
         });
