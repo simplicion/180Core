@@ -21,7 +21,7 @@ The sovereign foundation of the 180 Ecosystem: Universal Identity, Sovereign Wal
 │   ├── ui/                      # Shared platform UI primitives (Glassmorphism, Dark mode, Accessible Modals/Buttons)
 │   ├── typescript-config/       # Shared strict tsconfig presets
 │   └── eslint-config/           # Shared lint rules
-└── scripts/                     # Dev runner, seeders, SDK CDN deployer, and test suites
+└── scripts/                     # Dev runner, SDK CDN deployer, and test suites
 ```
 
 ## Quick Start

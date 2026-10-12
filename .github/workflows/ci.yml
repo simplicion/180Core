@@ -72,8 +72,3 @@ jobs:
           CORE_DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/180core_db?schema=public
           JWT_SECRET: ci_jwt_secret_token_180_core_test_key_99999
         run: pnpm build
-
-      - name: Seed Developer & First-Party Catalog
-        env:
-          CORE_DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/180core_db?schema=public
-        run: pnpm db:seed

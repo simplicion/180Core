@@ -764,6 +764,186 @@
     } catch (_) {}
   }
 
+  // <one-eighty-pricing-table> UNIVERSAL EMBEDDABLE COMPONENT
+  if (isBrowser && window.customElements && !window.customElements.get('one-eighty-pricing-table')) {
+    try {
+      var OneEightyPricingTableElement = class extends HTMLElement {
+        connectedCallback() {
+          var el = this;
+          var appId = el.getAttribute('app-id') || el.getAttribute('appid') || el.getAttribute('client-id') || '';
+          var theme = el.getAttribute('theme') || 'auto';
+          var customAccent = el.getAttribute('accent-color') || '';
+          var apiServer = el.getAttribute('api-base') || DEFAULT_API_SERVER;
+          var selectedInterval = el.getAttribute('interval') || 'monthly';
+
+          if (!appId) {
+            el.innerHTML = '<div style="padding:16px;font-family:sans-serif;color:#ef4444;background:rgba(239,68,68,0.1);border-radius:12px;font-size:13px;border:1px solid rgba(239,68,68,0.2);">Missing required <code>app-id</code> attribute on <code>&lt;one-eighty-pricing-table&gt;</code>.</div>';
+            return;
+          }
+
+          el.innerHTML = '<div style="padding:32px;text-align:center;font-family:sans-serif;color:#71717a;font-size:13px;"><div style="width:24px;height:24px;border:2px solid #71717a;border-top-color:transparent;border-radius:50%;margin:0 auto 12px auto;animation:one-eighty-spin 0.75s linear infinite;"></div>Loading subscription tiers...</div>';
+
+          fetch(apiServer + '/api/v1/pricing-tables/' + encodeURIComponent(appId))
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+              if (!data || !data.success || !data.config) {
+                el.innerHTML = '<div style="padding:20px;text-align:center;font-family:sans-serif;color:#ef4444;font-size:13px;">Unable to load pricing table. Please check app ID or network connectivity.</div>';
+                return;
+              }
+              var config = data.config;
+              var accentColor = customAccent || config.accentColor || '#6366f1';
+              var yearlyDiscount = Number(config.yearlyDiscountPct || 20);
+              var plans = config.planCards || [];
+
+              function checkIsDark() {
+                if (theme === 'light') return false;
+                if (theme === 'dark' || theme === 'obsidian') return true;
+                // 'auto' mode: check host/developer platform document classes
+                if (typeof document !== 'undefined') {
+                  var docDark = document.documentElement.classList.contains('dark') ||
+                    Boolean(document.body && document.body.classList.contains('dark')) ||
+                    document.documentElement.getAttribute('data-theme') === 'dark' ||
+                    Boolean(document.body && document.body.getAttribute('data-theme') === 'dark');
+                  if (docDark) return true;
+                }
+                // Default is White / Light Mode!
+                return false;
+              }
+
+              var currentActiveInterval = selectedInterval;
+
+              function renderTable(currentInterval) {
+                currentActiveInterval = currentInterval;
+                var isDark = checkIsDark();
+                var text = isDark ? '#f4f4f5' : '#09090b';
+                var muted = isDark ? '#a1a1aa' : '#71717a';
+                var cardBg = isDark ? '#18181b' : '#ffffff';
+                var cardBorder = isDark ? 'rgba(255,255,255,0.1)' : '#e4e4e7';
+                var toggleBg = isDark ? 'rgba(255,255,255,0.06)' : '#f4f4f5';
+
+                var html = '<div style="font-family:system-ui,-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;color:' + text + ';padding:24px 12px;box-sizing:border-box;">';
+
+                if (config.headline) {
+                  html += '<div style="text-align:center;margin-bottom:28px;">';
+                  html += '<h2 style="margin:0 0 8px 0;font-size:26px;font-weight:800;letter-spacing:-0.02em;">' + config.headline + '</h2>';
+                  if (config.subheadline) {
+                    html += '<p style="margin:0;font-size:14px;color:' + muted + ';max-width:580px;margin-left:auto;margin-right:auto;">' + config.subheadline + '</p>';
+                  }
+
+                  html += '<div style="margin-top:20px;display:inline-flex;align-items:center;padding:4px;border-radius:12px;background:' + toggleBg + ';border:1px solid ' + cardBorder + ';">';
+                  html += '<button type="button" data-interval="monthly" style="padding:6px 16px;border-radius:8px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:' + (currentInterval === 'monthly' ? accentColor : 'transparent') + ';color:' + (currentInterval === 'monthly' ? '#ffffff' : muted) + ';transition:all 0.15s ease;">Monthly</button>';
+                  html += '<button type="button" data-interval="yearly" style="padding:6px 16px;border-radius:8px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:' + (currentInterval === 'yearly' ? accentColor : 'transparent') + ';color:' + (currentInterval === 'yearly' ? '#ffffff' : muted) + ';transition:all 0.15s ease;display:inline-flex;align-items:center;gap:6px;">Annual <span style="font-size:10px;background:rgba(16,185,129,0.2);color:#10b981;padding:1px 6px;border-radius:999px;font-weight:700;">Save ' + yearlyDiscount + '%</span></button>';
+                  html += '</div></div>';
+                }
+
+                html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;max-width:1100px;margin:0 auto;align-items:stretch;">';
+                plans.forEach(function (p) {
+                  var amount = currentInterval === 'yearly' ? (p.yearlyAmount || Math.round((p.amount || 0) * 12 * (1 - yearlyDiscount / 100))) : (p.amount || 0);
+                  var isPopular = !!p.isPopular;
+                  var curSymbol = p.currency === 'INR' ? '₹' : p.currency === 'EUR' ? '€' : p.currency === 'GBP' ? '£' : '$';
+                  var badge = p.badgeText || (isPopular ? 'Most Popular' : '');
+
+                  html += '<div style="position:relative;background:' + cardBg + ';border:' + (isPopular ? '2px solid ' + accentColor : '1px solid ' + cardBorder) + ';border-radius:20px;padding:28px 24px;display:flex;flex-direction:column;justify-content:space-between;box-shadow:' + (isPopular ? '0 12px 32px -8px rgba(99,102,241,0.25)' : (isDark ? 'none' : '0 1px 3px rgba(0,0,0,0.05)')) + ';transition:transform 0.2s ease;">';
+                  if (badge) {
+                    html += '<div style="position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:' + accentColor + ';color:#ffffff;font-size:10px;font-weight:700;padding:2px 10px;border-radius:999px;text-transform:uppercase;letter-spacing:0.04em;">' + badge + '</div>';
+                  }
+                  html += '<div>';
+                  html += '<h3 style="margin:0 0 6px 0;font-size:18px;font-weight:700;">' + p.name + '</h3>';
+                  if (p.description) {
+                    html += '<p style="margin:0 0 16px 0;font-size:12px;color:' + muted + ';line-height:1.4;">' + p.description + '</p>';
+                  }
+                  html += '<div style="display:flex;align-items:baseline;gap:4px;margin-bottom:20px;">';
+                  html += '<span style="font-size:32px;font-weight:800;font-family:monospace;">' + curSymbol + amount + '</span>';
+                  html += '<span style="font-size:12px;color:' + muted + ';">/' + (currentInterval === 'yearly' ? 'yr' : 'mo') + '</span>';
+                  html += '</div>';
+
+                  if (p.features && p.features.length) {
+                    html += '<div style="border-top:1px solid ' + cardBorder + ';padding-top:16px;margin-bottom:24px;">';
+                    html += '<ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px;font-size:12.5px;">';
+                    p.features.forEach(function (feat) {
+                      var featText = typeof feat === 'object' ? feat.text : feat;
+                      var inc = typeof feat === 'object' ? feat.included !== false : true;
+                      html += '<li style="display:flex;align-items:center;gap:8px;color:' + (inc ? text : muted) + ';opacity:' + (inc ? '1' : '0.5') + ';">';
+                      html += '<span style="color:' + (inc ? '#10b981' : muted) + ';font-weight:700;">' + (inc ? '✓' : '×') + '</span>';
+                      html += '<span>' + featText + '</span>';
+                      html += '</li>';
+                    });
+                    html += '</ul>';
+                    html += '</div>';
+                  }
+                  html += '</div>';
+
+                  var btnText = p.buttonText || (p.trialDays && p.trialDays > 0 ? 'Start ' + p.trialDays + '-Day Free Trial' : 'Get Started');
+                  html += '<div>';
+                  html += '<button type="button" data-plan="' + p.planCode + '" style="width:100%;padding:12px;border-radius:12px;font-size:13px;font-weight:700;border:none;cursor:pointer;background:' + (isPopular ? accentColor : (isDark ? '#27272a' : '#09090b')) + ';color:#ffffff;transition:all 0.15s ease;" onmouseover="this.style.opacity=0.9" onmouseout="this.style.opacity=1">' + btnText + '</button>';
+                  if (p.trialDays && p.trialDays > 0) {
+                    html += '<p style="margin:6px 0 0 0;font-size:11px;color:' + muted + ';text-align:center;">' + p.trialDays + '-day free trial • Cancel anytime</p>';
+                  }
+                  html += '</div>';
+                  html += '</div>';
+                });
+                html += '</div></div>';
+
+                el.innerHTML = html;
+
+                var btnMonthly = el.querySelector('button[data-interval="monthly"]');
+                var btnYearly = el.querySelector('button[data-interval="yearly"]');
+                if (btnMonthly) btnMonthly.onclick = function () { renderTable('monthly'); };
+                if (btnYearly) btnYearly.onclick = function () { renderTable('yearly'); };
+
+                var planBtns = el.querySelectorAll('button[data-plan]');
+                planBtns.forEach(function (b) {
+                  b.onclick = function () {
+                    var code = b.getAttribute('data-plan');
+                    var targetPlan = plans.find(function (item) { return item.planCode === code; });
+                    if (!targetPlan) return;
+                    if (targetPlan.buttonUrl && targetPlan.buttonUrl.trim().length > 0) {
+                      window.open(targetPlan.buttonUrl.trim(), '_blank');
+                      return;
+                    }
+                    var amt = currentInterval === 'yearly' ? (targetPlan.yearlyAmount || Math.round((targetPlan.amount || 0) * 12 * (1 - yearlyDiscount / 100))) : (targetPlan.amount || 0);
+                    OneEighty.pay.checkout({
+                      appId: appId,
+                      planCode: targetPlan.planCode,
+                      amount: amt,
+                      currency: targetPlan.currency || 'USD',
+                      title: targetPlan.name,
+                      uxMode: 'bottom_sheet'
+                    });
+                  };
+                });
+              }
+
+              renderTable(selectedInterval);
+
+              // Auto-sync with host page theme changes
+              if (theme === 'auto' && typeof MutationObserver !== 'undefined' && typeof document !== 'undefined') {
+                if (el._themeObserver) el._themeObserver.disconnect();
+                el._themeObserver = new MutationObserver(function () {
+                  renderTable(currentActiveInterval);
+                });
+                el._themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme'] });
+                if (document.body) {
+                  el._themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class', 'data-theme'] });
+                }
+              }
+            })
+            .catch(function (err) {
+              el.innerHTML = '<div style="padding:20px;text-align:center;font-family:sans-serif;color:#ef4444;font-size:13px;">Error loading pricing table: ' + (err.message || 'Network error') + '</div>';
+            });
+        }
+
+        disconnectedCallback() {
+          if (this._themeObserver) {
+            this._themeObserver.disconnect();
+            this._themeObserver = null;
+          }
+        }
+      };
+      window.customElements.define('one-eighty-pricing-table', OneEightyPricingTableElement);
+    } catch (_) {}
+  }
+
   if (isBrowser) {
     try {
       var handleRevoked = function (revokedClientId) {

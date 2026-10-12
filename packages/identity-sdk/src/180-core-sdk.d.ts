@@ -132,6 +132,12 @@ declare global {
     OneEightyAuth: OneEightyAuthService;
     OneEightyPay: OneEightyPayService;
   }
+
+  interface HTMLElementTagNameMap {
+    'one-eighty-auth-button': HTMLElement;
+    'one-eighty-pay-button': HTMLElement;
+    'one-eighty-pricing-table': HTMLElement;
+  }
 }
 
 export const OneEighty: OneEightyCoreInstance;

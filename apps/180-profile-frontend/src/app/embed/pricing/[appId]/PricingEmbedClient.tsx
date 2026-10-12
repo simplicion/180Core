@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { Check, Sparkles, Shield, ArrowRight, AlertCircle } from 'lucide-react';
 import { Button, LogoLoader } from '@workspace/ui';
@@ -89,6 +89,56 @@ export function PricingEmbedClient({ appId: initialAppId }: { appId?: string } =
   const [error, setError] = useState<string | null>(null);
   const [selectedInterval, setSelectedInterval] = useState<'MONTHLY' | 'YEARLY'>('MONTHLY');
 
+  // Real-time Platform/Host Theme Auto-Detection (Default: White / Light mode)
+  const [docIsDark, setDocIsDark] = useState<boolean>(false);
+  const [externalTheme, setExternalTheme] = useState<string | null>(null);
+
+  useEffect(() => {
+    const updateDocDark = () => {
+      if (typeof document !== 'undefined') {
+        const isDarkActive =
+          document.documentElement.classList.contains('dark') ||
+          Boolean(document.body?.classList.contains('dark')) ||
+          document.documentElement.getAttribute('data-theme') === 'dark' ||
+          document.body?.getAttribute('data-theme') === 'dark';
+        setDocIsDark(Boolean(isDarkActive));
+      }
+    };
+    updateDocDark();
+
+    const observer = new MutationObserver(updateDocDark);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme'] });
+    if (document.body) {
+      observer.observe(document.body, { attributes: true, attributeFilter: ['class', 'data-theme'] });
+    }
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data && (event.data.type === '180_THEME_CHANGE' || event.data.type === 'THEME_CHANGE')) {
+        if (typeof event.data.theme === 'string') {
+          setExternalTheme(event.data.theme);
+        }
+      }
+    };
+    window.addEventListener('message', handleMessage);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('message', handleMessage);
+    };
+  }, []);
+
+  const isDark = useMemo(() => {
+    let urlTheme: string | null = null;
+    if (typeof window !== 'undefined') {
+      urlTheme = new URLSearchParams(window.location.search).get('theme');
+    }
+    const effectiveTheme = externalTheme || urlTheme || config?.theme || 'auto';
+    if (effectiveTheme === 'light') return false;
+    if (effectiveTheme === 'dark' || effectiveTheme === 'obsidian') return true;
+    // Default is White (light mode), auto-switching if dark mode is detected on host page
+    return docIsDark;
+  }, [externalTheme, config?.theme, docIsDark]);
+
   const getApiBase = () => {
     return CORE_BACKEND_URL;
   };
@@ -174,19 +224,27 @@ export function PricingEmbedClient({ appId: initialAppId }: { appId?: string } =
 
   if (loading) {
     return (
-      <div className="min-h-[400px] flex flex-col items-center justify-center p-8 bg-zinc-950 text-white">
+      <div className={`min-h-[400px] flex flex-col items-center justify-center p-8 transition-colors ${
+        isDark ? 'bg-zinc-950 text-white' : 'bg-white text-zinc-950'
+      }`}>
         <LogoLoader size={36} className="w-9 h-9 text-purple-500" />
-        <p className="text-xs text-zinc-400 font-medium mt-3">Loading pricing plans...</p>
+        <p className={`text-xs font-medium mt-3 ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+          Loading pricing plans...
+        </p>
       </div>
     );
   }
 
   if (error || !config) {
     return (
-      <div className="min-h-[300px] flex flex-col items-center justify-center p-8 bg-zinc-950 text-center">
-        <AlertCircle className="w-8 h-8 text-red-400 mb-2" />
-        <p className="text-sm font-semibold text-white">Pricing Unavailable</p>
-        <p className="text-xs text-zinc-400 max-w-sm mt-1">{error || 'Could not load pricing tiers.'}</p>
+      <div className={`min-h-[300px] flex flex-col items-center justify-center p-8 text-center transition-colors ${
+        isDark ? 'bg-zinc-950' : 'bg-white'
+      }`}>
+        <AlertCircle className="w-8 h-8 text-red-500 mb-2" />
+        <p className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-zinc-950'}`}>Pricing Unavailable</p>
+        <p className={`text-xs max-w-sm mt-1 ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+          {error || 'Could not load pricing tiers.'}
+        </p>
       </div>
     );
   }
@@ -196,16 +254,30 @@ export function PricingEmbedClient({ appId: initialAppId }: { appId?: string } =
   const accentColor = config.accentColor || '#6366f1';
 
   return (
-    <div className="w-full bg-zinc-950 text-white py-8 px-4 sm:px-6 font-sans">
+    <div className={`w-full py-8 px-4 sm:px-6 font-sans transition-colors duration-200 ${
+      isDark ? 'bg-zinc-950 text-white' : 'bg-white text-zinc-950'
+    }`}>
       {/* Header */}
       <div className="max-w-4xl mx-auto text-center space-y-3 mb-8">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-zinc-300 text-xs font-semibold">
+        <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+          isDark
+            ? 'bg-white/5 border border-white/10 text-zinc-300'
+            : 'bg-zinc-100 border border-zinc-200 text-zinc-700'
+        }`}>
           <Sparkles className="w-3.5 h-3.5" style={{ color: accentColor }} />
           <span>{config.appName || '180 Workspace'} Membership</span>
         </div>
-        <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">{config.headline}</h1>
+        <h1 className={`text-2xl sm:text-3xl font-black tracking-tight ${
+          isDark ? 'text-white' : 'text-zinc-950'
+        }`}>
+          {config.headline}
+        </h1>
         {config.subheadline && (
-          <p className="text-xs sm:text-sm text-zinc-400 max-w-lg mx-auto">{config.subheadline}</p>
+          <p className={`text-xs sm:text-sm max-w-lg mx-auto ${
+            isDark ? 'text-zinc-400' : 'text-zinc-600'
+          }`}>
+            {config.subheadline}
+          </p>
         )}
 
         {/* Interval Switcher */}
@@ -213,7 +285,9 @@ export function PricingEmbedClient({ appId: initialAppId }: { appId?: string } =
           <div className="pt-2 flex items-center justify-center gap-3">
             <span
               className={`text-xs font-semibold cursor-pointer ${
-                selectedInterval === 'MONTHLY' ? 'text-white' : 'text-zinc-500'
+                selectedInterval === 'MONTHLY'
+                  ? (isDark ? 'text-white' : 'text-zinc-950')
+                  : 'text-zinc-400'
               }`}
               onClick={() => setSelectedInterval('MONTHLY')}
             >
@@ -223,7 +297,9 @@ export function PricingEmbedClient({ appId: initialAppId }: { appId?: string } =
               type="button"
               onClick={() => setSelectedInterval(selectedInterval === 'MONTHLY' ? 'YEARLY' : 'MONTHLY')}
               className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
-              style={{ backgroundColor: selectedInterval === 'YEARLY' ? accentColor : '#27272a' }}
+              style={{
+                backgroundColor: selectedInterval === 'YEARLY' ? accentColor : (isDark ? '#27272a' : '#e4e4e7'),
+              }}
             >
               <span
                 className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
@@ -237,12 +313,14 @@ export function PricingEmbedClient({ appId: initialAppId }: { appId?: string } =
             >
               <span
                 className={`text-xs font-semibold ${
-                  selectedInterval === 'YEARLY' ? 'text-white' : 'text-zinc-500'
+                  selectedInterval === 'YEARLY'
+                    ? (isDark ? 'text-white' : 'text-zinc-950')
+                    : 'text-zinc-400'
                 }`}
               >
                 Annual billing
               </span>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20">
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold border border-emerald-500/20">
                 Save {yearlyDiscount}%
               </span>
             </div>
@@ -252,12 +330,18 @@ export function PricingEmbedClient({ appId: initialAppId }: { appId?: string } =
 
       {/* Empty State when no tiers exist */}
       {cards.length === 0 ? (
-        <div className="max-w-md mx-auto text-center p-8 rounded-3xl border border-white/10 bg-zinc-900/50 space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto text-zinc-400">
+        <div className={`max-w-md mx-auto text-center p-8 rounded-3xl border space-y-3 ${
+          isDark ? 'border-white/10 bg-zinc-900/50' : 'border-zinc-200 bg-zinc-50'
+        }`}>
+          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mx-auto ${
+            isDark ? 'bg-white/5 border border-white/10 text-zinc-400' : 'bg-white border border-zinc-200 text-zinc-500'
+          }`}>
             <Sparkles className="w-6 h-6" />
           </div>
-          <h3 className="text-base font-bold text-white">No Subscription Tiers Published Yet</h3>
-          <p className="text-xs text-zinc-400">
+          <h3 className={`text-base font-bold ${isDark ? 'text-white' : 'text-zinc-950'}`}>
+            No Subscription Tiers Published Yet
+          </h3>
+          <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
             This application has not published any public subscription plans yet. Please check back later.
           </p>
         </div>
@@ -309,10 +393,14 @@ export function PricingEmbedClient({ appId: initialAppId }: { appId?: string } =
                 key={plan.planCode || index}
                 className={`relative rounded-3xl p-6 sm:p-7 flex flex-col justify-between transition-all duration-300 ${
                   plan.isPopular
-                    ? 'border-2 bg-gradient-to-b from-white/[0.04] via-zinc-900/90 to-zinc-950 shadow-2xl'
-                    : 'border border-white/10 bg-zinc-900/70 hover:border-white/20'
+                    ? isDark
+                      ? 'border-2 bg-gradient-to-b from-white/[0.04] via-zinc-900/90 to-zinc-950 shadow-2xl'
+                      : 'border-2 bg-gradient-to-b from-indigo-50/50 via-white to-white shadow-xl'
+                    : isDark
+                    ? 'border border-white/10 bg-zinc-900/70 hover:border-white/20'
+                    : 'border border-zinc-200 bg-white hover:border-zinc-300 shadow-sm hover:shadow-md'
                 }`}
-                style={plan.isPopular ? { borderColor: `${accentColor}90` } : {}}
+                style={plan.isPopular ? { borderColor: `${accentColor}${isDark ? '90' : 'dd'}` } : {}}
               >
                 {badgeText && (
                   <div
@@ -326,22 +414,22 @@ export function PricingEmbedClient({ appId: initialAppId }: { appId?: string } =
                 <div className="space-y-4">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <h3 className="text-base font-bold text-white">{plan.name}</h3>
+                      <h3 className={`text-base font-bold ${isDark ? 'text-white' : 'text-zinc-950'}`}>{plan.name}</h3>
                       {plan.description && (
-                        <p className="text-xs text-zinc-400 mt-1 line-clamp-2">{plan.description}</p>
+                        <p className={`text-xs mt-1 line-clamp-2 ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>{plan.description}</p>
                       )}
                     </div>
                     {plan.trialDays && plan.trialDays > 0 ? (
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold shrink-0">
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] font-bold shrink-0">
                         {plan.trialDays}d Trial
                       </span>
                     ) : null}
                   </div>
 
-                  <div className="pt-2 pb-3 border-b border-white/5">
+                  <div className={`pt-2 pb-3 border-b ${isDark ? 'border-white/5' : 'border-zinc-100'}`}>
                     {isFree ? (
                       <div className="flex items-baseline gap-1">
-                        <span className="text-3xl font-black text-white font-mono">Free</span>
+                        <span className={`text-3xl font-black font-mono ${isDark ? 'text-white' : 'text-zinc-950'}`}>Free</span>
                         <span className="text-xs text-zinc-500 font-medium">/forever</span>
                       </div>
                     ) : (
@@ -350,7 +438,7 @@ export function PricingEmbedClient({ appId: initialAppId }: { appId?: string } =
                           plan.originalAmount &&
                           plan.originalAmount !== plan.amount && (
                             <div className="flex items-center gap-2 mb-1">
-                              <span className="text-xs text-zinc-500 line-through font-mono">
+                              <span className="text-xs text-zinc-400 line-through font-mono">
                                 {plan.originalCurrency === 'INR'
                                   ? '₹'
                                   : plan.originalCurrency === 'EUR'
@@ -363,14 +451,14 @@ export function PricingEmbedClient({ appId: initialAppId }: { appId?: string } =
                                   : plan.originalAmount}
                               </span>
                               {plan.regionalPricing.discountPercentage ? (
-                                <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20">
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold border border-emerald-500/20">
                                   {plan.regionalPricing.discountPercentage}% Off
                                 </span>
                               ) : null}
                             </div>
                           )}
                         <div className="flex items-baseline gap-1">
-                          <span className="text-3xl font-black text-white font-mono">
+                          <span className={`text-3xl font-black font-mono ${isDark ? 'text-white' : 'text-zinc-950'}`}>
                             {currencySymbol}
                             {finalAmount}
                           </span>
@@ -379,13 +467,13 @@ export function PricingEmbedClient({ appId: initialAppId }: { appId?: string } =
                           </span>
                         </div>
                         {plan.regionalPricing?.isApplied && (
-                          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-indigo-400 font-medium">
+                          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-indigo-600 dark:text-indigo-400 font-medium">
                             <span>{plan.regionalPricing.flag}</span>
                             <span>Localized for {plan.regionalPricing.countryName}</span>
                           </div>
                         )}
                         {selectedInterval === 'YEARLY' && (
-                          <p className="text-[11px] text-emerald-400 font-medium mt-1">
+                          <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium mt-1">
                             Billed annually ({currencySymbol}
                             {Math.round(finalAmount / 12)}/mo)
                           </p>
@@ -406,14 +494,16 @@ export function PricingEmbedClient({ appId: initialAppId }: { appId?: string } =
                         <li
                           key={fIdx}
                           className={`flex items-start gap-2 text-xs ${
-                            isIncluded ? 'text-zinc-300' : 'text-zinc-500 line-through'
+                            isIncluded
+                              ? (isDark ? 'text-zinc-300' : 'text-zinc-700')
+                              : (isDark ? 'text-zinc-500 line-through' : 'text-zinc-400 line-through')
                           }`}
                         >
                           <div
                             className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
                               isIncluded
-                                ? 'bg-emerald-500/10 text-emerald-400'
-                                : 'bg-zinc-800 text-zinc-500'
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                : (isDark ? 'bg-zinc-800 text-zinc-500' : 'bg-zinc-100 text-zinc-400')
                             }`}
                           >
                             {isIncluded ? <Check className="w-2.5 h-2.5" /> : '✕'}
@@ -421,7 +511,9 @@ export function PricingEmbedClient({ appId: initialAppId }: { appId?: string } =
                           <div className="min-w-0">
                             <span>{featText}</span>
                             {featNote && (
-                              <span className="block text-[10px] text-zinc-500 not-italic no-underline">
+                              <span className={`block text-[10px] not-italic no-underline ${
+                                isDark ? 'text-zinc-500' : 'text-zinc-400'
+                              }`}>
                                 {featNote}
                               </span>
                             )}
@@ -435,9 +527,11 @@ export function PricingEmbedClient({ appId: initialAppId }: { appId?: string } =
                 <div className="pt-6 mt-auto">
                   <Button
                     onClick={() => handleSelectPlan(plan)}
-                    className="w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-lg text-white"
+                    className="w-full py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md text-white"
                     style={{
-                      backgroundColor: plan.isPopular ? accentColor : '#27272a',
+                      backgroundColor: plan.isPopular
+                        ? accentColor
+                        : (isDark ? '#27272a' : '#09090b'),
                     }}
                   >
                     <span>{plan.buttonText || (isFree ? 'Get Started Free' : 'Choose Plan')}</span>
@@ -452,7 +546,7 @@ export function PricingEmbedClient({ appId: initialAppId }: { appId?: string } =
 
       {/* Embedded Trust Footer */}
       <div className="max-w-4xl mx-auto pt-8 text-center flex items-center justify-center gap-2 text-[11px] text-zinc-500">
-        <Shield className="w-3.5 h-3.5 text-emerald-400" />
+        <Shield className="w-3.5 h-3.5 text-emerald-500" />
         <span>Secure 256-bit encrypted checkout powered by 180 Pay</span>
       </div>
     </div>

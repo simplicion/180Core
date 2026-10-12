@@ -39,6 +39,8 @@ import {
   Lock,
   Key,
   Cpu,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { Button, UniversalSkeleton } from '@workspace/ui';
 import { toast } from 'react-hot-toast';
@@ -152,6 +154,38 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [previewInterval, setPreviewInterval] = useState<'MONTHLY' | 'YEARLY'>('MONTHLY');
   const [copiedSnippet, setCopiedSnippet] = useState<'wc' | 'iframe' | 'react' | 'url' | 'headless' | 'token' | null>(null);
+
+  // Real-time Platform Theme Auto-Detection (detects light/white vs dark mode across Developer Console)
+  const [platformIsDark, setPlatformIsDark] = useState<boolean>(false);
+  const [previewThemeOverride, setPreviewThemeOverride] = useState<'auto' | 'light' | 'dark'>('auto');
+
+  useEffect(() => {
+    const checkDark = () => {
+      if (typeof document !== 'undefined') {
+        const isDark = document.documentElement.classList.contains('dark');
+        setPlatformIsDark(isDark);
+      }
+    };
+    checkDark();
+
+    const observer = new MutationObserver(checkDark);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+    window.addEventListener('storage', checkDark);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('storage', checkDark);
+    };
+  }, []);
+
+  const effectiveCanvasIsDark = useMemo(() => {
+    if (previewThemeOverride === 'light') return false;
+    if (previewThemeOverride === 'dark') return true;
+    if (config.theme === 'light') return false;
+    if (config.theme === 'dark' || config.theme === 'obsidian') return true;
+    // Default: 'auto' strictly detects and mirrors the platform's current mode (Light by default)
+    return platformIsDark;
+  }, [previewThemeOverride, config.theme, platformIsDark]);
 
   // Modal: Edit/Create Tier
   const [showCardModal, setShowCardModal] = useState(false);
@@ -1570,22 +1604,80 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
 
         {/* Right Column / Full Width: Live Interactive Canvas Preview */}
         {(viewMode === 'preview' || viewMode === 'split') && (
-          <div className={`${viewMode === 'split' ? 'lg:col-span-6 2xl:col-span-6 lg:sticky lg:top-4 self-start' : 'w-full'} rounded-3xl border border-zinc-200 dark:border-white/10 bg-zinc-950 p-5 sm:p-6 space-y-5 shadow-2xl relative overflow-hidden lg:max-h-[calc(100vh-80px)] lg:overflow-y-auto`}>
+          <div className={`${viewMode === 'split' ? 'lg:col-span-6 2xl:col-span-6 lg:sticky lg:top-4 self-start' : 'w-full'} rounded-3xl border ${
+            effectiveCanvasIsDark 
+              ? 'border-white/10 bg-zinc-950 text-white' 
+              : 'border-zinc-200 bg-white text-zinc-950 shadow-xl'
+          } p-5 sm:p-6 space-y-5 shadow-2xl relative overflow-hidden lg:max-h-[calc(100vh-80px)] lg:overflow-y-auto transition-colors duration-200`}>
             {/* Preview Controls Bar */}
-            <div className="flex items-center justify-between pb-4 border-b border-white/10">
+            <div className={`flex items-center justify-between pb-4 border-b ${effectiveCanvasIsDark ? 'border-white/10' : 'border-zinc-200'}`}>
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-xs font-bold text-white uppercase tracking-wider">Live Canvas Preview</span>
+                <span className={`text-xs font-bold uppercase tracking-wider ${effectiveCanvasIsDark ? 'text-white' : 'text-zinc-900'}`}>
+                  Live Canvas Preview
+                </span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                  effectiveCanvasIsDark ? 'bg-zinc-800 text-zinc-300 border border-white/10' : 'bg-zinc-100 text-zinc-700 border border-zinc-200'
+                }`}>
+                  {effectiveCanvasIsDark ? 'Dark Mode' : 'White (Default)'}
+                </span>
               </div>
 
-              {/* Viewport switch: Desktop / Mobile */}
+              {/* Viewport switch & Theme mode toggle */}
               <div className="flex items-center gap-2">
-                <div className="inline-flex p-1 rounded-xl bg-zinc-900 border border-white/10 text-xs">
+                {/* Theme mode preview toggle */}
+                <div className={`inline-flex p-1 rounded-xl border text-xs ${
+                  effectiveCanvasIsDark ? 'bg-zinc-900 border-white/10' : 'bg-zinc-100 border-zinc-200'
+                }`}>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewThemeOverride('auto')}
+                    className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                      previewThemeOverride === 'auto'
+                        ? (effectiveCanvasIsDark ? 'bg-zinc-800 text-white shadow-xs' : 'bg-white text-zinc-950 shadow-xs')
+                        : (effectiveCanvasIsDark ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 hover:text-zinc-950')
+                    }`}
+                    title="Auto-detect and sync with platform theme"
+                  >
+                    Auto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewThemeOverride('light')}
+                    className={`p-1.5 rounded-lg transition-all ${
+                      previewThemeOverride === 'light'
+                        ? (effectiveCanvasIsDark ? 'bg-zinc-800 text-amber-400 shadow-xs' : 'bg-white text-amber-500 shadow-xs')
+                        : (effectiveCanvasIsDark ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 hover:text-zinc-950')
+                    }`}
+                    title="Force Clean Light (White) Mode"
+                  >
+                    <Sun className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewThemeOverride('dark')}
+                    className={`p-1.5 rounded-lg transition-all ${
+                      previewThemeOverride === 'dark'
+                        ? (effectiveCanvasIsDark ? 'bg-zinc-800 text-indigo-400 shadow-xs' : 'bg-white text-indigo-600 shadow-xs')
+                        : (effectiveCanvasIsDark ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 hover:text-zinc-950')
+                    }`}
+                    title="Force Obsidian Dark Mode"
+                  >
+                    <Moon className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Viewport switch: Desktop / Mobile */}
+                <div className={`inline-flex p-1 rounded-xl border text-xs ${
+                  effectiveCanvasIsDark ? 'bg-zinc-900 border-white/10' : 'bg-zinc-100 border-zinc-200'
+                }`}>
                   <button
                     type="button"
                     onClick={() => setPreviewDevice('desktop')}
                     className={`p-1.5 rounded-lg ${
-                      previewDevice === 'desktop' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'
+                      previewDevice === 'desktop'
+                        ? (effectiveCanvasIsDark ? 'bg-zinc-800 text-white' : 'bg-white text-zinc-950 shadow-xs')
+                        : (effectiveCanvasIsDark ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 hover:text-zinc-950')
                     }`}
                     title="Desktop View"
                   >
@@ -1595,7 +1687,9 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
                     type="button"
                     onClick={() => setPreviewDevice('mobile')}
                     className={`p-1.5 rounded-lg ${
-                      previewDevice === 'mobile' ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'
+                      previewDevice === 'mobile'
+                        ? (effectiveCanvasIsDark ? 'bg-zinc-800 text-white' : 'bg-white text-zinc-950 shadow-xs')
+                        : (effectiveCanvasIsDark ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 hover:text-zinc-950')
                     }`}
                     title="Mobile View"
                   >
@@ -1607,7 +1701,11 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
                   href={`${getPublicBase()}/embed/pricing/${appId}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="p-2 rounded-xl bg-zinc-900 border border-white/10 text-zinc-300 hover:text-white text-xs flex items-center gap-1.5"
+                  className={`p-2 rounded-xl border text-xs flex items-center gap-1.5 ${
+                    effectiveCanvasIsDark
+                      ? 'bg-zinc-900 border-white/10 text-zinc-300 hover:text-white'
+                      : 'bg-zinc-100 border-zinc-200 text-zinc-700 hover:text-zinc-950'
+                  }`}
                   title="Open live embed in new tab"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
@@ -1619,23 +1717,33 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
             <div
               className={`mx-auto transition-all duration-300 ${
                 previewDevice === 'mobile'
-                  ? 'max-w-[380px] rounded-[36px] border-4 border-zinc-800 bg-zinc-950 p-4 shadow-2xl overflow-hidden'
+                  ? `max-w-[380px] rounded-[36px] border-4 p-4 shadow-2xl overflow-hidden ${
+                      effectiveCanvasIsDark ? 'border-zinc-800 bg-zinc-950' : 'border-zinc-300 bg-zinc-50'
+                    }`
                   : 'w-full'
               }`}
             >
               {/* Rendered Live Preview Component */}
-              <div className="py-6 px-2 space-y-6 text-white font-sans">
+              <div className={`py-6 px-2 space-y-6 font-sans ${effectiveCanvasIsDark ? 'text-white' : 'text-zinc-950'}`}>
                 {/* Header */}
                 <div className="text-center space-y-2">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-zinc-300 text-[11px] font-semibold">
+                  <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-semibold ${
+                    effectiveCanvasIsDark ? 'bg-white/5 border-white/10 text-zinc-300' : 'bg-zinc-100 border-zinc-200 text-zinc-700'
+                  }`}>
                     <Sparkles className="w-3 h-3" style={{ color: config.accentColor }} />
                     <span>{config.appName || '180 Workspace'} Membership</span>
                   </div>
-                  <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                  <h3 className={`text-xl sm:text-2xl font-black tracking-tight ${
+                    effectiveCanvasIsDark ? 'text-white' : 'text-zinc-950'
+                  }`}>
                     {config.headline || 'Simple, Transparent Pricing'}
                   </h3>
                   {config.subheadline && (
-                    <p className="text-xs text-zinc-400 max-w-md mx-auto">{config.subheadline}</p>
+                    <p className={`text-xs max-w-md mx-auto ${
+                      effectiveCanvasIsDark ? 'text-zinc-400' : 'text-zinc-600'
+                    }`}>
+                      {config.subheadline}
+                    </p>
                   )}
 
                   {/* Interval Switcher */}
@@ -1643,7 +1751,9 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
                     <div className="pt-2 flex items-center justify-center gap-3">
                       <span
                         className={`text-xs font-semibold cursor-pointer ${
-                          previewInterval === 'MONTHLY' ? 'text-white' : 'text-zinc-500'
+                          previewInterval === 'MONTHLY' 
+                            ? (effectiveCanvasIsDark ? 'text-white' : 'text-zinc-950') 
+                            : 'text-zinc-400'
                         }`}
                         onClick={() => setPreviewInterval('MONTHLY')}
                       >
@@ -1656,7 +1766,7 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
                         }
                         className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
                         style={{
-                          backgroundColor: previewInterval === 'YEARLY' ? config.accentColor : '#27272a',
+                          backgroundColor: previewInterval === 'YEARLY' ? config.accentColor : (effectiveCanvasIsDark ? '#27272a' : '#e4e4e7'),
                         }}
                       >
                         <span
@@ -1671,12 +1781,14 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
                       >
                         <span
                           className={`text-xs font-semibold ${
-                            previewInterval === 'YEARLY' ? 'text-white' : 'text-zinc-500'
+                            previewInterval === 'YEARLY' 
+                              ? (effectiveCanvasIsDark ? 'text-white' : 'text-zinc-950') 
+                              : 'text-zinc-400'
                           }`}
                         >
                           Annual
                         </span>
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20">
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold border border-emerald-500/20">
                           Save {yearlyDiscount}%
                         </span>
                       </div>
@@ -1686,32 +1798,34 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
 
                 {/* Cards Preview Grid */}
                 {config.planCards.length === 0 ? (
-                  <div className="p-8 text-center rounded-2xl border border-dashed border-white/10 bg-zinc-900/40 text-xs text-zinc-400 space-y-4">
-                    <p className="text-zinc-400 font-medium">
+                  <div className={`p-8 text-center rounded-2xl border border-dashed text-xs space-y-4 ${
+                    effectiveCanvasIsDark ? 'border-white/10 bg-zinc-900/40 text-zinc-400' : 'border-zinc-200 bg-zinc-50 text-zinc-500'
+                  }`}>
+                    <p className="font-medium">
                       No plan tiers configured yet. Add your first tier to see it rendered live here.
                     </p>
                     {/* Visual 3-tier placeholder wireframe */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 opacity-50">
-                      <div className="h-32 rounded-xl border border-dashed border-white/20 p-3.5 flex flex-col justify-between text-left">
+                      <div className={`h-32 rounded-xl border border-dashed p-3.5 flex flex-col justify-between text-left ${effectiveCanvasIsDark ? 'border-white/20' : 'border-zinc-300'}`}>
                         <div className="space-y-1.5">
-                          <div className="w-14 h-2.5 rounded bg-white/20" />
-                          <div className="w-20 h-4 rounded bg-white/30" />
+                          <div className={`w-14 h-2.5 rounded ${effectiveCanvasIsDark ? 'bg-white/20' : 'bg-zinc-200'}`} />
+                          <div className={`w-20 h-4 rounded ${effectiveCanvasIsDark ? 'bg-white/30' : 'bg-zinc-300'}`} />
                         </div>
-                        <div className="w-full h-7 rounded-lg bg-white/10" />
+                        <div className={`w-full h-7 rounded-lg ${effectiveCanvasIsDark ? 'bg-white/10' : 'bg-zinc-100'}`} />
                       </div>
                       <div className="h-32 rounded-xl border border-dashed border-purple-500/40 p-3.5 flex flex-col justify-between text-left bg-purple-500/5">
                         <div className="space-y-1.5">
                           <div className="w-14 h-2.5 rounded bg-purple-400/40" />
-                          <div className="w-20 h-4 rounded bg-white/40" />
+                          <div className={`w-20 h-4 rounded ${effectiveCanvasIsDark ? 'bg-white/40' : 'bg-zinc-400'}`} />
                         </div>
                         <div className="w-full h-7 rounded-lg bg-purple-500/30" />
                       </div>
-                      <div className="h-32 rounded-xl border border-dashed border-white/20 p-3.5 flex flex-col justify-between text-left">
+                      <div className={`h-32 rounded-xl border border-dashed p-3.5 flex flex-col justify-between text-left ${effectiveCanvasIsDark ? 'border-white/20' : 'border-zinc-300'}`}>
                         <div className="space-y-1.5">
-                          <div className="w-14 h-2.5 rounded bg-white/20" />
-                          <div className="w-20 h-4 rounded bg-white/30" />
+                          <div className={`w-14 h-2.5 rounded ${effectiveCanvasIsDark ? 'bg-white/20' : 'bg-zinc-200'}`} />
+                          <div className={`w-20 h-4 rounded ${effectiveCanvasIsDark ? 'bg-white/30' : 'bg-zinc-300'}`} />
                         </div>
-                        <div className="w-full h-7 rounded-lg bg-white/10" />
+                        <div className={`w-full h-7 rounded-lg ${effectiveCanvasIsDark ? 'bg-white/10' : 'bg-zinc-100'}`} />
                       </div>
                     </div>
                   </div>
@@ -1744,10 +1858,14 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
                           key={plan.planCode || pIdx}
                           className={`relative rounded-2xl p-5 flex flex-col justify-between transition-all ${
                             plan.isPopular
-                              ? 'border-2 bg-gradient-to-b from-white/[0.04] via-zinc-900/90 to-zinc-950 shadow-xl'
-                              : 'border border-white/10 bg-zinc-900/70 hover:border-white/20'
+                              ? effectiveCanvasIsDark
+                                ? 'border-2 bg-gradient-to-b from-white/[0.04] via-zinc-900/90 to-zinc-950 shadow-xl'
+                                : 'border-2 bg-gradient-to-b from-indigo-50/50 via-white to-white shadow-xl'
+                              : effectiveCanvasIsDark
+                              ? 'border border-white/10 bg-zinc-900/70 hover:border-white/20'
+                              : 'border border-zinc-200 bg-white hover:border-zinc-300 shadow-xs hover:shadow-md'
                           }`}
-                          style={plan.isPopular ? { borderColor: `${config.accentColor}90` } : {}}
+                          style={plan.isPopular ? { borderColor: `${config.accentColor}${effectiveCanvasIsDark ? '90' : 'dd'}` } : {}}
                         >
                           {badgeText && (
                             <div
@@ -1761,30 +1879,32 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
                           <div className="space-y-3">
                             <div className="flex items-start justify-between gap-1">
                               <div>
-                                <h4 className="text-sm font-bold text-white">{plan.name}</h4>
+                                <h4 className={`text-sm font-bold ${effectiveCanvasIsDark ? 'text-white' : 'text-zinc-950'}`}>
+                                  {plan.name}
+                                </h4>
                                 {plan.description && (
-                                  <p className="text-[11px] text-zinc-400 mt-0.5 line-clamp-2">
+                                  <p className={`text-[11px] mt-0.5 line-clamp-2 ${effectiveCanvasIsDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
                                     {plan.description}
                                   </p>
                                 )}
                               </div>
                               {plan.trialDays && plan.trialDays > 0 ? (
-                                <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[9px] font-bold shrink-0">
+                                <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[9px] font-bold shrink-0">
                                   {plan.trialDays}d trial
                                 </span>
                               ) : null}
                             </div>
 
-                            <div className="pt-1 pb-2 border-b border-white/5">
+                            <div className={`pt-1 pb-2 border-b ${effectiveCanvasIsDark ? 'border-white/5' : 'border-zinc-100'}`}>
                               {isFree ? (
                                 <div className="flex items-baseline gap-1">
-                                  <span className="text-2xl font-black text-white font-mono">Free</span>
+                                  <span className={`text-2xl font-black font-mono ${effectiveCanvasIsDark ? 'text-white' : 'text-zinc-950'}`}>Free</span>
                                   <span className="text-[10px] text-zinc-500 font-medium">/forever</span>
                                 </div>
                               ) : (
                                 <>
                                   <div className="flex items-baseline gap-1">
-                                    <span className="text-2xl font-black text-white font-mono">
+                                    <span className={`text-2xl font-black font-mono ${effectiveCanvasIsDark ? 'text-white' : 'text-zinc-950'}`}>
                                       {currencySymbol}
                                       {finalAmount}
                                     </span>
@@ -1793,7 +1913,7 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
                                     </span>
                                   </div>
                                   {previewInterval === 'YEARLY' && (
-                                    <p className="text-[10px] text-emerald-400 font-medium mt-0.5">
+                                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">
                                       Billed annually ({currencySymbol}
                                       {Math.round(finalAmount / 12)}/mo)
                                     </p>
@@ -1813,14 +1933,16 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
                                   <li
                                     key={fIdx}
                                     className={`flex items-start gap-1.5 text-[11px] ${
-                                      isIncluded ? 'text-zinc-300' : 'text-zinc-500 line-through'
+                                      isIncluded
+                                        ? (effectiveCanvasIsDark ? 'text-zinc-300' : 'text-zinc-700')
+                                        : (effectiveCanvasIsDark ? 'text-zinc-500 line-through' : 'text-zinc-400 line-through')
                                     }`}
                                   >
                                     <div
                                       className={`w-3.5 h-3.5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
                                         isIncluded
-                                          ? 'bg-emerald-500/10 text-emerald-400'
-                                          : 'bg-zinc-800 text-zinc-500'
+                                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                          : (effectiveCanvasIsDark ? 'bg-zinc-800 text-zinc-500' : 'bg-zinc-100 text-zinc-400')
                                       }`}
                                     >
                                       {isIncluded ? <Check className="w-2 h-2" /> : '✕'}
@@ -1837,7 +1959,9 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
                               type="button"
                               className="w-full py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 text-white transition-all shadow-md"
                               style={{
-                                backgroundColor: plan.isPopular ? config.accentColor : '#27272a',
+                                backgroundColor: plan.isPopular
+                                  ? config.accentColor
+                                  : (effectiveCanvasIsDark ? '#27272a' : '#09090b'),
                               }}
                             >
                               <span>{plan.buttonText || (isFree ? 'Get Started' : 'Choose Plan')}</span>
@@ -1852,8 +1976,10 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
 
                 {/* Trust Footer */}
                 {config.showTrustBadge !== false && (
-                  <div className="pt-4 text-center flex items-center justify-center gap-1.5 text-[10px] text-zinc-500">
-                    <Shield className="w-3 h-3 text-emerald-400" />
+                  <div className={`pt-4 text-center flex items-center justify-center gap-1.5 text-[10px] ${
+                    effectiveCanvasIsDark ? 'text-zinc-500' : 'text-zinc-500'
+                  }`}>
+                    <Shield className="w-3 h-3 text-emerald-500" />
                     <span>Secure 256-bit encrypted checkout powered by 180 Pay</span>
                   </div>
                 )}
