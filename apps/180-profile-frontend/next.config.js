@@ -8,7 +8,7 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_GOOGLE_CLIENT_ID:
       process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
-      '188560578303-tqob33d58ednaer1ab0r2u64ouqb55mk.apps.googleusercontent.com',
+      '188560578303-2bih1dg5qhbq5uao9q451r6db3986e6f.apps.googleusercontent.com',
   },
   images: {
     unoptimized: true,

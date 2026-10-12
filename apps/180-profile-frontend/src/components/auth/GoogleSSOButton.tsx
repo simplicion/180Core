@@ -13,7 +13,7 @@ interface GoogleSSOButtonProps {
 }
 
 const DEFAULT_GOOGLE_CLIENT_ID =
-  '188560578303-tqob33d58ednaer1ab0r2u64ouqb55mk.apps.googleusercontent.com';
+  '188560578303-2bih1dg5qhbq5uao9q451r6db3986e6f.apps.googleusercontent.com';
 
 export function GoogleSSOButton({
   oauthParams,
@@ -48,10 +48,8 @@ export function GoogleSSOButton({
     };
   }, [googleLoading]);
 
-  // Attempt dynamic Google OAuth config resolution from core backend if clientId isn't populated
+  // Dynamic Google OAuth config resolution from core backend
   useEffect(() => {
-    if (googleClientId && googleClientId !== '') return;
-
     let isMounted = true;
     fetch(getCoreApiUrl('/api/oauth/google-config'))
       .then((res) => res.json())
@@ -67,7 +65,7 @@ export function GoogleSSOButton({
     return () => {
       isMounted = false;
     };
-  }, [googleClientId]);
+  }, []);
 
   const activeClientId = googleClientId || DEFAULT_GOOGLE_CLIENT_ID;
 
