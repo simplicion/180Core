@@ -102,12 +102,16 @@ jobs:
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
             --parameters '{"commands":[
-              "echo \"=== PROXY INSPECT ===\"",
-              "docker inspect 180workspace-proxy --format \"{{.Config.Image}}\"",
-              "echo \"=== PROXY LOGS ===\"",
-              "docker logs --tail 30 180workspace-proxy",
-              "echo \"=== PROXY NGINX CONF ===\"",
-              "docker exec 180workspace-proxy cat /etc/nginx/conf.d/default.conf /etc/nginx/nginx.conf 2>/dev/null || true"
+              "echo \"=== HOST ENVIRONMENT ===\"",
+              "which node pm2 pnpm docker docker-compose git 2>&1 || true",
+              "echo \"=== HOST HOME DIRS ===\"",
+              "ls -la /home/ubuntu /var/www /root 2>/dev/null || true",
+              "echo \"=== DOCKER NETWORKS ===\"",
+              "docker network ls",
+              "echo \"=== PROXY NETWORKS ===\"",
+              "docker inspect 180workspace-proxy --format \"{{json .NetworkSettings.Networks}}\"",
+              "echo \"=== RUNNING PROCESSES ===\"",
+              "ps aux | grep -E \"node|pm2|core|180\" | head -n 30 || true"
             ]}' \
             --query "Command.CommandId" \
             --output text)
