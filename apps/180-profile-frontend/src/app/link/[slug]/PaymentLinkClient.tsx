@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import {
-  ShieldCheck,
   CheckCircle2,
   AlertCircle,
   Copy,
@@ -11,16 +10,11 @@ import {
   Download,
   ExternalLink,
   Tag,
-  CreditCard,
-  Wallet,
   ArrowRight,
-  Lock,
   Sparkles,
   ShoppingBag,
   User,
-  Mail,
   Phone,
-  MapPin,
   QrCode,
 } from 'lucide-react';
 import { Button, LogoLoader } from '@workspace/ui';
@@ -253,15 +247,12 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
       }
     }
 
-    if (!customerEmail.trim()) {
-      toast.error('Please enter your email address for order fulfillment');
+    if (!customerPhone.trim()) {
+      toast.error('Please enter your phone number to proceed');
       return;
     }
 
-    if (link.collectPhone && !customerPhone.trim()) {
-      toast.error('Please enter your phone number');
-      return;
-    }
+    const effectiveEmail = customerEmail.trim() || `${customerPhone.replace(/\D/g, '') || 'guest'}@customer.180pay.com`;
 
     // Preview Demonstration Simulation
     if (link.id === 'preview') {
@@ -297,7 +288,7 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
           metadata: {
             paymentLinkId: link.id,
             paymentLinkSlug: link.slug,
-            customerEmail: customerEmail.trim(),
+            customerEmail: effectiveEmail,
             customerName: customerName.trim(),
             customerPhone: customerPhone.trim(),
             customerAddress: customerAddress.trim(),
@@ -360,9 +351,9 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
           description: link.description || 'Payment',
           order_id: orderData.orderId,
           prefill: {
-            name: customerName,
-            email: customerEmail,
-            contact: customerPhone,
+            name: customerName.trim() || undefined,
+            email: effectiveEmail,
+            contact: customerPhone.trim(),
           },
           theme: { color: '#2563eb' },
           handler: async (response: any) => {
@@ -428,21 +419,23 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-4">
-        <LogoLoader size={44} className="w-11 h-11 text-indigo-500" />
-        <p className="text-xs text-zinc-400 font-medium mt-3">Loading checkout link...</p>
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4 relative overflow-hidden">
+        <div className="fixed inset-0 marketing-grid-bg pointer-events-none z-0 opacity-70" />
+        <LogoLoader size={44} className="w-11 h-11 text-indigo-600 relative z-10" />
+        <p className="text-xs text-zinc-500 font-medium mt-3 relative z-10">Loading checkout link...</p>
       </div>
     );
   }
 
   if (error || !link) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-4 text-center">
-        <div className="w-14 h-14 rounded-2xl bg-red-500/10 text-red-400 flex items-center justify-center mb-4 border border-red-500/20">
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4 text-center relative overflow-hidden">
+        <div className="fixed inset-0 marketing-grid-bg pointer-events-none z-0 opacity-70" />
+        <div className="w-14 h-14 rounded-2xl bg-red-50 text-red-500 flex items-center justify-center mb-4 border border-red-200 relative z-10">
           <AlertCircle className="w-7 h-7" />
         </div>
-        <h1 className="text-lg font-bold text-white mb-1">Payment Link Unavailable</h1>
-        <p className="text-xs text-zinc-400 max-w-sm mb-6">
+        <h1 className="text-lg font-bold text-zinc-900 mb-1 relative z-10">Payment Link Unavailable</h1>
+        <p className="text-xs text-zinc-500 max-w-sm mb-6 relative z-10">
           {error || 'This payment link does not exist, has expired, or was deactivated by the seller.'}
         </p>
         <Button
@@ -454,7 +447,7 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
               window.location.reload();
             }
           }}
-          className="bg-zinc-800 hover:bg-zinc-700 text-white text-xs px-4 py-2 rounded-xl"
+          className="bg-zinc-900 hover:bg-zinc-800 text-white text-xs px-4 py-2 rounded-xl relative z-10"
         >
           Try Again
         </Button>
@@ -465,23 +458,26 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
   // FULFILLED SUCCESS VIEW
   if (fulfilledData) {
     return (
-      <div className="min-h-[100dvh] bg-zinc-950 flex flex-col justify-end sm:justify-center p-0 sm:p-6 relative overflow-hidden">
-        {/* Background ambient glow */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-950/30 via-zinc-950 to-zinc-950 pointer-events-none" />
+      <div className="min-h-[100dvh] bg-white text-zinc-900 flex flex-col justify-end sm:justify-center p-0 sm:p-6 relative overflow-hidden">
+        {/* Full Page Minimal Grid Background */}
+        <div className="fixed inset-0 marketing-grid-bg pointer-events-none z-0 opacity-70" />
+        <div className="fixed top-0 right-0 w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="w-full max-w-lg sm:mx-auto rounded-t-[32px] sm:rounded-3xl border-t sm:border border-white/10 bg-zinc-900/95 sm:bg-zinc-900/90 backdrop-blur-xl p-6 sm:p-8 space-y-6 shadow-2xl text-center z-10">
-          <div className="w-12 h-1.5 rounded-full bg-white/20 mx-auto -mt-2 mb-4 sm:hidden" />
-          <div className="w-16 h-16 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/20 shadow-lg shadow-emerald-500/10">
+        <div className="w-full max-w-lg sm:mx-auto rounded-t-[32px] sm:rounded-3xl border-t sm:border border-zinc-200/80 bg-white/95 sm:bg-white/90 backdrop-blur-xl p-6 sm:p-8 space-y-6 shadow-xl text-center z-10">
+          <div className="w-12 h-1.5 rounded-full bg-zinc-300 mx-auto -mt-2 mb-4 sm:hidden" />
+          <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-200 shadow-lg shadow-emerald-500/10">
             <CheckCircle2 className="w-9 h-9" />
           </div>
 
           <div className="space-y-1">
-            <h1 className="text-xl font-bold text-white">Payment Successful!</h1>
-            <p className="text-xs text-zinc-400">
-              Receipt sent to <span className="font-semibold text-zinc-200">{customerEmail}</span>
-            </p>
+            <h1 className="text-xl font-bold text-zinc-900">Payment Successful!</h1>
+            {customerPhone && (
+              <p className="text-xs text-zinc-500">
+                Confirmation sent to <span className="font-semibold text-zinc-800">{customerPhone}</span>
+              </p>
+            )}
             {fulfilledData.transactionId && (
-              <p className="text-[11px] font-mono text-zinc-500 mt-1">
+              <p className="text-[11px] font-mono text-zinc-400 mt-1">
                 Ref: {fulfilledData.transactionId}
               </p>
             )}
@@ -489,21 +485,21 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
 
           {/* Fulfillment Secret Message */}
           {fulfilledData.fulfillmentMessage && (
-            <div className="rounded-2xl border border-indigo-500/30 bg-indigo-500/5 p-4 text-left space-y-2">
+            <div className="rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4 text-left space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                <span className="text-[11px] font-bold text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5" />
                   Your Digital Access / Secret
                 </span>
                 <button
                   onClick={() => handleCopySecret(fulfilledData.fulfillmentMessage!)}
-                  className="text-xs text-zinc-400 hover:text-white flex items-center gap-1 transition-colors"
+                  className="text-xs text-zinc-500 hover:text-zinc-900 flex items-center gap-1 transition-colors cursor-pointer"
                 >
-                  {copiedSecret ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedSecret ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                   {copiedSecret ? 'Copied' : 'Copy'}
                 </button>
               </div>
-              <div className="p-3 rounded-xl bg-black/40 font-mono text-xs text-zinc-200 select-all break-all border border-white/5">
+              <div className="p-3 rounded-xl bg-white font-mono text-xs text-zinc-800 select-all break-all border border-zinc-200">
                 {fulfilledData.fulfillmentMessage}
               </div>
             </div>
@@ -516,7 +512,7 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
                 href={fulfilledData.fulfillmentFileUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-all shadow-lg shadow-indigo-600/30"
+                className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-all shadow-lg shadow-indigo-600/20"
               >
                 <Download className="w-4 h-4" />
                 Download Digital Asset
@@ -529,18 +525,13 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
             <div className="pt-1">
               <a
                 href={fulfilledData.redirectUrl}
-                className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors"
+                className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-900 transition-colors"
               >
                 <span>Continue to {link.merchant.name}</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
             </div>
           )}
-
-          <div className="pt-4 border-t border-white/5 flex items-center justify-center gap-2 text-[11px] text-zinc-500">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-            <span>Verified & Secured by 180 Pay</span>
-          </div>
         </div>
       </div>
     );
@@ -548,9 +539,11 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
 
   // MAIN CHECKOUT VIEW
   return (
-    <div className="min-h-[100dvh] bg-zinc-950 text-white flex flex-col justify-end sm:justify-between p-0 sm:p-6 lg:p-8 relative overflow-hidden">
-      {/* Background ambient glow */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-950/30 via-zinc-950 to-zinc-950 pointer-events-none" />
+    <div className="min-h-[100dvh] bg-white text-zinc-900 flex flex-col justify-end sm:justify-between p-0 sm:p-6 lg:p-8 relative overflow-hidden">
+      {/* Full Page Minimal Grid Background */}
+      <div className="fixed inset-0 marketing-grid-bg pointer-events-none z-0 opacity-70" />
+      <div className="fixed top-0 right-0 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="fixed bottom-0 left-0 w-[500px] h-[500px] bg-slate-400/5 rounded-full blur-3xl pointer-events-none" />
 
       {/* Mobile Top Header (above bottom sheet) */}
       <header className="sm:hidden px-5 pt-6 pb-3 flex items-center justify-between z-10">
@@ -559,26 +552,24 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
             <img
               src={link.merchant.logoUrl}
               alt={link.merchant.name}
-              className="w-8 h-8 rounded-xl object-cover border border-white/10"
+              className="w-8 h-8 rounded-xl object-cover border border-zinc-200"
             />
           ) : (
-            <div className="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-xs border border-indigo-500/30">
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs border border-indigo-100">
               {link.merchant.name.charAt(0).toUpperCase()}
             </div>
           )}
-          <div>
-            <span className="text-xs font-bold text-zinc-200 block">{link.merchant.name}</span>
-            <span className="text-[10px] text-zinc-500 flex items-center gap-1">
-              <Lock className="w-2.5 h-2.5 text-emerald-400" />
-              <span>180 Pay Sovereign Gateway</span>
-            </span>
-          </div>
+          <span className="text-xs font-bold text-zinc-900 block">{link.merchant.name}</span>
         </div>
 
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400 font-medium">
-          <ShieldCheck className="w-3 h-3" />
-          <span>Bank Verified</span>
-        </div>
+        <button
+          type="button"
+          onClick={() => setShowQRModal(true)}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-100 border border-zinc-200 text-[10px] text-zinc-700 font-medium cursor-pointer"
+        >
+          <QrCode className="w-3 h-3 text-indigo-600" />
+          <span>Scan QR</span>
+        </button>
       </header>
 
       {/* Desktop Header */}
@@ -588,128 +579,121 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
             <img
               src={link.merchant.logoUrl}
               alt={link.merchant.name}
-              className="w-8 h-8 rounded-xl object-cover border border-white/10"
+              className="w-8 h-8 rounded-xl object-cover border border-zinc-200 shadow-sm"
             />
           ) : (
-            <div className="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-xs border border-indigo-500/30">
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs border border-indigo-100">
               {link.merchant.name.charAt(0).toUpperCase()}
             </div>
           )}
-          <span className="text-sm font-semibold text-zinc-200">{link.merchant.name}</span>
+          <span className="text-sm font-semibold text-zinc-900">{link.merchant.name}</span>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setShowQRModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-[11px] text-zinc-300 font-medium transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-100 hover:bg-zinc-200/70 border border-zinc-200 text-[11px] text-zinc-700 font-medium transition-all cursor-pointer"
             title="Scan to pay on mobile"
           >
-            <QrCode className="w-3.5 h-3.5 text-indigo-400" />
+            <QrCode className="w-3.5 h-3.5 text-indigo-600" />
             <span>Scan QR</span>
           </button>
-
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[11px] text-zinc-400 font-medium">
-            <Lock className="w-3 h-3 text-emerald-400" />
-            <span>256-bit Encrypted Checkout</span>
-          </div>
         </div>
       </header>
 
       {/* Main Container: Mobile Bottom Sheet / Desktop Centered Card */}
       <main className="max-w-2xl mx-auto w-full my-0 sm:my-auto z-20">
-        <div className="rounded-t-[32px] sm:rounded-3xl border-t sm:border border-white/10 bg-zinc-900/95 sm:bg-zinc-900/80 backdrop-blur-2xl p-5 sm:p-8 shadow-2xl space-y-5 max-h-[88dvh] sm:max-h-none overflow-y-auto pb-8 sm:pb-8">
+        <div className="rounded-t-[32px] sm:rounded-3xl border-t sm:border border-zinc-200/80 bg-white/95 sm:bg-white/90 backdrop-blur-2xl p-5 sm:p-8 shadow-xl shadow-zinc-900/5 space-y-5 max-h-[88dvh] sm:max-h-none overflow-y-auto pb-8 sm:pb-8">
           {/* Mobile Drag Handle */}
-          <div className="w-12 h-1.5 rounded-full bg-white/20 mx-auto -mt-1 mb-2 sm:hidden" />
+          <div className="w-12 h-1.5 rounded-full bg-zinc-300 mx-auto -mt-1 mb-2 sm:hidden" />
 
           {/* Demo Preview Notification Banner */}
           {link.id === 'preview' && (
-            <div className="p-3 sm:p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs flex items-center justify-between gap-3">
+            <div className="p-3 sm:p-4 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-900 text-xs flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
-                <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />
+                <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" />
                 <div>
-                  <span className="font-bold text-white">Live Checkout Preview</span>
-                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                  <span className="font-bold text-zinc-900">Live Checkout Preview</span>
+                  <p className="text-[11px] text-zinc-500 mt-0.5">
                     This is an interactive demonstration. Complete and save your payment link in the 180 Developer Portal to start accepting live payments.
                   </p>
                 </div>
               </div>
-              <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-bold uppercase tracking-wider shrink-0 border border-indigo-500/30">
+              <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold uppercase tracking-wider shrink-0 border border-indigo-200">
                 Preview Mode
               </span>
             </div>
           )}
 
           {/* Mobile Sheet Header */}
-          <div className="flex items-center justify-between gap-3 pb-3 border-b border-white/10 sm:hidden">
+          <div className="flex items-center justify-between gap-3 pb-3 border-b border-zinc-100 sm:hidden">
             <div className="min-w-0">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1">
-                <Sparkles className="w-3 h-3" />
-                180 Pay Bottom Sheet
+              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 flex items-center gap-1">
+                Direct Payment Link
               </span>
-              <h2 className="text-sm font-black text-white truncate">{link.title}</h2>
+              <h2 className="text-sm font-black text-zinc-900 truncate">{link.title}</h2>
             </div>
             <div className="text-right shrink-0">
-              <div className="text-lg font-black text-emerald-400 font-mono">
+              <div className="text-lg font-black text-emerald-600 font-mono">
                 {getSymbol(link.currency, link.regionalPricing?.symbol)}
                 {currentPayableAmount.toFixed(2)}
               </div>
-              <span className="text-[9px] text-zinc-400 font-mono uppercase">UPI / Card</span>
             </div>
           </div>
 
           {/* Desktop Item Header */}
-          <div className="hidden sm:flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-6 border-b border-white/10">
+          <div className="hidden sm:flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-6 border-b border-zinc-100">
             <div className="space-y-1.5">
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[10px] font-bold uppercase tracking-wider border border-indigo-500/20">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600 text-[10px] font-bold uppercase tracking-wider border border-indigo-100">
                 <ShoppingBag className="w-3 h-3" />
                 Direct Payment Link
               </span>
-              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">{link.title}</h1>
+              <h1 className="text-xl sm:text-2xl font-black text-zinc-900 tracking-tight">{link.title}</h1>
               {link.description && (
-                <p className="text-xs text-zinc-400 max-w-md leading-relaxed">{link.description}</p>
+                <p className="text-xs text-zinc-500 max-w-md leading-relaxed">{link.description}</p>
               )}
             </div>
 
             <div className="sm:text-right shrink-0">
               {isOpenAmount ? (
                 <div className="space-y-0.5">
-                  <div className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono">
+                  <div className="text-2xl sm:text-3xl font-black text-emerald-600 font-mono">
                     {getSymbol(link.currency, link.regionalPricing?.symbol)}
                     {currentPayableAmount.toFixed(2)}
                   </div>
-                  <span className="inline-block text-[10px] font-bold text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/20">
+                  <span className="inline-block text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-100">
                     Customer-Chosen Amount
                   </span>
                 </div>
               ) : appliedCoupon ? (
                 <div className="space-y-0.5">
-                  <span className="text-xs text-zinc-500 line-through font-mono">
+                  <span className="text-xs text-zinc-400 line-through font-mono">
                     {getSymbol(link.currency, link.regionalPricing?.symbol)}
                     {link.amount.toFixed(2)}
                   </span>
-                  <div className="text-2xl font-black text-emerald-400 font-mono">
+                  <div className="text-2xl font-black text-emerald-600 font-mono">
                     {getSymbol(link.currency, link.regionalPricing?.symbol)}
                     {appliedCoupon.finalAmount.toFixed(2)}
                   </div>
-                  <span className="inline-block text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  <span className="inline-block text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
                     -{getSymbol(link.currency, link.regionalPricing?.symbol)}{appliedCoupon.discountAmount.toFixed(2)} Saved
                   </span>
                 </div>
               ) : (
                 <div className="space-y-0.5">
                   {link.regionalPricing?.isApplied && link.regionalPricing.originalCurrency !== link.currency && (
-                    <span className="text-xs text-zinc-500 line-through font-mono block">
+                    <span className="text-xs text-zinc-400 line-through font-mono block">
                       {getSymbol(link.regionalPricing.originalCurrency)}
                       {link.regionalPricing.originalAmount.toFixed(2)} {link.regionalPricing.originalCurrency}
                     </span>
                   )}
-                  <div className="text-2xl sm:text-3xl font-black text-white font-mono">
+                  <div className="text-2xl sm:text-3xl font-black text-zinc-900 font-mono">
                     {getSymbol(link.currency, link.regionalPricing?.symbol)}
                     {link.amount.toFixed(2)}
                   </div>
                   {link.regionalPricing?.isApplied && link.regionalPricing.discountPercentage ? (
-                    <span className="inline-block text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    <span className="inline-block text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
                       {link.regionalPricing.discountPercentage}% Regional Savings
                     </span>
                   ) : null}
@@ -720,13 +704,13 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
 
           {/* Regional Multi-Pricing Banner */}
           {link.regionalPricing?.isApplied && (
-            <div className="p-3.5 rounded-2xl border border-indigo-500/30 bg-indigo-500/10 backdrop-blur-md flex items-center gap-3">
+            <div className="p-3.5 rounded-2xl border border-indigo-200 bg-indigo-50/60 flex items-center gap-3">
               <span className="text-2xl">{link.regionalPricing.banner?.flag || link.regionalPricing.flag}</span>
               <div className="min-w-0">
-                <h4 className="text-xs font-bold text-indigo-300">
+                <h4 className="text-xs font-bold text-indigo-900">
                   {link.regionalPricing.banner?.headline || `Special Localized Price (${link.regionalPricing.countryName})`}
                 </h4>
-                <p className="text-[11px] text-zinc-300 leading-tight">
+                <p className="text-[11px] text-zinc-600 leading-tight">
                   {link.regionalPricing.banner?.message || 'A targeted regional price has been automatically applied.'}
                 </p>
               </div>
@@ -735,28 +719,22 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
 
           {/* Sold Out Notice */}
           {link.isSoldOut ? (
-            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-center space-y-1">
-              <span className="text-sm font-bold text-red-400">Sold Out</span>
-              <p className="text-xs text-zinc-400">
+            <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-center space-y-1">
+              <span className="text-sm font-bold text-red-600">Sold Out</span>
+              <p className="text-xs text-zinc-500">
                 All available purchase slots for this payment link have been claimed.
               </p>
             </div>
           ) : (
-            <form onSubmit={handleCheckout} className="space-y-5">
-              {/* Flexible Amount Input Box (When Link is Open/Customer-Defined Amount) */}
+            <form onSubmit={handleCheckout} className="space-y-4">
+              {/* Flexible Amount Input Field */}
               {isOpenAmount && (
-                <div className="p-4 rounded-2xl border border-indigo-500/30 bg-indigo-500/10 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>Enter Payment Amount ({link.currency})</span>
-                    </label>
-                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
-                      Flexible Amount
-                    </span>
-                  </div>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-black text-indigo-400 font-mono">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-zinc-700">
+                    Enter Payment Amount ({link.currency})
+                  </label>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-4 text-base font-bold text-zinc-400 font-mono">
                       {getSymbol(link.currency, link.regionalPricing?.symbol)}
                     </span>
                     <input
@@ -766,127 +744,68 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
                       required
                       value={customAmountInput}
                       onChange={(e) => setCustomAmountInput(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full pl-10 pr-4 py-3 rounded-xl bg-black/60 border border-white/10 text-2xl font-black font-mono text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="500"
+                      className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-sm font-bold font-mono text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
                     />
                   </div>
-                  {/* Quick Preset Amount Chips */}
-                  <div className="flex items-center gap-2 flex-wrap pt-1">
-                    {[100, 250, 500, 1000, 2000, 5000].map((preset) => (
-                      <button
-                        key={preset}
-                        type="button"
-                        onClick={() => setCustomAmountInput(String(preset))}
-                        className={`px-3 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
-                          customAmountInput === String(preset)
-                            ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                            : 'bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/10'
-                        }`}
-                      >
-                        {getSymbol(link.currency, link.regionalPricing?.symbol)}{preset}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-[11px] text-zinc-400">
-                    You can enter any custom amount you wish to pay to {link.merchant.name}.
-                  </p>
                 </div>
               )}
 
               {/* Customer Contact Form */}
-              <div className="space-y-3">
-                <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                  Contact & Fulfillment Details
-                </h3>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-zinc-400 mb-1">Full Name</label>
-                    <div className="relative">
-                      <User className="w-4 h-4 text-zinc-500 absolute left-3 top-3" />
-                      <input
-                        type="text"
-                        placeholder="Alex Mercer"
-                        value={customerName}
-                        onChange={(e) => setCustomerName(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-semibold text-zinc-400 mb-1">
-                      Email Address <span className="text-red-400">*</span>
-                    </label>
-                    <div className="relative">
-                      <Mail className="w-4 h-4 text-zinc-500 absolute left-3 top-3" />
-                      <input
-                        type="email"
-                        required
-                        placeholder="alex@gmail.com"
-                        value={customerEmail}
-                        onChange={(e) => setCustomerEmail(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
-                    </div>
+              <div className="space-y-3 pt-1">
+                <div>
+                  <label className="block text-[11px] font-semibold text-zinc-700 mb-1">
+                    Customer Name <span className="text-zinc-400 font-normal">(Optional)</span>
+                  </label>
+                  <div className="relative">
+                    <User className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      placeholder="e.g. Alex Mercer"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+                    />
                   </div>
                 </div>
 
-                {link.collectPhone && (
-                  <div>
-                    <label className="block text-[11px] font-semibold text-zinc-400 mb-1">
-                      Phone Number <span className="text-red-400">*</span>
-                    </label>
-                    <div className="relative">
-                      <Phone className="w-4 h-4 text-zinc-500 absolute left-3 top-3" />
-                      <input
-                        type="tel"
-                        required
-                        placeholder="+91 98765 43210"
-                        value={customerPhone}
-                        onChange={(e) => setCustomerPhone(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
-                    </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-zinc-700 mb-1">
+                    Phone Number <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Phone className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
+                    <input
+                      type="tel"
+                      required
+                      placeholder="+91 98765 43210"
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-zinc-50 border border-zinc-200 text-xs text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+                    />
                   </div>
-                )}
-
-                {link.collectAddress && (
-                  <div>
-                    <label className="block text-[11px] font-semibold text-zinc-400 mb-1">Shipping Address</label>
-                    <div className="relative">
-                      <MapPin className="w-4 h-4 text-zinc-500 absolute left-3 top-3" />
-                      <input
-                        type="text"
-                        placeholder="Street address, City, ZIP code"
-                        value={customerAddress}
-                        onChange={(e) => setCustomerAddress(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
 
               {/* Coupon Section */}
               {link.allowCoupons && (
-                <div className="pt-2">
+                <div className="pt-1">
                   <div className="flex gap-2">
                     <div className="relative flex-1">
-                      <Tag className="w-4 h-4 text-zinc-500 absolute left-3 top-3" />
+                      <Tag className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
                       <input
                         type="text"
                         placeholder="Promo or Coupon Code"
                         value={couponCode}
                         onChange={(e) => setCouponCode(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs font-mono uppercase text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        className="w-full pl-9 pr-3 py-2 rounded-xl bg-zinc-50 border border-zinc-200 text-xs font-mono uppercase text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
                       />
                     </div>
                     <Button
                       type="button"
                       onClick={handleApplyCoupon}
                       disabled={validatingCoupon || !couponCode.trim()}
-                      className="bg-zinc-800 hover:bg-zinc-700 text-white text-xs px-4 py-2 rounded-xl shrink-0"
+                      className="bg-zinc-900 hover:bg-zinc-800 text-white text-xs px-4 py-2 rounded-xl shrink-0 cursor-pointer"
                     >
                       {validatingCoupon ? 'Checking...' : 'Apply'}
                     </Button>
@@ -899,7 +818,7 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
                 <Button
                   type="submit"
                   disabled={isProcessing}
-                  className="w-full py-3.5 px-6 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-all shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-2"
+                  className="w-full py-3.5 px-6 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-all shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {isProcessing ? (
                     <>
@@ -919,31 +838,8 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
               </div>
             </form>
           )}
-
-          {/* Security Footer */}
-          <div className="pt-4 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-zinc-500">
-            <div className="flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>Zero-code, end-to-end encrypted checkout</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="flex items-center gap-1">
-                <CreditCard className="w-3.5 h-3.5" />
-                Cards & NetBanking
-              </span>
-              <span className="flex items-center gap-1">
-                <Wallet className="w-3.5 h-3.5" />
-                UPI & 180 Wallet
-              </span>
-            </div>
-          </div>
         </div>
       </main>
-
-      {/* Page Footer (Desktop) */}
-      <footer className="hidden sm:block max-w-2xl mx-auto w-full text-center pt-6 text-[11px] text-zinc-600 z-10">
-        Powered by <span className="font-semibold text-zinc-400">180 Pay</span> · Developer Infrastructure
-      </footer>
 
       {/* QR Code Dialog */}
       <PaymentLinkQRDialog

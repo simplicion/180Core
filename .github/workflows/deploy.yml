@@ -124,12 +124,16 @@ jobs:
           GH_ACTOR: ${{ github.actor }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CORE_DB_URL: ${{ secrets.CORE_DATABASE_URL }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: |
           echo "Preparing zero-downtime SSM parameters for EC2 ($INSTANCE_ID)..."
           SSM_PARAMS=$(jq -n \
             --arg token "$GH_TOKEN" \
             --arg actor "$GH_ACTOR" \
             --arg coreDb "$CORE_DB_URL" \
+            --arg googleId "$GOOGLE_CLIENT_ID" \
+            --arg googleSecret "$GOOGLE_CLIENT_SECRET" \
             --arg hostHdr "Host: api.180core.cloud" \
             '{commands: [
               "echo === 1. DOCKER LOGIN GHCR ===",
@@ -139,11 +143,13 @@ jobs:
               "echo === 3. STOP AND REMOVE OLD CONTAINER ===",
               "docker stop 180workspace-core-backend 2>/dev/null || true",
               "docker rm 180workspace-core-backend 2>/dev/null || true",
-              "echo === 4. ENSURE DOCKER NETWORKS ===",
+              "echo === 4. ENSURE DOCKER NETWORKS & SYNC OAUTH CONFIG ===",
               "docker network create app_180workspace-net 2>/dev/null || true",
               "docker network create 180workspace-net 2>/dev/null || true",
+              ("if [ -n " + ($googleId | @sh) + " ]; then sed -i \"s/^GOOGLE_CLIENT_ID=.*/GOOGLE_CLIENT_ID=\"$googleId\"/\" /home/ubuntu/app/.env 2>/dev/null || true; fi"),
+              ("if [ -n " + ($googleSecret | @sh) + " ]; then sed -i \"s/^GOOGLE_CLIENT_SECRET=.*/GOOGLE_CLIENT_SECRET=\"$googleSecret\"/\" /home/ubuntu/app/.env 2>/dev/null || true; fi"),
               "echo === 5. LAUNCH 180CORE BACKEND CONTAINER ===",
-              ("docker run -d --name 180workspace-core-backend --restart always --network app_180workspace-net --network-alias core-backend -p 4003:4003 --add-host host.docker.internal:host-gateway --env-file /home/ubuntu/app/.env -e PORT=4003 -e NODE_ENV=production -e REDIS_URL=redis://host.docker.internal:6379 -e REDIS_INTERNAL_URL=redis://host.docker.internal:6379 -e CORE_DATABASE_URL=" + ($coreDb | @sh) + " ghcr.io/simplicion/180core-core-backend:latest"),
+              ("docker run -d --name 180workspace-core-backend --restart always --network app_180workspace-net --network-alias core-backend -p 4003:4003 --add-host host.docker.internal:host-gateway --env-file /home/ubuntu/app/.env " + (if ($googleId | length) > 0 then "-e GOOGLE_CLIENT_ID=" + ($googleId | @sh) + " " else "" end) + (if ($googleSecret | length) > 0 then "-e GOOGLE_CLIENT_SECRET=" + ($googleSecret | @sh) + " " else "" end) + "-e PORT=4003 -e NODE_ENV=production -e REDIS_URL=redis://host.docker.internal:6379 -e REDIS_INTERNAL_URL=redis://host.docker.internal:6379 -e CORE_DATABASE_URL=" + ($coreDb | @sh) + " ghcr.io/simplicion/180core-core-backend:latest"),
               "docker network connect 180workspace-net 180workspace-core-backend --alias core-backend 2>/dev/null || true",
               "docker network connect app_180workspace-net 180workspace-proxy 2>/dev/null || true",
               "docker network connect 180workspace-net 180workspace-proxy 2>/dev/null || true",
@@ -284,7 +290,7 @@ jobs:
           NEXT_PUBLIC_CORE_BACKEND_URL: 'https://api.180core.cloud'
           NEXT_PUBLIC_CORE_API_URL: 'https://api.180core.cloud'
           NEXT_PUBLIC_DEVELOPERS_URL: 'https://developer.180core.cloud'
-          NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '188560578303-2bih1dg5qhbq5uao9q451r6db3986e6f.apps.googleusercontent.com' }}
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}
           NEXT_PUBLIC_ROOT_DOMAIN: '180core.cloud'
           NEXT_PUBLIC_MAIN_DOMAIN: '180core.cloud'
         run: pnpm --filter 180-profile-frontend build

@@ -225,7 +225,10 @@ function DeveloperDashboardContent() {
   const getApiBase = () => {
     if (typeof window === 'undefined') return process.env.NEXT_PUBLIC_CORE_BACKEND_URL || 'http://localhost:4003';
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    return isLocal ? 'http://localhost:4003' : (process.env.NEXT_PUBLIC_CORE_BACKEND_URL || 'https://api.180core.cloud');
+    if (isLocal) {
+      return window.location.hostname === '127.0.0.1' ? 'http://127.0.0.1:4003' : 'http://localhost:4003';
+    }
+    return process.env.NEXT_PUBLIC_CORE_BACKEND_URL || 'https://api.180core.cloud';
   };
 
   const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 5000): Promise<Response | null> => {
@@ -334,7 +337,7 @@ function DeveloperDashboardContent() {
         }
       }
 
-      // Step 3: Fallback to decode JWT client-side
+      // Step 3: Fallback to decode JWT client-side or check cached user
       if (!user) {
         try {
           const parts = token.split('.');
@@ -346,6 +349,11 @@ function DeveloperDashboardContent() {
               email: payload.email,
               username: payload.username,
             };
+          } else {
+            const cachedUserStr = localStorage.getItem('user');
+            if (cachedUserStr) {
+              user = JSON.parse(cachedUserStr);
+            }
           }
         } catch (_) {}
       }
@@ -939,10 +947,11 @@ function DeveloperDashboardContent() {
                   {filteredApps.map((app) => (
                     <div
                       key={app.id}
-                      className="rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#101012] p-5 space-y-4 shadow-xs hover:border-zinc-300 dark:hover:border-white/20 transition-all group flex flex-col justify-between"
+                      onClick={() => router.push(`/apps/${app.id}`)}
+                      className="rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#101012] p-5 shadow-xs hover:border-zinc-300 dark:hover:border-white/20 hover:shadow-md hover:-translate-y-0.5 transition-all group flex flex-col justify-between cursor-pointer"
                     >
                       <div className="space-y-3.5">
-                        {/* Header with App Logo and Badges */}
+                        {/* Header with App Logo, Badges, and Client ID */}
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-start gap-2.5 min-w-0">
                             {app.logoUrl ? (
@@ -965,94 +974,47 @@ function DeveloperDashboardContent() {
                                   Active
                                 </span>
                               </div>
-                              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-1">
-                                {app.description || '180 Workspace Business Operating System'}
+                              <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400 truncate max-w-[190px]" title={app.clientId}>
+                                {app.clientId}
                               </p>
                             </div>
                           </div>
-                        </div>
 
-                        {/* Client ID & Credentials Box */}
-                        <div className="p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200/60 dark:border-white/5 space-y-1.5">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-mono text-zinc-500 dark:text-zinc-400 text-[10px]">
-                              Client ID
-                            </span>
-                            <button
-                              onClick={() => copyToClipboard(app.clientId, 'client')}
-                              className="flex items-center gap-1 text-[10px] font-medium text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
-                            >
-                              {clientIdCopied ? (
-                                <Check className="w-2.5 h-2.5 text-emerald-500" />
-                              ) : (
-                                <Copy className="w-2.5 h-2.5" />
-                              )}
-                              <span>{clientIdCopied ? 'Copied' : 'Copy'}</span>
-                            </button>
-                          </div>
-                          <div className="font-mono text-[11px] text-zinc-900 dark:text-zinc-200 truncate select-all">
-                            {app.clientId}
-                          </div>
-
-                          <div className="pt-1.5 border-t border-zinc-200/60 dark:border-white/5 flex items-center justify-between text-xs">
-                            <span className="text-[10px] text-zinc-500 dark:text-zinc-400">
-                              Secret Hint:
-                            </span>
-                            <span className="font-mono text-[11px] text-zinc-600 dark:text-zinc-400">
-                              {app.clientSecretHint ? `••••${app.clientSecretHint}` : '••••3c9c'}
-                            </span>
-                            <button
-                              onClick={() => {
-                                setRotatingApp(app);
-                                setShowRotateModal(true);
-                              }}
-                              className="flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
-                            >
-                              <RotateCw className="w-2.5 h-2.5" />
-                              <span>Rotate</span>
-                            </button>
+                          <div className="w-7 h-7 rounded-full flex items-center justify-center text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-white group-hover:bg-zinc-100 dark:group-hover:bg-white/10 transition-all shrink-0">
+                            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                           </div>
                         </div>
-
-                        {app.webhookUrl && (
-                          <div className="flex items-center justify-between text-[10px] text-zinc-600 dark:text-zinc-400">
-                            <span>Webhook:</span>
-                            <span className="font-mono text-purple-600 dark:text-purple-400 truncate max-w-[130px]" title={app.webhookUrl}>
-                              {app.webhookUrl}
-                            </span>
-                          </div>
-                        )}
                       </div>
 
-                      {/* Footer Actions: Project Hub, 180 Identity, 180 Pay */}
-                      <div className="pt-2.5 border-t border-zinc-100 dark:border-white/5 flex flex-wrap items-center justify-between gap-1.5 text-xs">
-                        <Link
-                          href={`/apps/${app.id}`}
-                          className="font-bold text-xs text-zinc-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 flex items-center gap-1 transition-colors min-h-[32px]"
-                        >
-                          <span>Manage</span>
-                          <ArrowRight className="w-3 h-3" />
-                        </Link>
-
-                        <div className="flex items-center gap-1">
+                      {/* Optional Badges: 180 Identity, 180 Pay */}
+                      {(app.enableAuth || app.enablePay) && (
+                        <div className="pt-3 border-t border-zinc-100 dark:border-white/5 flex items-center justify-end gap-1.5 text-xs">
                           {app.enableAuth && (
-                            <Link
-                              href={`/apps/${app.id}/identity`}
-                              className="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 transition-colors"
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(`/apps/${app.id}/identity`);
+                              }}
+                              className="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 transition-colors cursor-pointer"
                             >
                               Identity
-                            </Link>
+                            </button>
                           )}
                           {app.enablePay && (
-                            <Link
-                              href={`/apps/${app.id}/pay`}
-                              className="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 transition-colors"
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(`/apps/${app.id}/pay`);
+                              }}
+                              className="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 transition-colors cursor-pointer"
                             >
                               Pay
-                            </Link>
+                            </button>
                           )}
                         </div>
-                      </div>
+                      )}
                     </div>
                   ))}
                 </div>

@@ -617,7 +617,7 @@ export function BillingView() {
               >
                 <Wallet className="w-3.5 h-3.5" />
                 <span>
-                  {subscribingTier === 'STARTER' || (isOpeningPay && subscribingTier === 'STARTER')
+                  {subscribingTier === 'STARTER'
                     ? 'Opening 180 Pay...'
                     : currentTier === 'STARTER' && !isTrialActive
                     ? 'Active Starter Plan'
@@ -714,7 +714,7 @@ export function BillingView() {
               >
                 <Wallet className="w-3.5 h-3.5" />
                 <span>
-                  {subscribingTier === 'PRO' || (isOpeningPay && subscribingTier === 'PRO')
+                  {subscribingTier === 'PRO'
                     ? 'Opening 180 Pay...'
                     : currentTier === 'PRO'
                     ? 'Active Pro Plan'

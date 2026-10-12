@@ -227,9 +227,9 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   });
 });
 
-const PORT = process.env.PORT || process.env.CORE_BACKEND_PORT || 4003;
+const PORT = Number(process.env.PORT || process.env.CORE_BACKEND_PORT || 4003);
 
-server.listen(PORT, async () => {
+server.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 180 Core Dedicated Backend running on http://localhost:${PORT}`);
   console.log(`💳 Domains active: Identity / OAuth2, Prepaid Wallet (Razorpay), 1-Click Checkout, Developer Payouts`);
   try {
