@@ -102,14 +102,10 @@ jobs:
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
             --parameters '{"commands":[
-              "echo \"=== PM2 LIST ===\"",
-              "su - ubuntu -c \"pm2 list\" 2>/dev/null || pm2 list 2>/dev/null || true",
-              "echo \"=== DOCKER PS ===\"",
-              "docker ps --format \"table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Ports}}\"",
-              "echo \"=== NGINX REVERSE PROXY ===\"",
-              "docker exec $(docker ps -q -f ancestor=*nginx*) nginx -T 2>/dev/null || docker exec $(docker ps -q -f name=nginx) nginx -T 2>/dev/null || grep -rn \"proxy_pass\" /etc/nginx/ 2>/dev/null || true",
-              "echo \"=== DOCKER LOGS ===\"",
-              "docker logs --tail 30 180workspace-backend 2>/dev/null || true"
+              "echo \"=== 180workspace-proxy NGINX CONFIG ===\"",
+              "docker exec 180workspace-proxy nginx -T 2>/dev/null || true",
+              "echo \"=== TEST BACKEND FROM PROXY ===\"",
+              "docker exec 180workspace-proxy curl -i http://180workspace-backend:4000/health 2>/dev/null || docker exec 180workspace-proxy wget -qO- http://180workspace-backend:4000/health 2>/dev/null || true"
             ]}' \
             --query "Command.CommandId" \
             --output text)
