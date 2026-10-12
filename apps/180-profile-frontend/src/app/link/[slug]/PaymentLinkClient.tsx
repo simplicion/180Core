@@ -55,6 +55,8 @@ interface PublicPaymentLink {
   collectPhone: boolean;
   collectAddress: boolean;
   allowCoupons: boolean;
+  allowCustomAmount?: boolean;
+  metadata?: Record<string, any>;
   isAvailable: boolean;
   isSoldOut: boolean;
   regionalPricing?: RegionalPricingData;
@@ -206,11 +208,27 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
     }
   };
 
-  const currentPayableAmount = appliedCoupon ? appliedCoupon.finalAmount : (link?.amount || 0);
+  // Customer-Chosen Flexible Amount State
+  const [customAmountInput, setCustomAmountInput] = useState<string>('500');
+
+  const isOpenAmount = Boolean(link && (link.allowCustomAmount || Number(link.amount) === 0 || link.metadata?.allowCustomAmount));
+  const currentPayableAmount = appliedCoupon
+    ? appliedCoupon.finalAmount
+    : isOpenAmount
+    ? (parseFloat(customAmountInput) || 0)
+    : (link?.amount || 0);
 
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!link) return;
+
+    if (isOpenAmount) {
+      const parsedAmount = parseFloat(customAmountInput);
+      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        toast.error('Please enter a valid payment amount greater than zero');
+        return;
+      }
+    }
 
     if (!customerEmail.trim()) {
       toast.error('Please enter your email address for order fulfillment');
@@ -409,8 +427,12 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
   // FULFILLED SUCCESS VIEW
   if (fulfilledData) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4 sm:p-6">
-        <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-zinc-900/90 backdrop-blur-xl p-6 sm:p-8 space-y-6 shadow-2xl text-center">
+      <div className="min-h-[100dvh] bg-zinc-950 flex flex-col justify-end sm:justify-center p-0 sm:p-6 relative overflow-hidden">
+        {/* Background ambient glow */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-950/30 via-zinc-950 to-zinc-950 pointer-events-none" />
+
+        <div className="w-full max-w-lg sm:mx-auto rounded-t-[32px] sm:rounded-3xl border-t sm:border border-white/10 bg-zinc-900/95 sm:bg-zinc-900/90 backdrop-blur-xl p-6 sm:p-8 space-y-6 shadow-2xl text-center z-10">
+          <div className="w-12 h-1.5 rounded-full bg-white/20 mx-auto -mt-2 mb-4 sm:hidden" />
           <div className="w-16 h-16 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/20 shadow-lg shadow-emerald-500/10">
             <CheckCircle2 className="w-9 h-9" />
           </div>
@@ -488,9 +510,41 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
 
   // MAIN CHECKOUT VIEW
   return (
-    <div className="min-h-screen bg-zinc-950 text-white flex flex-col justify-between p-4 sm:p-6 lg:p-8">
-      {/* Top Header */}
-      <header className="max-w-2xl mx-auto w-full flex items-center justify-between pb-6">
+    <div className="min-h-[100dvh] bg-zinc-950 text-white flex flex-col justify-end sm:justify-between p-0 sm:p-6 lg:p-8 relative overflow-hidden">
+      {/* Background ambient glow */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-950/30 via-zinc-950 to-zinc-950 pointer-events-none" />
+
+      {/* Mobile Top Header (above bottom sheet) */}
+      <header className="sm:hidden px-5 pt-6 pb-3 flex items-center justify-between z-10">
+        <div className="flex items-center gap-2.5">
+          {link.merchant.logoUrl ? (
+            <img
+              src={link.merchant.logoUrl}
+              alt={link.merchant.name}
+              className="w-8 h-8 rounded-xl object-cover border border-white/10"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-xs border border-indigo-500/30">
+              {link.merchant.name.charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div>
+            <span className="text-xs font-bold text-zinc-200 block">{link.merchant.name}</span>
+            <span className="text-[10px] text-zinc-500 flex items-center gap-1">
+              <Lock className="w-2.5 h-2.5 text-emerald-400" />
+              <span>180 Pay Sovereign Gateway</span>
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400 font-medium">
+          <ShieldCheck className="w-3 h-3" />
+          <span>Bank Verified</span>
+        </div>
+      </header>
+
+      {/* Desktop Header */}
+      <header className="hidden sm:flex max-w-2xl mx-auto w-full items-center justify-between pb-6 z-10">
         <div className="flex items-center gap-2.5">
           {link.merchant.logoUrl ? (
             <img
@@ -517,18 +571,39 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
             <span>Scan QR</span>
           </button>
 
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[11px] text-zinc-400 font-medium">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[11px] text-zinc-400 font-medium">
             <Lock className="w-3 h-3 text-emerald-400" />
             <span>256-bit Encrypted Checkout</span>
           </div>
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="max-w-2xl mx-auto w-full my-auto">
-        <div className="rounded-3xl border border-white/10 bg-zinc-900/80 backdrop-blur-2xl p-6 sm:p-8 shadow-2xl space-y-6">
-          {/* Item Header */}
-          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-6 border-b border-white/10">
+      {/* Main Container: Mobile Bottom Sheet / Desktop Centered Card */}
+      <main className="max-w-2xl mx-auto w-full my-0 sm:my-auto z-20">
+        <div className="rounded-t-[32px] sm:rounded-3xl border-t sm:border border-white/10 bg-zinc-900/95 sm:bg-zinc-900/80 backdrop-blur-2xl p-5 sm:p-8 shadow-2xl space-y-5 max-h-[88dvh] sm:max-h-none overflow-y-auto pb-8 sm:pb-8">
+          {/* Mobile Drag Handle */}
+          <div className="w-12 h-1.5 rounded-full bg-white/20 mx-auto -mt-1 mb-2 sm:hidden" />
+
+          {/* Mobile Sheet Header */}
+          <div className="flex items-center justify-between gap-3 pb-3 border-b border-white/10 sm:hidden">
+            <div className="min-w-0">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1">
+                <Sparkles className="w-3 h-3" />
+                180 Pay Bottom Sheet
+              </span>
+              <h2 className="text-sm font-black text-white truncate">{link.title}</h2>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="text-lg font-black text-emerald-400 font-mono">
+                {getSymbol(link.currency, link.regionalPricing?.symbol)}
+                {currentPayableAmount.toFixed(2)}
+              </div>
+              <span className="text-[9px] text-zinc-400 font-mono uppercase">UPI / Card</span>
+            </div>
+          </div>
+
+          {/* Desktop Item Header */}
+          <div className="hidden sm:flex flex-col sm:flex-row sm:items-start justify-between gap-4 pb-6 border-b border-white/10">
             <div className="space-y-1.5">
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[10px] font-bold uppercase tracking-wider border border-indigo-500/20">
                 <ShoppingBag className="w-3 h-3" />
@@ -541,7 +616,17 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
             </div>
 
             <div className="sm:text-right shrink-0">
-              {appliedCoupon ? (
+              {isOpenAmount ? (
+                <div className="space-y-0.5">
+                  <div className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono">
+                    {getSymbol(link.currency, link.regionalPricing?.symbol)}
+                    {currentPayableAmount.toFixed(2)}
+                  </div>
+                  <span className="inline-block text-[10px] font-bold text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/20">
+                    Customer-Chosen Amount
+                  </span>
+                </div>
+              ) : appliedCoupon ? (
                 <div className="space-y-0.5">
                   <span className="text-xs text-zinc-500 line-through font-mono">
                     {getSymbol(link.currency, link.regionalPricing?.symbol)}
@@ -602,6 +687,56 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
             </div>
           ) : (
             <form onSubmit={handleCheckout} className="space-y-5">
+              {/* Flexible Amount Input Box (When Link is Open/Customer-Defined Amount) */}
+              {isOpenAmount && (
+                <div className="p-4 rounded-2xl border border-indigo-500/30 bg-indigo-500/10 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Enter Payment Amount ({link.currency})</span>
+                    </label>
+                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                      Flexible Amount
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-black text-indigo-400 font-mono">
+                      {getSymbol(link.currency, link.regionalPricing?.symbol)}
+                    </span>
+                    <input
+                      type="number"
+                      min="1"
+                      step="any"
+                      required
+                      value={customAmountInput}
+                      onChange={(e) => setCustomAmountInput(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full pl-10 pr-4 py-3 rounded-xl bg-black/60 border border-white/10 text-2xl font-black font-mono text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  {/* Quick Preset Amount Chips */}
+                  <div className="flex items-center gap-2 flex-wrap pt-1">
+                    {[100, 250, 500, 1000, 2000, 5000].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setCustomAmountInput(String(preset))}
+                        className={`px-3 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                          customAmountInput === String(preset)
+                            ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                            : 'bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/10'
+                        }`}
+                      >
+                        {getSymbol(link.currency, link.regionalPricing?.symbol)}{preset}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-zinc-400">
+                    You can enter any custom amount you wish to pay to {link.merchant.name}.
+                  </p>
+                </div>
+              )}
+
               {/* Customer Contact Form */}
               <div className="space-y-3">
                 <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
@@ -718,8 +853,8 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
                   ) : (
                     <>
                       <span>
-                        Pay {link.currency === 'INR' ? '₹' : '$'}
-                        {currentPayableAmount.toFixed(2)}
+                        Pay {getSymbol(link.currency, link.regionalPricing?.symbol)}
+                        {currentPayableAmount.toFixed(2)} via UPI / Card
                       </span>
                       <ArrowRight className="w-4 h-4" />
                     </>
@@ -749,8 +884,8 @@ export function PaymentLinkClient({ slug: initialSlug }: { slug?: string } = {})
         </div>
       </main>
 
-      {/* Page Footer */}
-      <footer className="max-w-2xl mx-auto w-full text-center pt-6 text-[11px] text-zinc-600">
+      {/* Page Footer (Desktop) */}
+      <footer className="hidden sm:block max-w-2xl mx-auto w-full text-center pt-6 text-[11px] text-zinc-600 z-10">
         Powered by <span className="font-semibold text-zinc-400">180 Pay</span> · Developer Infrastructure
       </footer>
 

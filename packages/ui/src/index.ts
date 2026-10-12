@@ -63,3 +63,4 @@ export * from './components/OneEightyPayButton';
 export * from './components/AICreditDrawer';
 export * from './components/PlatformDrawer';
 export * from './components/OneEightyCoreLogo';
+export * from './components/FloatingSupportWidget';

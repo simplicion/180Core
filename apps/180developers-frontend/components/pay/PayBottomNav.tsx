@@ -13,7 +13,6 @@ import {
   Tag,
   Link2,
   Layers,
-  Globe,
   Bot,
   Sliders,
   Landmark,
@@ -65,7 +64,6 @@ export function PayBottomNav() {
     { label: 'Coupons & Promos', href: `/apps/${projectId}/pay/coupons`, icon: Tag },
     { label: 'Payment Links', href: `/apps/${projectId}/pay/links`, icon: Link2 },
     { label: 'Pricing Tables', href: `/apps/${projectId}/pay/pricing`, icon: Layers },
-    { label: 'Geo-Pricing & PPP', href: `/apps/${projectId}/pay/geo`, icon: Globe },
     { label: 'Agent Envelopes', href: `/apps/${projectId}/pay/agents`, icon: Bot },
     { label: 'Gateways & Routing', href: `/apps/${projectId}/pay/gateways`, icon: Sliders },
   ];

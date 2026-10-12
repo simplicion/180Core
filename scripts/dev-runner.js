@@ -32,6 +32,14 @@ const APPS = {
     port: 3008,
     color: '\x1b[38;5;208m', // Orange
   },
+  admin: {
+    name: '180 Super Admin Panel (Treasury, Fleet, Support & Settles)',
+    filter: '180-admin-frontend',
+    cmd: 'pnpm',
+    args: ['--filter', '180-admin-frontend', 'dev'],
+    port: 3010,
+    color: '\x1b[38;5;45m', // Cyan
+  },
 };
 
 const RESET = '\x1b[0m';
@@ -107,13 +115,15 @@ console.log(BOLD + GREEN + '==================================================' 
 console.log('  [backend]    -> http://localhost:4003 (Sovereign API, OIDC, Pay)');
 console.log('  [profile]    -> http://localhost:3009 (Universal Profile & SSO)');
 console.log('  [developers] -> http://localhost:3008 (Developer Portal)');
+console.log('  [admin]      -> http://localhost:3010 (Super Admin Platform)');
 console.log('--------------------------------------------------');
-console.log('Controls: [b] Restart backend | [p] Restart profile | [d] Restart devs | [q] Quit\n');
+console.log('Controls: [b] Restart backend | [p] Restart profile | [d] Restart devs | [a] Restart admin | [q] Quit\n');
 
-// Start all three by default
+// Start all four by default on pnpm dev
 startProcess('backend');
 startProcess('profile');
 startProcess('developers');
+startProcess('admin');
 
 if (process.stdin.isTTY) {
   readline.emitKeypressEvents(process.stdin);
@@ -124,5 +134,6 @@ if (process.stdin.isTTY) {
     if (key.name === 'b') { stopProcess('backend'); setTimeout(() => startProcess('backend'), 500); }
     if (key.name === 'p') { stopProcess('profile'); setTimeout(() => startProcess('profile'), 500); }
     if (key.name === 'd') { stopProcess('developers'); setTimeout(() => startProcess('developers'), 500); }
+    if (key.name === 'a') { stopProcess('admin'); setTimeout(() => startProcess('admin'), 500); }
   });
 }

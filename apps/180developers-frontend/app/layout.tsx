@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import { Toaster } from 'react-hot-toast';
+import { FloatingSupportWidget } from '@workspace/ui';
 import PortalShell from '../components/layout/PortalShell';
 import './globals.css';
 
@@ -95,6 +96,7 @@ export default function RootLayout({
           }}
         />
         <PortalShell>{children}</PortalShell>
+        <FloatingSupportWidget backendUrl="http://localhost:4003" />
       </body>
     </html>
   );

@@ -1,0 +1,32 @@
+{
+  "name": "180-admin-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3010",
+    "build": "next build",
+    "postbuild": "node -e \"const fs = require('fs'); if (fs.existsSync('public') && fs.existsSync('out')) { fs.cpSync('public', 'out', { recursive: true }); console.log('✓ Synced public assets to out'); }\"",
+    "start": "next start -p 3010",
+    "deploy": "next build && npx wrangler pages deploy out --project-name=180-admin-frontend --commit-dirty=true",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@workspace/ui": "workspace:*",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.447.0",
+    "next": "15.5.20",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-hot-toast": "^2.4.1",
+    "tailwind-merge": "^2.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.9.3"
+  }
+}

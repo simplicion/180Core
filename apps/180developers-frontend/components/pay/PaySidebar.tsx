@@ -11,7 +11,6 @@ import {
   Tag,
   Link2,
   Layers,
-  Globe,
   Bot,
   Sliders,
   ChevronLeft,
@@ -95,11 +94,6 @@ export function PaySidebar({
       label: 'Pricing Tables',
       href: `/apps/${projectId}/pay/pricing`,
       icon: Layers,
-    },
-    {
-      label: 'Geo-Pricing & PPP',
-      href: `/apps/${projectId}/pay/geo`,
-      icon: Globe,
     },
     {
       label: 'Agent Envelopes',

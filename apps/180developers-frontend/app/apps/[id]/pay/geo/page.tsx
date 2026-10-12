@@ -1,26 +1,18 @@
 'use client';
 
-import React from 'react';
-import { AppShellLayout } from '@/components/common/AppShellLayout';
-import { PaySidebar } from '@/components/pay/PaySidebar';
-import { PayBottomNav } from '@/components/pay/PayBottomNav';
-import { GeoPricingTab } from '@/components/apps/pay/GeoPricingTab';
-import { useProject } from '@/context/ProjectContext';
+import { useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 
 export default function PayGeoPricingPage() {
-  const { projectId } = useProject();
+  const params = useParams();
+  const router = useRouter();
+  const id = params?.id as string;
 
-  return (
-    <AppShellLayout
-      sidebar={<PaySidebar />}
-      bottomNav={<PayBottomNav />}
-      title="Geo-Pricing & Purchasing Power Parity"
-      badge="Global Localization"
-      badgeColor="emerald"
-    >
-      <div className="p-6">
-        <GeoPricingTab appId={projectId} />
-      </div>
-    </AppShellLayout>
-  );
+  useEffect(() => {
+    if (id) {
+      router.replace(`/apps/${id}/pay/pricing`);
+    }
+  }, [id, router]);
+
+  return null;
 }

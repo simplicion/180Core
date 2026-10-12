@@ -15,6 +15,7 @@ router.post('/:id/complete', PaymentLinkApiController.completePaymentLink);
 // Developer management endpoints
 router.get('/apps/:appId', protect, PaymentLinkApiController.listPaymentLinks);
 router.post('/apps/:appId', protect, PaymentLinkApiController.createPaymentLink);
+router.post('/apps/:appId/gateway-qr', optionalAuth, PaymentLinkApiController.generateGatewayQr);
 router.get('/apps/:appId/:id', protect, PaymentLinkApiController.getPaymentLinkById);
 router.put('/apps/:appId/:id', protect, PaymentLinkApiController.updatePaymentLink);
 router.delete('/apps/:appId/:id', protect, PaymentLinkApiController.deletePaymentLink);

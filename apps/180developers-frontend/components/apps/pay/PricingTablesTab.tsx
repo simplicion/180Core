@@ -148,7 +148,7 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
 
   // View state
   const [activeTab, setActiveTab] = useState<'tiers' | 'styling' | 'snippets' | 'custom_css' | 'api'>('tiers');
-  const [viewMode, setViewMode] = useState<'editor' | 'split' | 'preview'>('editor');
+  const [viewMode, setViewMode] = useState<'editor' | 'split' | 'preview'>('split');
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [previewInterval, setPreviewInterval] = useState<'MONTHLY' | 'YEARLY'>('MONTHLY');
   const [copiedSnippet, setCopiedSnippet] = useState<'wc' | 'iframe' | 'react' | 'url' | 'headless' | 'token' | null>(null);
@@ -504,6 +504,101 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
     return item ? item.symbol : '$';
   };
 
+  const handleApplySaaSStarterTemplate = () => {
+    const templatePlans: PlanCard[] = [
+      {
+        planCode: 'starter',
+        name: 'Starter',
+        description: 'For individuals exploring the platform',
+        amount: 0,
+        yearlyAmount: 0,
+        currency: 'USD',
+        isFree: true,
+        buttonText: 'Get Started Free',
+        features: [
+          { text: 'Up to 3 active projects', included: true },
+          { text: '1,000 monthly API calls', included: true },
+          { text: 'Community support', included: true },
+          { text: 'Custom domains', included: false },
+          { text: 'Dedicated 99.99% SLA', included: false },
+        ],
+        featureKeys: ['projects:3', 'api:1k'],
+      },
+      {
+        planCode: 'pro',
+        name: 'Pro',
+        description: 'For scaling startups & professional builders',
+        amount: 29,
+        yearlyAmount: 279,
+        currency: 'USD',
+        isPopular: true,
+        badgeText: 'Most Popular',
+        buttonText: 'Upgrade to Pro',
+        features: [
+          { text: 'Unlimited active projects', included: true },
+          { text: '100,000 monthly API calls', included: true },
+          { text: 'Priority email & chat support', included: true },
+          { text: 'Custom domain branding', included: true },
+          { text: 'Dedicated 99.99% SLA', included: false },
+        ],
+        featureKeys: ['projects:unlimited', 'api:100k', 'custom_domains'],
+      },
+      {
+        planCode: 'enterprise',
+        name: 'Enterprise',
+        description: 'High-volume workloads & custom compliance',
+        amount: 99,
+        yearlyAmount: 950,
+        currency: 'USD',
+        buttonText: 'Contact Sales / Enterprise',
+        features: [
+          { text: 'Unlimited active projects', included: true },
+          { text: 'Unlimited API bandwidth', included: true },
+          { text: '99.99% Uptime SLA guarantee', included: true },
+          { text: 'Dedicated account manager', included: true },
+          { text: 'Single Sign-On (SAML / Okta)', included: true },
+        ],
+        featureKeys: ['projects:unlimited', 'api:unlimited', 'sso:saml', 'sla:9999'],
+      },
+    ];
+
+    setConfig((prev) => ({
+      ...prev,
+      planCards: templatePlans,
+    }));
+    toast.success('Applied curated SaaS 3-tier template!');
+  };
+
+  const handleImportAvailablePlans = () => {
+    if (availablePlans.length === 0) {
+      toast.error('No registered 180 Pay plans found to import');
+      return;
+    }
+    const imported: PlanCard[] = availablePlans.map((p) => ({
+      planCode: p.planCode,
+      name: p.name,
+      description: p.description || '',
+      amount: p.amount,
+      yearlyAmount: Math.round(p.amount * 12 * 0.8),
+      currency: p.currency,
+      interval: p.interval,
+      trialDays: p.trialDays || 0,
+      buttonText: 'Subscribe Now',
+      features: [
+        { text: `Access to ${p.name}`, included: true },
+        { text: 'Full feature entitlement', included: true },
+        { text: 'Cancel anytime', included: true },
+      ],
+      featureKeys: [`plan:${p.planCode}`],
+    }));
+
+    setConfig((prev) => ({
+      ...prev,
+      planCards: imported,
+    }));
+    toast.success(`Imported ${imported.length} plans from 180 Pay!`);
+  };
+
   if (loading) {
     return (
       <div className="rounded-3xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#101012] p-8 shadow-sm">
@@ -516,36 +611,36 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
 
   return (
     <div className="space-y-6">
-      {/* Top Header & Studio Navigation Bar */}
-      <div className="rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#101012] p-6 sm:p-7 shadow-sm dark:shadow-2xl">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-zinc-200 dark:border-white/10">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center">
-                <Layers className="w-4 h-4" />
-              </span>
-              <div>
-                <h2 className="text-base sm:text-lg font-bold tracking-tight text-zinc-950 dark:text-white flex items-center gap-2">
-                  <span>Embeddable Pricing Table Studio</span>
-                  <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 text-[10px] font-bold border border-purple-500/20">
-                    Pro Builder
-                  </span>
+      {/* Sleek Top Studio Toolbar */}
+      <div className="rounded-2xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#101012] p-3 sm:px-4 shadow-sm dark:shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+              <Layers className="w-4 h-4" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold tracking-tight text-zinc-950 dark:text-white">
+                  Embeddable Pricing Table Studio
                 </h2>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  Configure subscription tiers with auto-sync to 180 Pay recurring billing, dynamic styling & multi-device preview.
-                </p>
+                <span className="px-2 py-0.2 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 text-[10px] font-bold border border-purple-500/20">
+                  Pro Builder
+                </span>
               </div>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                Interactive two-pane editor &amp; live preview canvas with real-time updates
+              </p>
             </div>
           </div>
 
           {/* Action Toolbar */}
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
             {/* View Mode Toggle */}
             <div className="inline-flex p-1 rounded-xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-white/5 text-xs">
               <button
                 type="button"
                 onClick={() => setViewMode('editor')}
-                className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
+                className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
                   viewMode === 'editor'
                     ? 'bg-white dark:bg-zinc-800 text-zinc-950 dark:text-white shadow-xs'
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white'
@@ -556,7 +651,7 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
               <button
                 type="button"
                 onClick={() => setViewMode('split')}
-                className={`hidden md:block px-3 py-1.5 rounded-lg font-semibold transition-all ${
+                className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
                   viewMode === 'split'
                     ? 'bg-white dark:bg-zinc-800 text-zinc-950 dark:text-white shadow-xs'
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white'
@@ -567,7 +662,7 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
               <button
                 type="button"
                 onClick={() => setViewMode('preview')}
-                className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
+                className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
                   viewMode === 'preview'
                     ? 'bg-white dark:bg-zinc-800 text-zinc-950 dark:text-white shadow-xs'
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white'
@@ -577,222 +672,254 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
               </button>
             </div>
 
-
+            {/* Live Hosted URL Link */}
+            <a
+              href={`${getPublicBase()}/embed/pricing/${appId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-semibold px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <span>Live Embed</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
 
             {/* Save Configuration Button */}
             <Button
               type="button"
               onClick={handleSaveConfig}
               disabled={saving}
-              className="bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs px-4 py-2 rounded-xl flex items-center gap-2 shadow-lg shadow-purple-600/20"
+              className="bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs px-4 py-1.5 rounded-xl flex items-center gap-2 shadow-lg shadow-purple-600/20 cursor-pointer"
             >
               {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-              <span>Save & Sync</span>
+              <span>Save &amp; Sync</span>
             </Button>
           </div>
         </div>
-
-        {/* Studio Sub-Navigation Tabs */}
-        <div className="flex items-center gap-2 pt-4 overflow-x-auto text-xs border-b border-zinc-100 dark:border-white/5 pb-2">
-          <button
-            type="button"
-            onClick={() => setActiveTab('tiers')}
-            className={`px-3 py-1.5 rounded-xl font-bold transition-colors flex items-center gap-2 shrink-0 ${
-              activeTab === 'tiers'
-                ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
-                : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900'
-            }`}
-          >
-            <Tag className="w-3.5 h-3.5" />
-            <span>Subscription Tiers ({config.planCards.length})</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('styling')}
-            className={`px-3 py-1.5 rounded-xl font-bold transition-colors flex items-center gap-2 shrink-0 ${
-              activeTab === 'styling'
-                ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
-                : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900'
-            }`}
-          >
-            <Palette className="w-3.5 h-3.5" />
-            <span>Branding & Appearance</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('snippets')}
-            className={`px-3 py-1.5 rounded-xl font-bold transition-colors flex items-center gap-2 shrink-0 ${
-              activeTab === 'snippets'
-                ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
-                : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900'
-            }`}
-          >
-            <Code2 className="w-3.5 h-3.5" />
-            <span>Embed Snippets</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('custom_css')}
-            className={`px-3 py-1.5 rounded-xl font-bold transition-colors flex items-center gap-2 shrink-0 ${
-              activeTab === 'custom_css'
-                ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
-                : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900'
-            }`}
-          >
-            <FileCode className="w-3.5 h-3.5" />
-            <span>Custom CSS</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('api')}
-            className={`px-3 py-1.5 rounded-xl font-bold transition-colors flex items-center gap-2 shrink-0 ${
-              activeTab === 'api'
-                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-                : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900'
-            }`}
-          >
-            <Zap className="w-3.5 h-3.5 text-amber-500" />
-            <span>Headless API & Entitlements</span>
-            <span className="px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold">New</span>
-          </button>
-        </div>
-
-        {/* Global Configuration Bar */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4">
-          <div>
-            <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">
-              Table Headline
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. Choose the plan tailored for your scale"
-              value={config.headline}
-              onChange={(e) => setConfig({ ...config, headline: e.target.value })}
-              className="w-full px-3.5 py-2 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-xs text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">
-              Subheadline / Tagline
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. Upgrade or cancel anytime. All plans include 180 Pay protection."
-              value={config.subheadline}
-              onChange={(e) => setConfig({ ...config, subheadline: e.target.value })}
-              className="w-full px-3.5 py-2 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-xs text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">
-              Annual Billing Discount (%)
-            </label>
-            <div className="relative">
-              <input
-                type="number"
-                min={0}
-                max={90}
-                value={config.yearlyDiscountPct}
-                onChange={(e) => setConfig({ ...config, yearlyDiscountPct: Number(e.target.value) })}
-                className="w-full px-3.5 py-2 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-xs text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 pr-16"
-              />
-              <span className="absolute right-3 top-2 text-[11px] font-bold text-emerald-500">
-                Save {config.yearlyDiscountPct}%
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* 180 Pay Engine Sync Checkbox */}
-        <div className="pt-3 flex items-center justify-between">
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={syncToSubscriptionPlans}
-              onChange={(e) => setSyncToSubscriptionPlans(e.target.checked)}
-              className="rounded border-zinc-300 text-purple-600 focus:ring-purple-500 w-4 h-4"
-            />
-            <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-              Auto-sync tiers to 180 Pay Recurring Subscription Engine (enables gateway rebilling & webhooks)
-            </span>
-          </label>
-
-          <a
-            href={`${getPublicBase()}/embed/pricing/${appId}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs font-semibold text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1"
-          >
-            <span>Live Hosted URL</span>
-            <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
       </div>
 
-      {/* Main Studio Body: Editor or Split View */}
-      <div className={`grid gap-6 ${viewMode === 'split' ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
-        {/* Left Column: Editor Tabs */}
+      {/* Main Studio Body: Full-Width Split View */}
+      <div className={`grid gap-6 ${viewMode === 'split' ? 'grid-cols-1 lg:grid-cols-12' : 'grid-cols-1'}`}>
+        {/* Left Column: Studio Editor */}
         {(viewMode === 'editor' || viewMode === 'split') && (
-          <div className="space-y-6">
+          <div className={`${viewMode === 'split' ? 'lg:col-span-6 2xl:col-span-6' : 'w-full'} space-y-4`}>
+            {/* Studio Sub-Navigation Tabs right on the Editor */}
+            <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-white dark:bg-[#101012] border border-zinc-200/80 dark:border-white/10 shadow-xs overflow-x-auto text-xs">
+              <button
+                type="button"
+                onClick={() => setActiveTab('tiers')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                  activeTab === 'tiers'
+                    ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 shadow-xs'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900'
+                }`}
+              >
+                <Tag className="w-3.5 h-3.5" />
+                <span>Subscription Plan Tiers ({config.planCards.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('styling')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                  activeTab === 'styling'
+                    ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 shadow-xs'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900'
+                }`}
+              >
+                <Palette className="w-3.5 h-3.5" />
+                <span>Branding &amp; Appearance</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('snippets')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                  activeTab === 'snippets'
+                    ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 shadow-xs'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900'
+                }`}
+              >
+                <Code2 className="w-3.5 h-3.5" />
+                <span>Embed Snippets</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('custom_css')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                  activeTab === 'custom_css'
+                    ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 shadow-xs'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900'
+                }`}
+              >
+                <FileCode className="w-3.5 h-3.5" />
+                <span>Custom CSS</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('api')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                  activeTab === 'api'
+                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shadow-xs'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-500" />
+                <span>Headless API</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold">New</span>
+              </button>
+            </div>
+
             {/* Tab 1: Tiers */}
             {activeTab === 'tiers' && (
-              <div className="rounded-3xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#101012] p-6 space-y-4 shadow-sm">
-                <div className="flex items-center justify-between pb-3 border-b border-zinc-200 dark:border-white/10">
-                  <div>
-                    <h3 className="text-sm font-bold text-zinc-950 dark:text-white">
-                      Subscription Plan Tiers ({config.planCards.length})
-                    </h3>
-                    <p className="text-xs text-zinc-500">
-                      Configure individual pricing plans, features, trial periods and CTA buttons.
-                    </p>
+              <>
+                {/* Global Configuration Bar inside Tiers Tab */}
+                <div className="rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#101012] p-5 space-y-4 shadow-sm">
+                  <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-white/5">
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                      <span>Table Headline &amp; Discount Settings</span>
+                    </span>
+                    <span className="text-[11px] text-zinc-400">
+                      Live sync to canvas preview
+                    </span>
                   </div>
-                  <Button
-                    type="button"
-                    onClick={openCreateCardModal}
-                    className="bg-purple-600 hover:bg-purple-500 text-white text-xs px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 font-bold shadow-md shadow-purple-600/20"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add Plan Tier</span>
-                  </Button>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">
+                        Table Headline
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Choose the plan tailored for your scale"
+                        value={config.headline}
+                        onChange={(e) => setConfig({ ...config, headline: e.target.value })}
+                        className="w-full px-3.5 py-2 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-xs text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">
+                        Subheadline / Tagline
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Upgrade or cancel anytime. All plans include 180 Pay protection."
+                        value={config.subheadline}
+                        onChange={(e) => setConfig({ ...config, subheadline: e.target.value })}
+                        className="w-full px-3.5 py-2 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-xs text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center pt-1">
+                    <div>
+                      <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">
+                        Annual Billing Discount (%)
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min={0}
+                          max={90}
+                          value={config.yearlyDiscountPct}
+                          onChange={(e) => setConfig({ ...config, yearlyDiscountPct: Number(e.target.value) })}
+                          className="w-full px-3.5 py-2 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-xs text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 pr-16"
+                        />
+                        <span className="absolute right-3 top-2 text-[11px] font-bold text-emerald-500">
+                          Save {config.yearlyDiscountPct}%
+                        </span>
+                      </div>
+                    </div>
+
+                    <label className="flex items-center gap-2 cursor-pointer select-none pt-2 sm:pt-4">
+                      <input
+                        type="checkbox"
+                        checked={syncToSubscriptionPlans}
+                        onChange={(e) => setSyncToSubscriptionPlans(e.target.checked)}
+                        className="rounded border-zinc-300 text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer"
+                      />
+                      <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300 leading-tight">
+                        Auto-sync tiers to 180 Pay Subscription Engine
+                      </span>
+                    </label>
+                  </div>
                 </div>
 
-                {/* Empty State */}
-                {config.planCards.length === 0 ? (
-                  <div className="p-8 sm:p-12 text-center rounded-2xl border-2 border-dashed border-zinc-200 dark:border-white/10 bg-zinc-50/50 dark:bg-zinc-900/20 space-y-4">
-                    <div className="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center mx-auto">
-                      <Layers className="w-6 h-6" />
-                    </div>
-                    <div className="max-w-sm mx-auto">
-                      <h4 className="text-sm font-bold text-zinc-950 dark:text-white">
-                        No Subscription Tiers Created Yet
-                      </h4>
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                        Build your tiers from scratch, import from your registered 180 Pay plans, or apply a curated SaaS template.
+                {/* Plan Tiers List / Builder Card */}
+                <div className="rounded-3xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#101012] p-6 space-y-4 shadow-sm">
+                  <div className="flex items-center justify-between pb-3 border-b border-zinc-200 dark:border-white/10">
+                    <div>
+                      <h3 className="text-sm font-bold text-zinc-950 dark:text-white">
+                        Subscription Plan Tiers ({config.planCards.length})
+                      </h3>
+                      <p className="text-xs text-zinc-500">
+                        Configure individual pricing plans, features, trial periods and CTA buttons.
                       </p>
                     </div>
-
-                    <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                      <Button
-                        type="button"
-                        onClick={openCreateCardModal}
-                        className="bg-purple-600 hover:bg-purple-500 text-white text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 font-bold"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Add First Tier</span>
-                      </Button>
-
-
-                    </div>
+                    <Button
+                      type="button"
+                      onClick={openCreateCardModal}
+                      className="bg-purple-600 hover:bg-purple-500 text-white text-xs px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 font-bold shadow-md shadow-purple-600/20 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Plan Tier</span>
+                    </Button>
                   </div>
-                ) : (
-                  /* Cards List with Reordering */
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                  {/* Empty State */}
+                  {config.planCards.length === 0 ? (
+                    <div className="p-8 sm:p-10 text-center rounded-2xl border-2 border-dashed border-zinc-200 dark:border-white/10 bg-zinc-50/50 dark:bg-zinc-900/20 space-y-4">
+                      <div className="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center mx-auto">
+                        <Layers className="w-6 h-6" />
+                      </div>
+                      <div className="max-w-sm mx-auto">
+                        <h4 className="text-sm font-bold text-zinc-950 dark:text-white">
+                          No Subscription Tiers Created Yet
+                        </h4>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                          Build your tiers from scratch, import from your registered 180 Pay plans, or apply a curated SaaS template.
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+                        <Button
+                          type="button"
+                          onClick={openCreateCardModal}
+                          className="bg-purple-600 hover:bg-purple-500 text-white text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 font-bold cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add First Tier</span>
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleApplySaaSStarterTemplate}
+                          className="border-purple-500/30 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10 text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 font-semibold cursor-pointer"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>Apply SaaS 3-Tier Template</span>
+                        </Button>
+
+                        {availablePlans.length > 0 && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={handleImportAvailablePlans}
+                            className="border-zinc-200 dark:border-white/10 text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 font-semibold cursor-pointer"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            <span>Import {availablePlans.length} Plans</span>
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    /* Cards List with Reordering */
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {config.planCards.map((card, idx) => {
                       const isFree = card.isFree || card.amount === 0;
                       const currencySymbol = getCurrencySymbol(card.currency);
@@ -963,7 +1090,8 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
                   </div>
                 )}
               </div>
-            )}
+            </>
+          )}
 
             {/* Tab 2: Branding & Appearance */}
             {activeTab === 'styling' && (
@@ -1442,7 +1570,7 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
 
         {/* Right Column / Full Width: Live Interactive Canvas Preview */}
         {(viewMode === 'preview' || viewMode === 'split') && (
-          <div className="rounded-3xl border border-zinc-200 dark:border-white/10 bg-zinc-950 p-6 space-y-5 shadow-2xl relative overflow-hidden">
+          <div className={`${viewMode === 'split' ? 'lg:col-span-6 2xl:col-span-6 lg:sticky lg:top-4 self-start' : 'w-full'} rounded-3xl border border-zinc-200 dark:border-white/10 bg-zinc-950 p-5 sm:p-6 space-y-5 shadow-2xl relative overflow-hidden lg:max-h-[calc(100vh-80px)] lg:overflow-y-auto`}>
             {/* Preview Controls Bar */}
             <div className="flex items-center justify-between pb-4 border-b border-white/10">
               <div className="flex items-center gap-2">
@@ -1558,8 +1686,34 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
 
                 {/* Cards Preview Grid */}
                 {config.planCards.length === 0 ? (
-                  <div className="p-8 text-center rounded-2xl border border-white/10 bg-zinc-900/40 text-xs text-zinc-400">
-                    No plan tiers configured yet. Add your first tier to see it rendered live here.
+                  <div className="p-8 text-center rounded-2xl border border-dashed border-white/10 bg-zinc-900/40 text-xs text-zinc-400 space-y-4">
+                    <p className="text-zinc-400 font-medium">
+                      No plan tiers configured yet. Add your first tier to see it rendered live here.
+                    </p>
+                    {/* Visual 3-tier placeholder wireframe */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 opacity-50">
+                      <div className="h-32 rounded-xl border border-dashed border-white/20 p-3.5 flex flex-col justify-between text-left">
+                        <div className="space-y-1.5">
+                          <div className="w-14 h-2.5 rounded bg-white/20" />
+                          <div className="w-20 h-4 rounded bg-white/30" />
+                        </div>
+                        <div className="w-full h-7 rounded-lg bg-white/10" />
+                      </div>
+                      <div className="h-32 rounded-xl border border-dashed border-purple-500/40 p-3.5 flex flex-col justify-between text-left bg-purple-500/5">
+                        <div className="space-y-1.5">
+                          <div className="w-14 h-2.5 rounded bg-purple-400/40" />
+                          <div className="w-20 h-4 rounded bg-white/40" />
+                        </div>
+                        <div className="w-full h-7 rounded-lg bg-purple-500/30" />
+                      </div>
+                      <div className="h-32 rounded-xl border border-dashed border-white/20 p-3.5 flex flex-col justify-between text-left">
+                        <div className="space-y-1.5">
+                          <div className="w-14 h-2.5 rounded bg-white/20" />
+                          <div className="w-20 h-4 rounded bg-white/30" />
+                        </div>
+                        <div className="w-full h-7 rounded-lg bg-white/10" />
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div

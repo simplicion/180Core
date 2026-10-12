@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@workspace/ui';
 import { toast } from 'react-hot-toast';
-import { getPublicBase } from '@/lib/api-config';
+import { getPublicBase, getApiBase, getAuthToken } from '@/lib/api-config';
 
 export interface PaymentQRModalProps {
   isOpen: boolean;
@@ -50,10 +50,8 @@ export function PaymentQRModal({
   defaultAppName = '180 Pay Merchant',
   defaultVpa = '',
 }: PaymentQRModalProps) {
-  // Mode selection: 'LINK' (Hosted checkout link) or 'DIRECT_UPI' (Direct UPI / Instant Pay) or 'CUSTOM'
-  const [activeTab, setActiveTab] = useState<'LINK' | 'DIRECT_UPI' | 'CUSTOM'>(
-    link ? 'LINK' : 'DIRECT_UPI'
-  );
+  // Mode selection: 'GATEWAY_UPI' (Razorpay Dynamic Gateway) or 'LINK' (180 Sovereign Bottom Sheet) or 'CUSTOM'
+  const [activeTab, setActiveTab] = useState<'GATEWAY_UPI' | 'LINK' | 'CUSTOM'>('GATEWAY_UPI');
 
   // Direct Payment Parameters
   const [payeeName, setPayeeName] = useState(defaultAppName);
@@ -67,6 +65,18 @@ export function PaymentQRModal({
   const [currency, setCurrency] = useState(link ? link.currency : 'INR');
   const [note, setNote] = useState(link ? link.title : 'Direct Payment');
   const [customUrl, setCustomUrl] = useState('');
+
+  // Live Gateway QR State (Razorpay / Connected Gateway)
+  const [gatewayQrData, setGatewayQrData] = useState<{
+    qrPayload: string;
+    qrType: string;
+    gateway: string;
+    isDirectUpi: boolean;
+    paymentUrl?: string;
+    vpa?: string;
+  } | null>(null);
+  const [gatewaySyncing, setGatewaySyncing] = useState(false);
+  const [gatewayError, setGatewayError] = useState<string | null>(null);
 
   // QR Customization
   const [qrTheme, setQrTheme] = useState<'clean' | 'dark' | 'brand'>('clean');
@@ -83,16 +93,65 @@ export function PaymentQRModal({
   // Synchronize state when target link changes
   useEffect(() => {
     if (link) {
-      setActiveTab('LINK');
       setAmount(String(link.amount));
       setCurrency(link.currency);
       setNote(link.title);
-    } else {
-      setActiveTab('DIRECT_UPI');
     }
   }, [link]);
 
-  // Persist merchant VPA preference
+  // Live Gateway Sync Effect: Whenever amount, currency, note, or app changes
+  useEffect(() => {
+    if (!isOpen || !defaultAppId) return;
+    if (activeTab !== 'GATEWAY_UPI') return;
+
+    let isMounted = true;
+    const timer = setTimeout(async () => {
+      try {
+        setGatewaySyncing(true);
+        setGatewayError(null);
+        const token = getAuthToken();
+        const apiBase = getApiBase();
+        const res = await fetch(`${apiBase}/api/v1/payment-links/apps/${defaultAppId}/gateway-qr`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            amount: parseFloat(amount) || 100,
+            currency,
+            title: note,
+            payeeName,
+            linkId: link?.id,
+          }),
+        });
+
+        const data = await res.json();
+        if (!isMounted) return;
+        if (res.ok && data.success) {
+          setGatewayQrData({
+            qrPayload: data.qrPayload,
+            qrType: data.qrType,
+            gateway: data.gateway || 'RAZORPAY',
+            isDirectUpi: Boolean(data.isDirectUpi),
+          });
+        } else {
+          setGatewayError(data.error || 'Could not sync connected gateway QR');
+        }
+      } catch (err: any) {
+        if (isMounted) setGatewayError(err.message || 'Gateway sync failed');
+      } finally {
+        if (isMounted) setGatewaySyncing(false);
+      }
+    }, 400);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [isOpen, defaultAppId, amount, currency, note, payeeName, activeTab, link?.id]);
+
+  // Persist merchant VPA preference (optional manual override)
   const handleVpaChange = (newVpa: string) => {
     setVpa(newVpa);
     if (typeof window !== 'undefined') {
@@ -106,14 +165,19 @@ export function PaymentQRModal({
       return `${getPublicBase()}/link/${link.slug}`;
     }
 
-    if (activeTab === 'DIRECT_UPI') {
-      const cleanVpa = vpa.trim() || 'simplicion@okhdfcbank';
-      const cleanName = encodeURIComponent(payeeName.trim() || '180 Pay Merchant');
-      const cleanNote = encodeURIComponent(note.trim() || 'Payment');
-      const numAmount = parseFloat(amount);
-      const amountParam = !isNaN(numAmount) && numAmount > 0 ? `&am=${numAmount.toFixed(2)}` : '';
-
-      return `upi://pay?pa=${cleanVpa}&pn=${cleanName}${amountParam}&cu=${currency.toUpperCase()}&tn=${cleanNote}`;
+    if (activeTab === 'GATEWAY_UPI') {
+      if (gatewayQrData?.qrPayload) {
+        return gatewayQrData.qrPayload;
+      }
+      if (vpa.trim()) {
+        const cleanVpa = vpa.trim();
+        const cleanName = encodeURIComponent(payeeName.trim() || '180 Pay Merchant');
+        const cleanNote = encodeURIComponent(note.trim() || 'Payment');
+        const numAmount = parseFloat(amount);
+        const amountParam = !isNaN(numAmount) && numAmount > 0 ? `&am=${numAmount.toFixed(2)}` : '';
+        return `upi://pay?pa=${cleanVpa}&pn=${cleanName}${amountParam}&cu=${currency.toUpperCase()}&tn=${cleanNote}`;
+      }
+      return link ? `${getPublicBase()}/link/${link.slug}` : `${getPublicBase()}/pay/${defaultAppId || ''}`;
     }
 
     return customUrl.trim() || `${getPublicBase()}`;
@@ -247,7 +311,9 @@ export function PaymentQRModal({
       ctx.fillStyle = '#64748b';
       ctx.font = 'normal 28px system-ui, -apple-system, sans-serif';
       ctx.fillText(
-        activeTab === 'DIRECT_UPI' && vpa ? `UPI ID: ${vpa}` : 'Powered by 180 Workspace Ledger Protocol',
+        activeTab === 'GATEWAY_UPI'
+          ? (gatewayQrData?.vpa ? `UPI VPA: ${gatewayQrData.vpa}` : 'Scan with Any UPI App • GPay, PhonePe, Paytm')
+          : 'Powered by 180 Workspace Ledger Protocol',
         600,
         1340
       );
@@ -322,7 +388,7 @@ export function PaymentQRModal({
               <img src="${qrDataUrl}" alt="Payment QR" />
             </div>
             <div class="footer">
-              ${activeTab === 'DIRECT_UPI' && vpa ? `<strong>UPI VPA:</strong> ${vpa}<br/>` : ''}
+              ${activeTab === 'GATEWAY_UPI' && gatewayQrData?.vpa ? `<strong>UPI VPA:</strong> ${gatewayQrData.vpa}<br/>` : activeTab === 'GATEWAY_UPI' ? `<strong>Dynamic Gateway:</strong> Scannable by any UPI App (GPay, PhonePe, Paytm)<br/>` : ''}
               <strong>180 Workspace Sovereign Payment Protocol</strong>
               <div class="footer-sub">Verified Instant Settlement • Secured by Universal Ledger</div>
             </div>
@@ -372,7 +438,20 @@ export function PaymentQRModal({
 
         {/* Tab Selection */}
         <div className="flex items-center p-1 rounded-2xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/80 dark:border-white/5 text-xs font-semibold">
-          {link && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('GATEWAY_UPI')}
+            className={`flex-1 py-2 px-3 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              activeTab === 'GATEWAY_UPI'
+                ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-xs font-bold'
+                : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'
+            }`}
+          >
+            <Smartphone className="w-3.5 h-3.5 text-emerald-500" />
+            <span>Razorpay Dynamic UPI</span>
+          </button>
+
+          {link ? (
             <button
               type="button"
               onClick={() => setActiveTab('LINK')}
@@ -383,22 +462,9 @@ export function PaymentQRModal({
               }`}
             >
               <CreditCard className="w-3.5 h-3.5" />
-              <span>Link Checkout QR</span>
+              <span>180 Pay Bottom Sheet</span>
             </button>
-          )}
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('DIRECT_UPI')}
-            className={`flex-1 py-2 px-3 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-              activeTab === 'DIRECT_UPI'
-                ? 'bg-white dark:bg-zinc-800 text-indigo-600 dark:text-white shadow-xs font-bold'
-                : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300'
-            }`}
-          >
-            <Smartphone className="w-3.5 h-3.5" />
-            <span>Direct UPI / Instant Pay</span>
-          </button>
+          ) : null}
 
           <button
             type="button"
@@ -453,6 +519,20 @@ export function PaymentQRModal({
               <div className="text-xs font-mono font-extrabold text-indigo-600 dark:text-indigo-400">
                 {currency === 'INR' ? '₹' : currency} {parseFloat(amount) > 0 ? parseFloat(amount).toFixed(2) : 'Open Amount'}
               </div>
+
+              {activeTab === 'GATEWAY_UPI' && (
+                <div className="flex items-center justify-center gap-1.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 pt-0.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Razorpay Connected Gateway</span>
+                </div>
+              )}
+
+              {activeTab === 'LINK' && (
+                <div className="flex items-center justify-center gap-1.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 pt-0.5">
+                  <CreditCard className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>180 Pay Mobile Bottom Sheet</span>
+                </div>
+              )}
             </div>
 
             {/* Compatible Apps Pill Bar */}
@@ -467,29 +547,26 @@ export function PaymentQRModal({
 
           {/* Right Column: Customization Controls & Parameters */}
           <div className="space-y-4">
-            {/* Direct UPI Options */}
-            {activeTab === 'DIRECT_UPI' && (
-              <div className="space-y-3 p-4 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/30 border border-zinc-200/80 dark:border-white/5">
-                <div>
-                  <label className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
-                    Payee UPI VPA ID *
-                  </label>
-                  <input
-                    type="text"
-                    value={vpa}
-                    onChange={(e) => handleVpaChange(e.target.value)}
-                    placeholder="e.g. merchant@okhdfcbank"
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
-                  />
-                  <p className="text-[10px] text-zinc-400 mt-1">
-                    Payments will deposit directly into this account with zero fees.
-                  </p>
+            {/* Gateway UPI Options */}
+            {activeTab === 'GATEWAY_UPI' && (
+              <div className="space-y-3.5 p-4 rounded-2xl bg-zinc-50/70 dark:bg-zinc-900/40 border border-zinc-200/80 dark:border-white/10">
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-2.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                      <span>Razorpay Connected Gateway</span>
+                      {gatewaySyncing && <RefreshCw className="w-3 h-3 animate-spin text-emerald-500" />}
+                    </div>
+                    <p className="text-[11px] text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                      Dynamic UPI QR linked to your live gateway account. Scannable with Google Pay, PhonePe, Paytm, BHIM & CRED. Payments trigger real-time webhooks & instant receipts.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2.5">
                   <div>
                     <label className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
-                      Amount (₹)
+                      Amount ({currency === 'INR' ? '₹' : currency})
                     </label>
                     <input
                       type="number"
@@ -497,7 +574,7 @@ export function PaymentQRModal({
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
                       placeholder="500"
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono font-bold"
                     />
                   </div>
                   <div>
@@ -509,7 +586,7 @@ export function PaymentQRModal({
                       value={payeeName}
                       onChange={(e) => setPayeeName(e.target.value)}
                       placeholder="Business Name"
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                   </div>
                 </div>
@@ -522,35 +599,67 @@ export function PaymentQRModal({
                     type="text"
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
-                    placeholder="e.g. Invoice #1024 or Coffee Order"
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="e.g. Invoice #1024 or Store Order"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
+
+                {/* Advanced optional fallback manual VPA override */}
+                <details className="text-[11px] text-zinc-500 pt-1 cursor-pointer">
+                  <summary className="font-semibold text-zinc-600 dark:text-zinc-400 hover:underline">
+                    Advanced: Manual VPA Override (Optional)
+                  </summary>
+                  <div className="mt-2 pt-2 border-t border-zinc-200 dark:border-white/10 space-y-1">
+                    <input
+                      type="text"
+                      value={vpa}
+                      onChange={(e) => handleVpaChange(e.target.value)}
+                      placeholder="Optional fallback VPA (e.g. merchant@okhdfcbank)"
+                      className="w-full px-3 py-1.5 text-xs rounded-lg border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-zinc-950 dark:text-white font-mono"
+                    />
+                    <p className="text-[10px] text-zinc-400">
+                      Leave blank to use live connected Razorpay gateway.
+                    </p>
+                  </div>
+                </details>
               </div>
             )}
 
             {/* Link Mode Info */}
-            {activeTab === 'LINK' && link && (
-              <div className="p-4 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/30 border border-zinc-200/80 dark:border-white/5 space-y-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-zinc-500">Target Slug:</span>
-                  <span className="font-mono text-zinc-800 dark:text-zinc-200 font-semibold">/link/{link.slug}</span>
+            {activeTab === 'LINK' && (
+              <div className="p-4 rounded-2xl bg-zinc-50/70 dark:bg-zinc-900/40 border border-zinc-200/80 dark:border-white/10 space-y-3 text-xs">
+                <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-start gap-2.5">
+                  <CreditCard className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <div className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                      180 Pay Mobile Bottom Sheet
+                    </div>
+                    <p className="text-[11px] text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                      When customers scan this QR with their phone camera, it strictly launches the 180 Pay Bottom Sheet on their device with UPI, Cards, Netbanking, and automated digital fulfillment.
+                    </p>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-zinc-500">Hosted URL:</span>
-                  <a
-                    href={`${getPublicBase()}/link/${link.slug}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-mono text-[11px]"
-                  >
-                    <span>Open Preview</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 pt-1">
-                  Scanning this QR code directs customers to the 180 Hosted Checkout where they can pay via Credit/Debit Cards, UPI, Netbanking, or Crypto.
-                </p>
+
+                {link && (
+                  <div className="space-y-2 pt-1 border-t border-zinc-200/60 dark:border-white/5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-zinc-500">Target Slug:</span>
+                      <span className="font-mono text-zinc-800 dark:text-zinc-200 font-semibold">/link/{link.slug}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-zinc-500">Hosted URL:</span>
+                      <a
+                        href={`${getPublicBase()}/link/${link.slug}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-mono text-[11px]"
+                      >
+                        <span>Preview Bottom Sheet</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

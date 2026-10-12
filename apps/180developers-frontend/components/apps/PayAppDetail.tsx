@@ -28,7 +28,6 @@ import {
   MapPin,
   Tag,
   Link2,
-  Globe,
   Bot,
   BarChart3,
   Layers,
@@ -45,7 +44,6 @@ import {
 import { CouponsTab } from './pay/CouponsTab';
 import { PaymentLinksTab } from './pay/PaymentLinksTab';
 import { PricingTablesTab } from './pay/PricingTablesTab';
-import { GeoPricingTab } from './pay/GeoPricingTab';
 import { AgentEnvelopesTab } from './pay/AgentEnvelopesTab';
 import { CustomGatewayTab } from './pay/CustomGatewayTab';
 
@@ -231,18 +229,6 @@ export function PayAppDetail({
         >
           <Layers className="w-3.5 h-3.5" />
           Pricing Tables
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('geo')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
-            activeTab === 'geo'
-              ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
-              : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
-          }`}
-        >
-          <Globe className="w-3.5 h-3.5" />
-          Geo-Pricing & PPP
         </button>
         <button
           type="button"
@@ -1146,7 +1132,6 @@ export function PayAppDetail({
   {activeTab === 'coupons' && <CouponsTab appId={app.id} />}
   {activeTab === 'links' && <PaymentLinksTab appId={app.id} />}
   {activeTab === 'pricing' && <PricingTablesTab appId={app.id} />}
-  {activeTab === 'geo' && <GeoPricingTab appId={app.id} />}
   {activeTab === 'agents' && <AgentEnvelopesTab appId={app.id} />}
   {activeTab === 'gateway' && <CustomGatewayTab appId={app.id} />}
 </div>

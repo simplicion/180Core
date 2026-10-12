@@ -17,10 +17,9 @@ export default function PayPricingPage() {
       title="Embeddable Pricing Tables"
       badge="Tier Builder"
       badgeColor="purple"
+      fullWidth
     >
-      <div className="p-6">
-        <PricingTablesTab appId={projectId} />
-      </div>
+      <PricingTablesTab appId={projectId} />
     </AppShellLayout>
   );
 }

@@ -12,6 +12,7 @@
     "dev:backend": "pnpm --filter 180-core-backend dev",
     "dev:profile": "pnpm --filter 180-profile-frontend dev",
     "dev:developers": "pnpm --filter 180developers-frontend dev",
+    "dev:admin": "pnpm --filter 180-admin-frontend dev",
     "db:generate": "pnpm --filter @workspace/db-180core generate",
     "db:push": "pnpm --filter @workspace/db-180core db:push",
     "db:migrate": "pnpm --filter @workspace/db-180core migrate:dev",

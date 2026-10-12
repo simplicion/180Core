@@ -15,6 +15,7 @@ export interface AppShellLayoutProps {
   badgeColor?: 'blue' | 'purple' | 'emerald' | 'amber';
   breadcrumbs?: { label: string; href?: string }[];
   action?: React.ReactNode;
+  fullWidth?: boolean;
 }
 
 export function AppShellLayout({
@@ -26,6 +27,7 @@ export function AppShellLayout({
   badgeColor = 'blue',
   breadcrumbs,
   action,
+  fullWidth = false,
 }: AppShellLayoutProps) {
   const { project, projectId, loading, isSidebarExpanded, userProfile, refreshProject } = useProject();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -119,7 +121,13 @@ export function AppShellLayout({
         />
 
         {/* Content Viewport with pb-28 on mobile so bottom nav never overlaps */}
-        <main className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full space-y-6 flex-1 pb-28 lg:pb-8">
+        <main
+          className={`w-full flex-1 pb-28 lg:pb-8 transition-all ${
+            fullWidth
+              ? 'p-4 sm:p-5 lg:p-6 max-w-none space-y-5'
+              : 'p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6'
+          }`}
+        >
           {/* Header Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-zinc-200 dark:border-white/10">
             <div>

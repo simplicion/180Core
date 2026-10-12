@@ -21,25 +21,7 @@ import { Button } from '@workspace/ui';
 import { toast } from 'react-hot-toast';
 import { getApiBase, getPublicBase, getAuthToken } from '@/lib/api-config';
 import { MultiPricingDrawer, MultiPricingConfig } from '@/components/pay/MultiPricingDrawer';
-import { PaymentQRModal } from '@/components/pay/PaymentQRModal';
-
-interface PaymentLinkItem {
-  id: string;
-  appId: string;
-  slug: string;
-  title: string;
-  description?: string;
-  amount: number;
-  currency: string;
-  purchasesCount: number;
-  maxPurchases?: number | null;
-  isActive: boolean;
-  redirectUrl?: string;
-  fulfillmentMessage?: string;
-  fulfillmentFileUrl?: string;
-  metadata?: Record<string, any>;
-  createdAt: string;
-}
+import { PaymentLinkDrawer, PaymentLinkItem } from '@/components/pay/PaymentLinkDrawer';
 
 interface PaymentLinksTabProps {
   appId: string;
@@ -50,18 +32,10 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
-  // Create Modal State
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [amount, setAmount] = useState('499');
-  const [currency, setCurrency] = useState('INR');
-  const [customSlug, setCustomSlug] = useState('');
-  const [maxPurchases, setMaxPurchases] = useState('');
-  const [fulfillmentMessage, setFulfillmentMessage] = useState('');
-  const [fulfillmentFileUrl, setFulfillmentFileUrl] = useState('');
-  const [redirectUrl, setRedirectUrl] = useState('');
+  // Unified Side Drawer State (Replaces both floating popups)
+  const [showDrawer, setShowDrawer] = useState(false);
+  const [drawerLink, setDrawerLink] = useState<PaymentLinkItem | null>(null);
+  const [drawerInitialTab, setDrawerInitialTab] = useState<'LINK' | 'QR'>('LINK');
 
   // Multi-Pricing Drawer State
   const [showMultiPricingDrawer, setShowMultiPricingDrawer] = useState(false);
@@ -73,10 +47,6 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
   });
 
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
-
-  // Instant QR Modal State
-  const [showQRModal, setShowQRModal] = useState(false);
-  const [qrSelectedLink, setQrSelectedLink] = useState<PaymentLinkItem | null>(null);
 
   const fetchLinks = useCallback(async () => {
     setLoading(true);
@@ -101,74 +71,6 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
     fetchLinks();
   }, [fetchLinks]);
 
-  const handleCreateLink = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) {
-      toast.error('Title is required');
-      return;
-    }
-    const val = parseFloat(amount);
-    if (isNaN(val) || val <= 0) {
-      toast.error('Amount must be greater than zero');
-      return;
-    }
-
-    setCreating(true);
-    try {
-      const token = getAuthToken();
-      if (!token) {
-        toast.error('Authentication required');
-        return;
-      }
-      const apiBase = getApiBase();
-      const res = await fetch(`${apiBase}/api/v1/payment-links/apps/${appId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim() || undefined,
-          amount: val,
-          currency: currency.toUpperCase(),
-          customSlug: customSlug.trim() || undefined,
-          maxPurchases: maxPurchases ? parseInt(maxPurchases, 10) : null,
-          fulfillmentMessage: fulfillmentMessage.trim() || undefined,
-          fulfillmentFileUrl: fulfillmentFileUrl.trim() || undefined,
-          redirectUrl: redirectUrl.trim() || undefined,
-          metadata: {
-            multiPricing: multiPricingConfig,
-          },
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to create payment link');
-      }
-
-      const createdLink = data.link || data.data;
-      toast.success('Payment Link generated successfully!');
-      setShowCreateModal(false);
-      setTitle('');
-      setDescription('');
-      setCustomSlug('');
-      setMultiPricingConfig({ enabled: false, mode: 'HYBRID', rules: [] });
-      fetchLinks();
-      if (createdLink) {
-        setQrSelectedLink(createdLink);
-        setShowQRModal(true);
-      }
-    } catch (err: any) {
-      const msg = err.message === 'Failed to fetch'
-        ? 'Network error: Unable to reach the API server.'
-        : (err.message || 'Error creating payment link');
-      toast.error(msg);
-    } finally {
-      setCreating(false);
-    }
-  };
 
   const handleOpenMultiPricingForNewLink = () => {
     setActiveEditingLink(null);
@@ -294,18 +196,23 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
             type="button"
             variant="outline"
             onClick={() => {
-              setQrSelectedLink(null);
-              setShowQRModal(true);
+              setDrawerLink(null);
+              setDrawerInitialTab('QR');
+              setShowDrawer(true);
             }}
-            className="rounded-xl border-zinc-200 dark:border-white/10 text-xs font-semibold flex items-center gap-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            className="rounded-xl border-zinc-200 dark:border-white/10 text-xs font-semibold flex items-center gap-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
           >
             <QrCode className="w-4 h-4 text-indigo-500" />
             <span>Generate Payment QR</span>
           </Button>
           <Button
             type="button"
-            onClick={() => setShowCreateModal(true)}
-            className="rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-lg shadow-indigo-500/20"
+            onClick={() => {
+              setDrawerLink(null);
+              setDrawerInitialTab('LINK');
+              setShowDrawer(true);
+            }}
+            className="rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-lg shadow-indigo-500/20 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Create Payment Link</span>
@@ -347,14 +254,30 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
                 className="p-5 rounded-2xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950 space-y-4 hover:border-zinc-300 dark:hover:border-white/20 transition-colors shadow-sm"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-sm font-bold text-zinc-950 dark:text-white">{link.title}</h3>
+                  <div
+                    onClick={() => {
+                      setDrawerLink(link);
+                      setDrawerInitialTab('LINK');
+                      setShowDrawer(true);
+                    }}
+                    className="cursor-pointer group flex-1"
+                  >
+                    <h3 className="text-sm font-bold text-zinc-950 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                      {link.title}
+                    </h3>
                     <p className="text-xs text-zinc-500 font-mono mt-0.5">/link/{link.slug}</p>
                   </div>
-                  <div className="text-right">
-                    <span className="text-base font-extrabold text-zinc-950 dark:text-white">
-                      {link.currency === 'INR' ? '₹' : '$'}{link.amount}
-                    </span>
+                  <div className="text-right shrink-0">
+                    {Number(link.amount) === 0 || link.metadata?.allowCustomAmount ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/80 dark:border-indigo-500/30 text-xs font-bold">
+                        <Sparkles className="w-3 h-3" />
+                        Flexible Amount
+                      </span>
+                    ) : (
+                      <span className="text-base font-extrabold text-zinc-950 dark:text-white font-mono">
+                        {link.currency === 'INR' ? '₹' : '$'}{Number(link.amount).toFixed(2)}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -392,17 +315,21 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
                   </div>
 
                   <div className="flex items-center gap-1.5">
+                    {/* Dedicated Get QR Code Action Button */}
                     <button
                       type="button"
                       onClick={() => {
-                        setQrSelectedLink(link);
-                        setShowQRModal(true);
+                        setDrawerLink(link);
+                        setDrawerInitialTab('QR');
+                        setShowDrawer(true);
                       }}
-                      className="p-2 rounded-xl text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors cursor-pointer"
-                      title="Generate & View QR Code"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-xs font-bold transition-all cursor-pointer border border-indigo-500/20"
+                      title="Get & download QR code for this link"
                     >
-                      <QrCode className="w-4 h-4" />
+                      <QrCode className="w-3.5 h-3.5" />
+                      <span>Get QR</span>
                     </button>
+
                     <button
                       type="button"
                       onClick={() => handleOpenMultiPricingForExistingLink(link)}
@@ -414,7 +341,7 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
                     <button
                       type="button"
                       onClick={() => copyLinkUrl(link.slug)}
-                      className="p-2 rounded-xl text-zinc-500 hover:text-zinc-950 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors"
+                      className="p-2 rounded-xl text-zinc-500 hover:text-zinc-950 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors cursor-pointer"
                       title="Copy Public Link"
                     >
                       {copiedSlug === link.slug ? (
@@ -427,7 +354,7 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
                       href={`${getPublicBase()}/link/${link.slug}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="p-2 rounded-xl text-zinc-500 hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors"
+                      className="p-2 rounded-xl text-zinc-500 hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors cursor-pointer"
                       title="Open Checkout Preview"
                     >
                       <ExternalLink className="w-4 h-4" />
@@ -435,7 +362,7 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
                     <button
                       type="button"
                       onClick={() => handleDeleteLink(link.id, link.slug)}
-                      className="p-2 rounded-xl text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                      className="p-2 rounded-xl text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
                       title="Delete Link"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -448,176 +375,6 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
         </div>
       )}
 
-      {/* CREATE MODAL */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
-          <div className="w-full max-w-lg rounded-3xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950 p-6 sm:p-8 space-y-6 shadow-2xl overflow-y-auto max-h-[90vh]">
-            <div className="flex items-center justify-between pb-4 border-b border-zinc-200 dark:border-white/10">
-              <div className="flex items-center gap-2">
-                <LinkIcon className="w-5 h-5 text-indigo-400" />
-                <h3 className="text-lg font-bold text-zinc-950 dark:text-white">Create Shareable Payment Link</h3>
-              </div>
-              <button onClick={() => setShowCreateModal(false)} className="text-zinc-400 hover:text-white">✕</button>
-            </div>
-
-            <form onSubmit={handleCreateLink} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">
-                  Item Title
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Masterclass VIP Ticket"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-sm text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">
-                  Description
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Optional brief description of what customer receives..."
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-sm text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">
-                    Price Amount
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-sm text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">
-                    Currency
-                  </label>
-                  <select
-                    value={currency}
-                    onChange={(e) => setCurrency(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-sm text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="INR">INR (₹)</option>
-                    <option value="USD">USD ($)</option>
-                    <option value="EUR">EUR (€)</option>
-                    <option value="GBP">GBP (£)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Regional Multi-Pricing Configuration Box */}
-              <div className="p-3.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-zinc-50 dark:bg-zinc-900/40 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center shrink-0">
-                    <Globe className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5 flex-wrap">
-                      <span>Multi-Currency & Regional Rules</span>
-                      {multiPricingConfig.enabled && multiPricingConfig.rules.length > 0 && (
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-bold">
-                          {multiPricingConfig.rules.length} Active ({multiPricingConfig.mode})
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-zinc-500 truncate">
-                      {multiPricingConfig.enabled
-                        ? `${multiPricingConfig.rules.length} custom country price rule(s) configured`
-                        : 'Offer localized pricing or PPP discounts in other countries'}
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleOpenMultiPricingForNewLink}
-                  className="rounded-xl text-xs font-semibold shrink-0 cursor-pointer border-indigo-200 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
-                >
-                  {multiPricingConfig.enabled ? 'Edit Rules' : 'Add Multi-Pricing'}
-                </Button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">
-                    Custom Slug (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. masterclass-pass"
-                    value={customSlug}
-                    onChange={(e) => setCustomSlug(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-sm font-mono text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">
-                    Capacity Cap (Inventory)
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="e.g. 50 (Leave blank for unlimited)"
-                    value={maxPurchases}
-                    onChange={(e) => setMaxPurchases(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-sm text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-              </div>
-
-              {/* Digital Fulfillment Assets */}
-              <div className="p-4 rounded-xl border border-indigo-500/20 bg-indigo-500/5 space-y-3">
-                <span className="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
-                  <Package className="w-3.5 h-3.5" />
-                  Instant Digital Delivery (Revealed Only After Payment)
-                </span>
-                <div>
-                  <input
-                    type="text"
-                    placeholder="License Key, Discord Invite, or Secret Access Message..."
-                    value={fulfillmentMessage}
-                    onChange={(e) => setFulfillmentMessage(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-xs text-zinc-950 dark:text-white focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <input
-                    type="url"
-                    placeholder="Digital Asset Download URL (e.g. https://cdn.../file.zip)"
-                    value={fulfillmentFileUrl}
-                    onChange={(e) => setFulfillmentFileUrl(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-xs text-zinc-950 dark:text-white focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-200 dark:border-white/10">
-                <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)} className="rounded-xl">
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={creating} className="rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold">
-                  {creating ? 'Generating...' : 'Create Payment Link'}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Reusable Multi-Pricing Rule Drawer */}
       <MultiPricingDrawer
         isOpen={showMultiPricingDrawer}
@@ -625,22 +382,29 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
           setShowMultiPricingDrawer(false);
           setActiveEditingLink(null);
         }}
-        baseAmount={activeEditingLink ? activeEditingLink.amount : (parseFloat(amount) || 1)}
-        baseCurrency={activeEditingLink ? activeEditingLink.currency : currency}
-        itemName={activeEditingLink ? activeEditingLink.title : (title || 'New Payment Link')}
+        baseAmount={activeEditingLink ? activeEditingLink.amount : 500}
+        baseCurrency={activeEditingLink ? activeEditingLink.currency : 'INR'}
+        itemName={activeEditingLink ? activeEditingLink.title : 'Payment Link'}
         value={multiPricingConfig}
         onChange={handleSaveMultiPricing}
       />
 
-      {/* Interactive Payment QR Code Modal (Supports Link QR & Direct UPI / Standee) */}
-      <PaymentQRModal
-        isOpen={showQRModal}
+      {/* Unified Side Drawer (Replaces both floating popups) */}
+      <PaymentLinkDrawer
+        isOpen={showDrawer}
         onClose={() => {
-          setShowQRModal(false);
-          setQrSelectedLink(null);
+          setShowDrawer(false);
+          setDrawerLink(null);
         }}
-        link={qrSelectedLink}
-        defaultAppId={appId}
+        appId={appId}
+        link={drawerLink}
+        initialTab={drawerInitialTab}
+        onLinkSaved={() => {
+          fetchLinks();
+        }}
+        onOpenMultiPricing={() => {
+          handleOpenMultiPricingForNewLink();
+        }}
       />
     </div>
   );

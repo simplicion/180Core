@@ -151,5 +151,33 @@ export class PaymentLinkApiController {
       return res.status(400).json({ success: false, error: err.message });
     }
   }
+
+  /**
+   * POST /api/v1/payment-links/apps/:appId/gateway-qr
+   * Generates dynamic live Gateway QR code (Razorpay/Stripe) for counter standees & mobile payments.
+   */
+  static async generateGatewayQr(req: Request, res: Response) {
+    try {
+      const appId = String(req.params.appId);
+      const { amount, currency, title, payeeName, linkId } = req.body || {};
+      const numAmount = parseFloat(amount);
+      if (isNaN(numAmount) || numAmount <= 0) {
+        return res.status(400).json({ success: false, error: 'Valid payment amount is required' });
+      }
+
+      const qrResult = await PaymentLinkService.generateGatewayQrCode(appId, {
+        amount: numAmount,
+        currency: currency || 'INR',
+        title: title || 'Payment via 180 Pay QR',
+        payeeName: payeeName || undefined,
+        linkId: linkId || undefined,
+      });
+
+      return res.status(200).json({ success: true, ...qrResult, data: qrResult });
+    } catch (err: any) {
+      console.error('[PaymentLinkApiController:generateGatewayQr] Error:', err);
+      return res.status(400).json({ success: false, error: err.message });
+    }
+  }
 }
 

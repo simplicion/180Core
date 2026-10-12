@@ -24,6 +24,8 @@ import geoPricingRoutes from './routes/geo-pricing.routes';
 import customerPortalRoutes from './routes/customer-portal.routes';
 import agentCheckoutRoutes from './routes/agent-checkout.routes';
 import pricingTableRoutes from './routes/pricing-table.routes';
+import adminRoutes from './routes/admin.routes';
+import supportRoutes from './routes/support.routes';
 import { generalApiLimiter } from './middleware/rate-limiter.middleware';
 import { RsaKeysService, seedFirstPartyOAuthApps, DeveloperBillingService } from '@workspace/identity-provider';
 import { RecurringBillingEngine } from '@workspace/payment-provider';
@@ -45,11 +47,12 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(generalApiLimiter);
 
-// CORS configuration supporting 180 Profile, Developers, and external origins
+// CORS configuration supporting 180 Profile, Developers, Admin, and external origins
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3008',
   'http://localhost:3009',
+  'http://localhost:3010',
   'https://180workspace.com',
   'https://profile.180workspace.com',
   'https://developers.180workspace.com',
@@ -57,6 +60,7 @@ const allowedOrigins = [
   'https://180core.cloud',
   'https://profile.180core.cloud',
   'https://developer.180core.cloud',
+  'https://admin.180core.cloud',
   'https://api.180core.cloud',
 ];
 
@@ -209,7 +213,11 @@ app.use('/api/v1/pricing-tables', pricingTableRoutes);
 app.use('/api/v1/payment/pricing-tables', pricingTableRoutes);
 app.use('/api/oauth/pricing-tables', pricingTableRoutes);
 
+// Admin & Platform Governance Routes
+app.use('/api/v1/admin', adminRoutes);
 
+// Universal Support & Bug Reporting Ingestion Routes
+app.use('/api/v1/support', supportRoutes);
 // Error Handling
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('[180-core-backend] Unhandled Error:', err);

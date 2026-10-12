@@ -594,5 +594,68 @@ model AgenticBudgetEnvelope {
   @@index([appId, isActive])
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PLATFORM TELEMETRY & SUPPORT TICKETING (180 CORE)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model SupportTicket {
+  id              String      @id @default(uuid())
+  ticketNumber    Int         @default(autoincrement())
+  userId          String?
+  appId           String?
+  userName        String?
+  userEmail       String?
+  title           String
+  description     String      @db.Text
+  category        String      @default("BUG_REPORT") // BUG_REPORT, PAYMENT_ISSUE, SETTLEMENT_QUERY, FEATURE_REQUEST, OTHER
+  priority        String      @default("MEDIUM")     // LOW, MEDIUM, HIGH, URGENT
+  status          String      @default("OPEN")       // OPEN, INVESTIGATING, RESOLVED, CLOSED
+  
+  // Automated Environment Telemetry
+  pageUrl         String      @db.Text
+  referrer        String?     @db.Text
+  userIp          String?
+  country         String?
+  timezone        String?
+  deviceInfo      Json?       // { os, browser, screen, viewport, userAgent, dpr, online }
+  consoleLogs     Json?       // [ { type: "error", message: "...", timestamp: "..." } ]
+  
+  // Media Attachments (Up to 5 images, stored as URLs or base64 data)
+  attachments     String[]    @default([])
+  
+  // Admin Resolution Fields
+  assignedAdminId String?
+  adminNotes      String?     @db.Text
+  resolvedAt      DateTime?
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([status, priority])
+  @@index([userId])
+  @@index([appId])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLATFORM AUDIT LOG
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AdminAuditLog {
+  id              String      @id @default(uuid())
+  adminUserId     String
+  adminEmail      String
+  action          String      // APPROVE_PAYOUT, REJECT_PAYOUT, SUSPEND_APP, UPDATE_FEE, RESOLVE_TICKET
+  targetType      String      // PAYOUT, APP, DEVELOPER, TICKET, SETTINGS
+  targetId        String
+  details         Json?
+  ipAddress       String?
+  createdAt       DateTime    @default(now())
+
+  @@index([adminUserId])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}
+
 
 

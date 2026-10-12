@@ -1,9 +1,11 @@
 'use strict';
 
 import crypto from 'crypto';
+import axios from 'axios';
 import { developersPrisma as prisma } from '@workspace/db-180core';
 import { WebhookDispatcherService } from '../webhook/webhook-dispatcher.service';
 import { GeoPricingService, COUNTRY_DIRECTORY } from '../geo/geo-pricing.service';
+import { CheckoutService } from '../checkout/checkout.service';
 
 export interface CreatePaymentLinkInput {
   title: string;
@@ -65,6 +67,8 @@ export interface PublicPaymentLinkResult {
   collectPhone: boolean;
   collectAddress: boolean;
   allowCoupons: boolean;
+  allowCustomAmount?: boolean;
+  metadata?: Record<string, any>;
   isAvailable: boolean;
   isSoldOut: boolean;
   regionalPricing?: RegionalPricingInfo;
@@ -107,8 +111,9 @@ export class PaymentLinkService {
     if (!data.title || !data.title.trim()) {
       throw new Error('Payment link title is required');
     }
-    if (data.amount <= 0) {
-      throw new Error('Payment amount must be greater than zero');
+    const isCustomAmount = Boolean(data.metadata?.allowCustomAmount) || Number(data.amount) === 0;
+    if (!isCustomAmount && (data.amount === undefined || Number(data.amount) < 0)) {
+      throw new Error('Payment amount must be greater than or equal to zero');
     }
 
     let slug = data.customSlug
@@ -258,6 +263,8 @@ export class PaymentLinkService {
       collectPhone: link.collectPhone,
       collectAddress: link.collectAddress,
       allowCoupons: link.allowCoupons,
+      allowCustomAmount: Number(link.amount) === 0 || Boolean((link.metadata as any)?.allowCustomAmount),
+      metadata: link.metadata,
       isAvailable,
       isSoldOut,
       regionalPricing,
@@ -350,8 +357,9 @@ export class PaymentLinkService {
       throw new Error('Payment link not found');
     }
 
-    if (data.amount !== undefined && data.amount <= 0) {
-      throw new Error('Payment amount must be greater than zero');
+    const isCustomAmount = Boolean(data.metadata?.allowCustomAmount) || (data.amount !== undefined && Number(data.amount) === 0);
+    if (!isCustomAmount && data.amount !== undefined && Number(data.amount) < 0) {
+      throw new Error('Payment amount must be greater than or equal to zero');
     }
 
     return await (prisma as any).paymentLink.update({
@@ -449,4 +457,180 @@ export class PaymentLinkService {
 
     return await this.completeLinkPurchase(linkId, sessionId);
   }
+
+  /**
+   * 9. Generates dynamic live Gateway QR code (Razorpay/Stripe) for counter standees & mobile payments.
+   */
+  static async generateGatewayQrCode(
+    appId: string,
+    options: {
+      amount: number;
+      currency?: string;
+      title?: string;
+      payeeName?: string;
+      linkId?: string;
+    }
+  ) {
+    let app = await (prisma as any).oAuthApp.findUnique({
+      where: { id: appId },
+    });
+
+    if (!app) {
+      // Check if appId was passed as a clientId
+      app = await (prisma as any).oAuthApp.findFirst({
+        where: { clientId: appId },
+      });
+    }
+
+    if (!app) {
+      // Graceful fallback to default platform merchant for live/simulated gateway credentials
+      app = { id: appId, name: options.payeeName || '180 Pay Merchant' };
+    }
+
+    let link: any = null;
+    if (options.linkId) {
+      link = await (prisma as any).paymentLink.findFirst({
+        where: { id: options.linkId, appId },
+      });
+    }
+
+    const { gatewayType, keyId, keySecret } = CheckoutService.resolveGatewayConfig(app);
+    const currency = (options.currency || link?.currency || 'INR').toUpperCase();
+    const amount = Number(options.amount || link?.amount || 100);
+    const payeeName = options.payeeName || link?.title || app.name || '180 Pay Merchant';
+    const description = options.title || link?.description || `Payment to ${app.name}`;
+    const amountPaise = Math.round(amount * 100);
+
+    // 1. Live or Connected Razorpay Gateway
+    if (gatewayType === 'RAZORPAY') {
+      const isSimulated =
+        !keyId ||
+        !keySecret ||
+        keyId.includes('simulated') ||
+        keyId.includes('mock_') ||
+        keySecret.includes('simulated');
+
+      if (!isSimulated) {
+        const authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+
+        // Tier 1: Try Razorpay native UPI QR code API (POST /v1/payments/qr_codes)
+        try {
+          const qrRes = await axios.post(
+            'https://api.razorpay.com/v1/payments/qr_codes',
+            {
+              type: 'upi_qr',
+              name: payeeName.slice(0, 40),
+              usage: 'single_payment',
+              fixed_amount: true,
+              payment_amount: amountPaise,
+              description: description.slice(0, 30),
+              notes: {
+                appId,
+                linkId: options.linkId || '',
+                source: '180_GATEWAY_DYNAMIC_QR',
+              },
+            },
+            {
+              headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
+              timeout: 6000,
+            }
+          );
+
+          if (qrRes.data && (qrRes.data.payload || qrRes.data.image_url)) {
+            return {
+              qrType: 'RAZORPAY_DYNAMIC_UPI',
+              qrPayload: qrRes.data.payload || qrRes.data.image_url,
+              qrImageUrl: qrRes.data.image_url,
+              qrId: qrRes.data.id,
+              gateway: 'RAZORPAY',
+              amount,
+              currency,
+              payeeName,
+              linkSlug: link?.slug || null,
+              isDirectUpi: true,
+              mode: 'DYNAMIC_UPI',
+            };
+          }
+        } catch (qrErr: any) {
+          // If native QR codes not enabled on this merchant account, fallback gracefully to Tier 2
+        }
+
+        // Tier 2: Razorpay Payment Link with dynamic UPI enabled (POST /v1/payment_links)
+        try {
+          const plinkRes = await axios.post(
+            'https://api.razorpay.com/v1/payment_links',
+            {
+              amount: amountPaise,
+              currency,
+              description: description.slice(0, 255),
+              upi_link: true,
+              notify: { sms: false, email: false, whatsapp: false },
+              reminder_enable: false,
+              notes: {
+                appId,
+                linkId: options.linkId || '',
+                source: '180_GATEWAY_DYNAMIC_QR',
+              },
+            },
+            {
+              headers: { Authorization: authHeader, 'Content-Type': 'application/json' },
+              timeout: 6000,
+            }
+          );
+
+          if (plinkRes.data && plinkRes.data.short_url) {
+            return {
+              qrType: 'RAZORPAY_PAYMENT_LINK',
+              qrPayload: plinkRes.data.short_url,
+              qrId: plinkRes.data.id,
+              gateway: 'RAZORPAY',
+              amount,
+              currency,
+              payeeName,
+              linkSlug: link?.slug || null,
+              isDirectUpi: false,
+              mode: 'GATEWAY_LINK',
+            };
+          }
+        } catch (plinkErr: any) {
+          console.warn('[PaymentLinkService] Razorpay payment link error:', plinkErr?.message);
+        }
+      }
+
+      // Tier 3: Simulated Razorpay UPI Payload for local / mock mode
+      const simVpa = 'rzp.simulated@hdfcbank';
+      const cleanName = encodeURIComponent(payeeName);
+      const cleanNote = encodeURIComponent(description);
+      const simUpi = `upi://pay?pa=${simVpa}&pn=${cleanName}&am=${amount.toFixed(2)}&cu=${currency}&tn=${cleanNote}`;
+
+      return {
+        qrType: 'RAZORPAY_SIMULATED',
+        qrPayload: simUpi,
+        gateway: 'RAZORPAY',
+        amount,
+        currency,
+        payeeName,
+        linkSlug: link?.slug || null,
+        isDirectUpi: true,
+        simulated: true,
+        mode: 'SIMULATED',
+      };
+    }
+
+    // Default / Stripe: Universal Web Checkout URL
+    const publicBase = process.env.PUBLIC_URL || process.env.NEXT_PUBLIC_PUBLIC_BASE || 'https://profile.180workspace.com';
+    const webUrl = link ? `${publicBase}/link/${link.slug}` : `${publicBase}/pay/${appId}`;
+    return {
+      qrType: 'UNIVERSAL_WEB_LINK',
+      qrPayload: webUrl,
+      gateway: gatewayType,
+      amount,
+      currency,
+      payeeName,
+      linkSlug: link?.slug || null,
+      isDirectUpi: false,
+      mode: 'WEB_LINK',
+    };
+  }
 }
+
