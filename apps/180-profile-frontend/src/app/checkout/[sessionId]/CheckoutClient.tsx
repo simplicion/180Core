@@ -23,12 +23,13 @@ import {
   Tag,
   Percent,
   Globe,
+  Search,
   X,
 } from 'lucide-react';
 import { Button, LogoLoader, AILogoIcon } from '@workspace/ui';
 import toast from 'react-hot-toast';
 import { getCoreApiUrl } from '@/lib/api';
-import { locationService, DetectedLocation } from '@/lib/location-service';
+import { locationService, DetectedLocation, CountryItem } from '@/lib/location-service';
 import { currencyService } from '@/lib/currency-service';
 
 declare global {
@@ -116,6 +117,26 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
   // ─── Live Location & Geolocation Currency State ─────────────────────────────
   const [detectedLocation, setDetectedLocation] = useState<DetectedLocation | null>(null);
   const [selectedCurrency, setSelectedCurrency] = useState<string | null>(null);
+  const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(null);
+  const [showCountryModal, setShowCountryModal] = useState<boolean>(false);
+  const [countrySearch, setCountrySearch] = useState<string>('');
+
+  const allCountries = useMemo(() => {
+    return locationService.getAllCountries();
+  }, []);
+
+  const filteredCountries = useMemo(() => {
+    if (!countrySearch.trim()) return allCountries;
+    const q = countrySearch.trim().toLowerCase();
+    return allCountries.filter((c) => {
+      const curr = currencyService.getCurrencyForCountry(c.code).toLowerCase();
+      return (
+        c.name.toLowerCase().includes(q) ||
+        c.code.toLowerCase().includes(q) ||
+        curr.includes(q)
+      );
+    });
+  }, [allCountries, countrySearch]);
 
   useEffect(() => {
     let isMounted = true;
@@ -236,24 +257,51 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
   };
 
   // ─── Currency & Monetary Amount Computations ───────────────────────────────
+  // Active Country Code (user chosen country overrides detected country, fallback to IN)
+  const activeCountryCode = useMemo(() => {
+    if (selectedCountryCode) return selectedCountryCode.toUpperCase();
+    if (detectedLocation?.countryCode) return detectedLocation.countryCode.toUpperCase();
+    return 'IN';
+  }, [selectedCountryCode, detectedLocation]);
+
+  const activeCountry = useMemo(() => {
+    const found = locationService.getCountryByCode(activeCountryCode);
+    if (found) return found;
+    return {
+      code: activeCountryCode,
+      name: detectedLocation?.countryName || (activeCountryCode === 'IN' ? 'India' : activeCountryCode),
+      dialCode: detectedLocation?.dialCode || '+91',
+      flag: detectedLocation?.flag || '🌐',
+    };
+  }, [activeCountryCode, detectedLocation]);
+
   const userLocalCurrency = useMemo(() => {
-    if (detectedLocation?.countryCode) {
-      return currencyService.getCurrencyForCountry(detectedLocation.countryCode);
-    }
-    return 'INR';
-  }, [detectedLocation]);
+    return currencyService.getCurrencyForCountry(activeCountryCode);
+  }, [activeCountryCode]);
 
   const developerOriginalCurrency = useMemo(() => {
     return String(session?.currency || 'USD').toUpperCase();
   }, [session?.currency]);
 
-  // Defaults automatically to user's detected local currency unless manually chosen
+  // Defaults automatically to user's selected country currency unless manually overridden
   const activeCurrency = useMemo(() => {
     if (selectedCurrency) return selectedCurrency.toUpperCase();
     return userLocalCurrency.toUpperCase();
   }, [selectedCurrency, userLocalCurrency]);
 
   const isLocalCurrencyActive = activeCurrency === userLocalCurrency.toUpperCase();
+
+  const handleSelectCountry = (country: CountryItem) => {
+    setSelectedCountryCode(country.code);
+    const newCurr = currencyService.getCurrencyForCountry(country.code);
+    setSelectedCurrency(newCurr);
+    setShowCountryModal(false);
+    setCountrySearch('');
+    prewarmedOrderRef.current = null;
+    prewarmingPromiseRef.current = null;
+    const meta = currencyService.getCurrencyMeta(newCurr);
+    toast.success(`Country set to ${country.name} • ${newCurr} (${meta.symbol})`, { id: 'country-switch' });
+  };
 
   const handleToggleCurrency = (newCurrency: string) => {
     const clean = newCurrency.toUpperCase();
@@ -285,7 +333,8 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
     return Math.max(0, Math.round((activeOriginalAmount - activeDiscountAmount) * 100) / 100);
   }, [activeOriginalAmount, activeDiscountAmount]);
 
-  const isIndia = (detectedLocation?.countryCode || '').toUpperCase() === 'IN';
+  // isIndia is dynamically evaluated against the active country selection!
+  const isIndia = activeCountryCode === 'IN';
 
   const isSupportedByGateway = useMemo(() => {
     return currencyService.isGatewaySupported(activeCurrency);
@@ -562,18 +611,8 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
   useEffect(() => {
     if (!session || !sessionId || session.status === 'COMPLETED' || !activeFinalAmount) return;
 
-    const isSandboxSession = Boolean(
-      sessionId && (
-        sessionId.startsWith('sess_sandbox_') ||
-        sessionId.startsWith('sess_demo_') ||
-        sessionId.startsWith('sess_180pay_') ||
-        sessionId.startsWith('sess_dev_') ||
-        sessionId.startsWith('cs_') ||
-        sessionId === 'default'
-      )
-    );
-
-    if (isSandboxSession && !isProduction) return;
+    // Do not pre-warm if session is a pure mock/default
+    if (!sessionId || sessionId === 'default' || sessionId.startsWith('sess_demo_') || sessionId.startsWith('sess_sandbox_')) return;
 
     // If order already pre-warmed for current charge amount and gateway currency, reuse it
     if (
@@ -621,20 +660,12 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
     const toastId = toast.loading('Authorizing payment with 180 Profile...');
 
     try {
-      const isSandboxSession = Boolean(
-        sessionId && (
-          sessionId.startsWith('sess_sandbox_') ||
-          sessionId.startsWith('sess_demo_') ||
-          sessionId.startsWith('sess_180pay_') ||
-          sessionId.startsWith('sess_dev_') ||
-          sessionId.startsWith('cs_') ||
-          sessionId === 'default'
-        )
+      // Only pure mock/offline demos without a backend complete directly
+      const isPureDemoSession = Boolean(
+        sessionId && (sessionId === 'default' || sessionId.startsWith('sess_demo_') || sessionId.startsWith('sess_sandbox_'))
       );
 
-      const isDevOrSandbox = !isProduction || isSandboxSession;
-
-      if (isDevOrSandbox) {
+      if (isPureDemoSession && !isProduction) {
         await new Promise((r) => setTimeout(r, 600));
         const demoTxId = 'tx_180pay_' + Math.random().toString(36).substring(2, 10);
         toast.success('Payment completed successfully!', { id: toastId });
@@ -734,19 +765,12 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
   const handleDirectPayment = async () => {
     if (!session) return;
 
-    const isSandboxSession = Boolean(
-      sessionId && (
-        sessionId.startsWith('sess_sandbox_') ||
-        sessionId.startsWith('sess_demo_') ||
-        sessionId.startsWith('sess_180pay_') ||
-        sessionId.startsWith('sess_dev_') ||
-        sessionId.startsWith('cs_') ||
-        sessionId === 'default'
-      )
+    const isPureDemoSession = Boolean(
+      sessionId && (sessionId === 'default' || sessionId.startsWith('sess_demo_') || sessionId.startsWith('sess_sandbox_'))
     );
 
     // In pure sandbox demo without backend, complete directly
-    if (isSandboxSession && !isProduction) {
+    if (isPureDemoSession && !isProduction) {
       setTopupLoading(true);
       const toastId = toast.loading('Initializing demo payment...');
       await new Promise((r) => setTimeout(r, 400));
@@ -875,17 +899,13 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
           email: storedUser?.email || undefined,
         },
         ...(!isIndia ? {
-          config: {
-            display: {
-              blocks: {
-                cards: {
-                  name: 'Credit & Debit Cards',
-                  instruments: [{ method: 'card' }],
-                },
-              },
-              sequence: ['block.cards'],
-              preferences: { show_default_blocks: false },
-            },
+          method: {
+            card: true,
+            upi: false,
+            netbanking: false,
+            wallet: false,
+            emi: false,
+            paylater: false,
           },
         } : {}),
         handler: async function (response: any) {
@@ -959,6 +979,11 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
       };
 
       const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (resp: any) {
+        const desc = resp.error?.description || resp.error?.reason || 'Payment failed or declined.';
+        toast.error(desc);
+        setTopupLoading(false);
+      });
       rzp.open();
       if (sessionId && sessionId !== 'default') {
         fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/track-event`), {
@@ -1331,8 +1356,8 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
         </div>
       </div>
 
-      {/* Dynamic Geolocation Currency Switcher */}
-      <div className="rounded-2xl border border-slate-200/80 dark:border-zinc-800/80 bg-slate-50/70 dark:bg-zinc-900/40 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
+      {/* Dynamic Geolocation & Country Selector Card */}
+      <div className="rounded-2xl border border-slate-200/80 dark:border-zinc-800/80 bg-slate-50/70 dark:bg-zinc-900/40 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 rounded-xl bg-blue-600/10 dark:bg-blue-400/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
             <Globe className="w-4 h-4" />
@@ -1340,51 +1365,182 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-xs font-bold text-slate-900 dark:text-zinc-100">
-                {isLocalCurrencyActive
-                  ? `Converted for ${detectedLocation?.countryName || 'India'}`
-                  : `Original ${developerOriginalCurrency} Pricing`}
+                Pricing for {activeCountry.name}
               </span>
-              {isLocalCurrencyActive && (
+              {selectedCountryCode ? (
+                <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded-full bg-blue-100 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/70">
+                  Selected ({activeCountry.code})
+                </span>
+              ) : (
                 <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/70">
-                  Auto-Detected ({detectedLocation?.countryCode || 'IN'})
+                  Auto-Detected ({activeCountry.code})
                 </span>
               )}
             </div>
             <p className="text-[10.5px] text-slate-500 dark:text-zinc-400 leading-tight mt-0.5">
-              {isLocalCurrencyActive
-                ? `1 ${developerOriginalCurrency} ≈ ${currencyService.format(currencyService.convert(1, developerOriginalCurrency, activeCurrency), activeCurrency)}. Click ${developerOriginalCurrency} to pay in developer currency.`
-                : `Showing developer base price. Click ${userLocalCurrency} to pay in your local currency.`}
+              {activeCurrency !== developerOriginalCurrency
+                ? `1 ${developerOriginalCurrency} ≈ ${currencyService.format(currencyService.convert(1, developerOriginalCurrency, activeCurrency), activeCurrency)}. Click to select any country.`
+                : `Showing original ${developerOriginalCurrency} base price. Click to select any country.`}
             </p>
           </div>
         </div>
 
-        <div className="inline-flex rounded-xl bg-slate-200/80 dark:bg-zinc-800 p-0.5 shrink-0 self-start sm:self-auto shadow-2xs">
+        {/* Country & Currency Selector Trigger */}
+        <div className="flex items-center gap-1.5 shrink-0 self-start sm:self-auto">
           <button
             type="button"
-            onClick={() => handleToggleCurrency(userLocalCurrency)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              isLocalCurrencyActive
-                ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-2xs'
-                : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200'
-            }`}
+            onClick={() => setShowCountryModal(true)}
+            className="group px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs font-bold text-slate-800 dark:text-zinc-200 hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 transition-all cursor-pointer flex items-center gap-2 shadow-2xs"
+            title="Click to select any country from all countries"
           >
-            <span>{currencyService.getCurrencyMeta(userLocalCurrency).flag}</span>
-            <span>{userLocalCurrency} (Local)</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleToggleCurrency(developerOriginalCurrency)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              !isLocalCurrencyActive
-                ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-2xs'
-                : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200'
-            }`}
-          >
-            <span>{currencyService.getCurrencyMeta(developerOriginalCurrency).flag}</span>
-            <span>{developerOriginalCurrency} (Original)</span>
+            <span className="text-base">{activeCountry.flag}</span>
+            <span className="max-w-[130px] truncate">{activeCountry.name}</span>
+            <span className="font-mono text-[10.5px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-700 text-blue-600 dark:text-blue-400">
+              {activeCurrency}
+            </span>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-500 transition-colors" />
           </button>
         </div>
       </div>
+
+      {/* Interactive Country Selection Modal */}
+      {showCountryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xl p-5 space-y-4 max-h-[85vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  Select Billing Country
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
+                  Choose any country to convert prices and load regional payment methods.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCountryModal(false);
+                  setCountrySearch('');
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 dark:text-zinc-500" />
+              <input
+                type="text"
+                value={countrySearch}
+                onChange={(e) => setCountrySearch(e.target.value)}
+                placeholder="Search country name, ISO code, or currency..."
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-zinc-800/80 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-blue-500"
+                autoFocus
+              />
+              {countrySearch && (
+                <button
+                  type="button"
+                  onClick={() => setCountrySearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {/* Quick Pick Popular Regions */}
+            {!countrySearch && (
+              <div className="space-y-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">
+                  Popular Regions
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { code: 'IN', label: 'India' },
+                    { code: 'NP', label: 'Nepal' },
+                    { code: 'US', label: 'United States' },
+                    { code: 'GB', label: 'United Kingdom' },
+                    { code: 'AE', label: 'UAE' },
+                    { code: 'CA', label: 'Canada' },
+                    { code: 'AU', label: 'Australia' },
+                    { code: 'DE', label: 'Germany' },
+                    { code: 'SG', label: 'Singapore' },
+                  ].map((pop) => {
+                    const c = locationService.getCountryByCode(pop.code);
+                    if (!c) return null;
+                    const curr = currencyService.getCurrencyForCountry(c.code);
+                    const isSelected = activeCountryCode === c.code;
+                    return (
+                      <button
+                        key={c.code}
+                        type="button"
+                        onClick={() => handleSelectCountry(c)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                            : 'bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border-slate-200 dark:border-zinc-700 hover:border-slate-300'
+                        }`}
+                      >
+                        <span>{c.flag}</span>
+                        <span>{c.name}</span>
+                        <span className={`text-[10px] font-mono ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
+                          ({curr})
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Scrollable List of All Countries */}
+            <div className="overflow-y-auto flex-1 space-y-1 pr-1 divide-y divide-slate-100 dark:divide-zinc-800/60 max-h-[300px]">
+              {filteredCountries.length === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-500 dark:text-zinc-400">
+                  No countries found matching "{countrySearch}"
+                </div>
+              ) : (
+                filteredCountries.map((c) => {
+                  const curr = currencyService.getCurrencyForCountry(c.code);
+                  const isSelected = activeCountryCode === c.code;
+                  return (
+                    <button
+                      key={c.code}
+                      type="button"
+                      onClick={() => handleSelectCountry(c)}
+                      className={`w-full px-3 py-2 rounded-xl flex items-center justify-between text-left transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-100 font-bold'
+                          : 'hover:bg-slate-50 dark:hover:bg-zinc-800/60 text-slate-700 dark:text-zinc-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="text-lg shrink-0">{c.flag}</span>
+                        <div className="min-w-0">
+                          <div className="text-xs truncate">{c.name}</div>
+                          <div className="text-[10px] text-slate-400 dark:text-zinc-500">
+                            {c.code} • Dial {c.dialCode}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0 flex items-center gap-2">
+                        <span className="text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
+                          {curr}
+                        </span>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Purchasing Power Parity (PPP) Banner */}
       {(session.metadata?.pppApplied || session.geoPricing || session.metadata?.isPpp) && (
@@ -1506,7 +1662,7 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
             </div>
           ) : (
             <div className="text-[11px] text-slate-600 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-800/50 p-2.5 rounded-xl border border-slate-200/70 dark:border-zinc-700/60 flex items-center justify-between">
-              <span>Pay remaining with UPI / Cards:</span>
+              <span>{isIndia ? 'Pay remaining with UPI / Cards:' : 'Pay remaining with Card:'}</span>
               <span className="font-bold text-slate-900 dark:text-zinc-200">
                 {currencyService.format(Math.max(0, activeFinalAmount - userBalance), activeCurrency)}
               </span>
@@ -1537,6 +1693,9 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
                 </span>
                 <span className="px-2 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-md text-[10.5px] font-medium border border-slate-200/50 dark:border-zinc-700/50">
                   Netbanking (All Indian Banks)
+                </span>
+                <span className="px-2 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-md text-[10.5px] font-medium border border-slate-200/50 dark:border-zinc-700/50">
+                  Wallets & EMI
                 </span>
               </>
             ) : (
@@ -1599,7 +1758,7 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
               {topupLoading
                 ? 'Opening Payment Gateway...'
                 : isIndia
-                ? `Pay ${currencyService.format(activeFinalAmount, activeCurrency)} via UPI / Cards`
+                ? `Pay ${currencyService.format(activeFinalAmount, activeCurrency)} via UPI / Cards / Netbanking`
                 : `Pay ${currencyService.format(chargeAmount, chargeCurrency)} via Card`}
             </span>
           </Button>

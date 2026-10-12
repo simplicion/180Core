@@ -35,9 +35,10 @@ export interface FloatingSupportWidgetProps {
   apiBaseUrl?: string;
   backendUrl?: string;
   defaultPosition?: 'bottom-right' | 'bottom-left';
+  hidden?: boolean;
 }
 
-const CATEGORIES = [
+export const CATEGORIES = [
   { id: 'BUG_REPORT', label: 'Bug / Broken UI', priority: 'HIGH' },
   { id: 'DATA_SYNC', label: 'Data & Sync', priority: 'HIGH' },
   { id: 'SLOW_PERFORMANCE', label: 'Slow Performance', priority: 'MEDIUM' },
@@ -61,7 +62,27 @@ export function FloatingSupportWidget({
   apiBaseUrl,
   backendUrl,
   defaultPosition = 'bottom-right',
+  hidden = false,
 }: FloatingSupportWidgetProps) {
+  const [shouldHide, setShouldHide] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const p = (window.location.pathname || '').toLowerCase();
+      if (p.includes('/checkout') || p.includes('/embed') || p.includes('/link') || p.includes('/pay/l')) {
+        return true;
+      }
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const p = (window.location.pathname || '').toLowerCase();
+      if (p.includes('/checkout') || p.includes('/embed') || p.includes('/link') || p.includes('/pay/l')) {
+        setShouldHide(true);
+      }
+    }
+  }, []);
+
   const [isOpen, setIsOpen] = useState(false);
   const [category, setCategory] = useState('BUG_REPORT');
   const [priority, setPriority] = useState('HIGH');
@@ -312,6 +333,10 @@ export function FloatingSupportWidget({
     setPriority('HIGH');
     setIsOpen(false);
   };
+
+  if (hidden || shouldHide) {
+    return null;
+  }
 
   return (
     <>

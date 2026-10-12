@@ -803,12 +803,24 @@ export class CheckoutService {
     sessionId: string,
     options?: { targetCurrency?: string; targetAmount?: number }
   ) {
-    const session = await prisma.checkoutSession.findUnique({
+    let session = await prisma.checkoutSession.findUnique({
       where: { id: sessionId },
       include: {
         app: true,
       },
     });
+
+    if (!session && sessionId.startsWith('sess_dev_')) {
+      try {
+        await this.getSession(sessionId);
+        session = await prisma.checkoutSession.findUnique({
+          where: { id: sessionId },
+          include: { app: true },
+        });
+      } catch (autoHealErr) {
+        console.warn('[CheckoutService:createDirectOrder] Auto-heal failed:', autoHealErr);
+      }
+    }
 
     if (!session) {
       throw new Error('Checkout session not found');
@@ -979,28 +991,68 @@ export class CheckoutService {
 
     const authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
 
-    const rzpResponse = await axios.post(
-      'https://api.razorpay.com/v1/orders',
-      {
-        amount: amountSmallestUnit,
-        currency: targetCurrency,
-        receipt: `cs_${session.id.replace(/-/g, '').slice(0, 36)}`,
-        notes: {
-          sessionId: session.id,
-          appId: session.appId,
-          appName: session.app?.name || '180 App',
-          title: session.title,
+    let rzpResponse;
+    try {
+      rzpResponse = await axios.post(
+        'https://api.razorpay.com/v1/orders',
+        {
+          amount: amountSmallestUnit,
           currency: targetCurrency,
+          receipt: `cs_${session.id.replace(/-/g, '').slice(0, 36)}`,
+          notes: {
+            sessionId: session.id,
+            appId: session.appId,
+            appName: session.app?.name || '180 App',
+            title: session.title,
+            currency: targetCurrency,
+          },
         },
-      },
-      {
-        headers: {
-          Authorization: authHeader,
-          'Content-Type': 'application/json',
-        },
-        timeout: 10000,
+        {
+          headers: {
+            Authorization: authHeader,
+            'Content-Type': 'application/json',
+          },
+          timeout: 10000,
+        }
+      );
+    } catch (rzpErr: any) {
+      const errorData = rzpErr.response?.data?.error;
+      const errorDesc = errorData?.description || rzpErr.message;
+      console.warn(`[Razorpay Order Error for ${targetCurrency}]:`, errorDesc);
+
+      // If non-INR currency fails on merchant account, seamlessly fallback to INR
+      if (targetCurrency !== 'INR') {
+        const inrAmount = GeoPricingService.convertCurrency(targetAmount, targetCurrency, 'INR');
+        const inrPaise = Math.max(100, Math.round(inrAmount * 100));
+        console.log(`[Razorpay Fallback] Retrying order creation in INR (${inrPaise} paise)...`);
+        rzpResponse = await axios.post(
+          'https://api.razorpay.com/v1/orders',
+          {
+            amount: inrPaise,
+            currency: 'INR',
+            receipt: `cs_${session.id.replace(/-/g, '').slice(0, 36)}`,
+            notes: {
+              sessionId: session.id,
+              appId: session.appId,
+              appName: session.app?.name || '180 App',
+              title: session.title,
+              currency: 'INR',
+              originalCurrency: targetCurrency,
+              originalAmount: String(targetAmount),
+            },
+          },
+          {
+            headers: {
+              Authorization: authHeader,
+              'Content-Type': 'application/json',
+            },
+            timeout: 10000,
+          }
+        );
+      } else {
+        throw new Error(errorDesc || 'Failed to initialize payment with Razorpay');
       }
-    );
+    }
 
     const actualOrderId = rzpResponse.data.id;
     const actualAmountPaise = rzpResponse.data.amount;
@@ -1045,10 +1097,20 @@ export class CheckoutService {
   }) {
     const { sessionId, orderId, paymentId, signature } = input;
 
-    const session = await prisma.checkoutSession.findUnique({
+    let session = await prisma.checkoutSession.findUnique({
       where: { id: sessionId },
       include: { app: true },
     });
+
+    if (!session && sessionId.startsWith('sess_dev_')) {
+      try {
+        await this.getSession(sessionId);
+        session = await prisma.checkoutSession.findUnique({
+          where: { id: sessionId },
+          include: { app: true },
+        });
+      } catch (e) {}
+    }
 
     if (!session) {
       throw new Error('Checkout session not found');

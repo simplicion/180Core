@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Toaster } from 'react-hot-toast';
-import { FloatingSupportWidget } from '@workspace/ui';
+import { ProfileSupportWrapper } from '@/components/ProfileSupportWrapper';
 import './globals.css';
 import '@/lib/api';
 
@@ -79,7 +79,7 @@ export default function RootLayout({
           }}
         />
         {children}
-        <FloatingSupportWidget backendUrl="http://localhost:4003" />
+        <ProfileSupportWrapper />
       </body>
     </html>
   );

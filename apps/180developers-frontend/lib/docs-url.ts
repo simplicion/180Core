@@ -3,12 +3,13 @@
  * Resolves to http://localhost:3005 in local development, and https://docs.180workspace.com in production.
  */
 export function getDocsBaseUrl(): string {
-  if (typeof window !== 'undefined') {
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      return 'http://localhost:3005';
-    }
+  if (process.env.NEXT_PUBLIC_DOCS_URL) {
+    return process.env.NEXT_PUBLIC_DOCS_URL;
   }
-  return process.env.NEXT_PUBLIC_DOCS_URL || 'https://docs.180workspace.com';
+  if (process.env.NODE_ENV === 'development') {
+    return 'http://localhost:3005';
+  }
+  return 'https://docs.180workspace.com';
 }
 
 export function getDocsUrl(path = '/docs/products/180-core/overview'): string {
