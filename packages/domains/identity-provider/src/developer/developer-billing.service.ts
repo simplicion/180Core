@@ -364,6 +364,36 @@ export class DeveloperBillingService {
     const description = isPro ? '10 Projects Access with 180 Identity & 180 Pay' : '5 Projects Access with 180 Identity & 180 Pay';
     const sessionId = `sess_dev_${planTier.toLowerCase()}_${userId.slice(0, 8)}_${Date.now()}`;
 
+    try {
+      const { starter, pro } = await this.ensurePlans();
+      const targetPlan = isPro ? pro : starter;
+
+      await (prisma as any).checkoutSession.create({
+        data: {
+          id: sessionId,
+          appId: targetPlan.appId,
+          userId,
+          amount,
+          currency: 'USD',
+          status: 'PENDING',
+          mode: 'subscription',
+          planId: targetPlan.id,
+          billingInterval: 'MONTHLY',
+          title,
+          description,
+          metadata: {
+            planTier,
+            userId,
+            maxProjects,
+            source: 'DEVELOPER_PORTAL_BILLING',
+          },
+          expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        },
+      });
+    } catch (sessionErr: any) {
+      console.warn('[DeveloperBillingService] Warning: Could not pre-create checkoutSession in DB:', sessionErr);
+    }
+
     return {
       sessionId,
       amount,

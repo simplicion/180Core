@@ -460,6 +460,7 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
           sessionId.startsWith('sess_sandbox_') ||
           sessionId.startsWith('sess_demo_') ||
           sessionId.startsWith('sess_180pay_') ||
+          sessionId.startsWith('sess_dev_') ||
           sessionId.startsWith('cs_') ||
           sessionId === 'default'
         )
@@ -468,11 +469,28 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
       // Robust fallback for Sandbox / Demo / Standalone sessions
       if (!sessionInfo && isSandboxSession) {
         const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-        const queryAmount = urlParams?.get('amount') ? parseFloat(urlParams.get('amount')!) : 499.0;
-        const queryTitle = urlParams?.get('title') || '180 Workspace Plan';
-        const queryDesc = urlParams?.get('description') || 'Secure Online Checkout';
-        const queryCurrency = urlParams?.get('currency') || 'INR';
-        const queryApp = urlParams?.get('appName') || urlParams?.get('app') || '180 Workspace';
+        const queryAmount = urlParams?.get('amount')
+          ? parseFloat(urlParams.get('amount')!)
+          : sessionId.includes('_pro_')
+            ? 5.0
+            : sessionId.includes('_starter_')
+              ? 2.0
+              : 499.0;
+        const queryTitle =
+          urlParams?.get('title') ||
+          (sessionId.startsWith('sess_dev_')
+            ? (sessionId.includes('_pro_') ? '180 Developer Portal — Pro Plan' : '180 Developer Portal — Starter Plan')
+            : '180 Workspace Plan');
+        const queryDesc =
+          urlParams?.get('description') ||
+          (sessionId.startsWith('sess_dev_')
+            ? (sessionId.includes('_pro_') ? '10 Projects Access with 180 Identity & 180 Pay' : '5 Projects Access with 180 Identity & 180 Pay')
+            : 'Secure Online Checkout');
+        const queryCurrency = urlParams?.get('currency') || (sessionId.startsWith('sess_dev_') ? 'USD' : 'INR');
+        const queryApp =
+          urlParams?.get('appName') ||
+          urlParams?.get('app') ||
+          (sessionId.startsWith('sess_dev_') ? '180 Developer Portal' : '180 Workspace');
 
         sessionInfo = {
           id: sessionId,
@@ -549,6 +567,7 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
         sessionId.startsWith('sess_sandbox_') ||
         sessionId.startsWith('sess_demo_') ||
         sessionId.startsWith('sess_180pay_') ||
+        sessionId.startsWith('sess_dev_') ||
         sessionId.startsWith('cs_') ||
         sessionId === 'default'
       )
@@ -607,6 +626,7 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
           sessionId.startsWith('sess_sandbox_') ||
           sessionId.startsWith('sess_demo_') ||
           sessionId.startsWith('sess_180pay_') ||
+          sessionId.startsWith('sess_dev_') ||
           sessionId.startsWith('cs_') ||
           sessionId === 'default'
         )
@@ -718,6 +738,9 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
       sessionId && (
         sessionId.startsWith('sess_sandbox_') ||
         sessionId.startsWith('sess_demo_') ||
+        sessionId.startsWith('sess_180pay_') ||
+        sessionId.startsWith('sess_dev_') ||
+        sessionId.startsWith('cs_') ||
         sessionId === 'default'
       )
     );
@@ -1157,7 +1180,7 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
             <p className="text-blue-800/90 leading-relaxed text-[11px]">
               For local sandbox testing, ensure your session prefix starts with <code className="bg-white/80 px-1 py-0.5 rounded font-mono font-bold text-blue-900">sess_sandbox_</code> or verify your checkout server endpoint in the{' '}
               <a
-                href="http://localhost:3008"
+                href={isProduction ? 'https://developer.180core.cloud' : 'http://localhost:3008'}
                 target="_blank"
                 rel="noreferrer"
                 className="font-bold underline hover:text-blue-950 inline-flex items-center gap-0.5"
@@ -1180,7 +1203,7 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
           </button>
 
           <a
-            href="http://localhost:3008"
+            href={isProduction ? 'https://developer.180core.cloud' : 'http://localhost:3008'}
             target="_blank"
             rel="noreferrer"
             className="flex-1 py-2 px-3 rounded-xl bg-blue-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-blue-700 active:scale-[0.99] transition-all cursor-pointer shadow-xs min-h-[38px]"
@@ -1217,6 +1240,7 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
       sessionId.startsWith('sess_sandbox_') ||
       sessionId.startsWith('sess_demo_') ||
       sessionId.startsWith('sess_180pay_') ||
+      sessionId.startsWith('sess_dev_') ||
       sessionId.startsWith('cs_') ||
       sessionId === 'default'
     )

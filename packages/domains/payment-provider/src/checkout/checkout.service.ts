@@ -215,7 +215,7 @@ export class CheckoutService {
    * Retrieves a Checkout Session for rendering the 180 Pay Drawer
    */
   static async getSession(sessionId: string) {
-    const session = await prisma.checkoutSession.findUnique({
+    let session = await prisma.checkoutSession.findUnique({
       where: { id: sessionId },
       include: {
         app: {
@@ -229,6 +229,62 @@ export class CheckoutService {
         },
       },
     });
+
+    // Auto-heal Developer Portal billing checkout sessions if not already in DB
+    if (!session && sessionId.startsWith('sess_dev_')) {
+      try {
+        const isPro = sessionId.includes('_pro_');
+        const planTier = isPro ? 'PRO' : 'STARTER';
+        const amount = isPro ? 5.0 : 2.0;
+        const title = isPro ? '180 Developer Portal — Pro Plan' : '180 Developer Portal — Starter Plan';
+        const description = isPro ? '10 Projects Access with 180 Identity & 180 Pay' : '5 Projects Access with 180 Identity & 180 Pay';
+
+        const platformApp = await prisma.oAuthApp.findFirst({
+          where: {
+            OR: [
+              { clientId: '180_client_70d751541f05347fe803ec8e128f5e83' },
+              { name: '180 Developer Portal' },
+              { name: '180workspace' },
+              { name: { contains: 'Workspace', mode: 'insensitive' } },
+              { name: { contains: 'Developer', mode: 'insensitive' } },
+            ],
+          },
+        }) || await prisma.oAuthApp.findFirst();
+
+        if (platformApp) {
+          session = await prisma.checkoutSession.create({
+            data: {
+              id: sessionId,
+              appId: platformApp.id,
+              amount,
+              currency: 'USD',
+              status: 'PENDING',
+              mode: 'subscription',
+              title,
+              description,
+              metadata: {
+                planTier,
+                source: 'DEVELOPER_PORTAL_BILLING',
+              },
+              expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+            },
+            include: {
+              app: {
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                  logoUrl: true,
+                  isVerified: true,
+                },
+              },
+            },
+          });
+        }
+      } catch (autoHealErr) {
+        console.warn('[CheckoutService:getSession] Could not auto-heal sess_dev_ session:', autoHealErr);
+      }
+    }
 
     if (!session) {
       throw new Error('Checkout session not found');
