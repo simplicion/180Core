@@ -147,7 +147,14 @@ jobs:
               "echo === 7. DOCKER LOGS CORE-BACKEND ===",
               "docker logs --tail 40 180workspace-core-backend 2>&1 || true",
               "echo === 8. TEST LOCAL PORT 4003 ===",
-              "curl -i http://localhost:4003/health 2>&1 || true"
+              "curl -i http://localhost:4003/health 2>&1 || true",
+              "echo === 9. NGINX UPSTREAM CONFIG ===",
+              "cat /home/ubuntu/app/nginx/nginx.conf 2>&1 || true",
+              "echo === 10. RESTART NGINX PROXY ===",
+              "docker restart 180workspace-proxy",
+              "sleep 3",
+              "echo === 11. TEST VIA NGINX ON PORT 80 ===",
+              "curl -i -H 'Host: api.180core.cloud' http://localhost/health 2>&1 || true"
             ]}')
 
           echo "Triggering zero-downtime reload on EC2..."
