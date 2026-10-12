@@ -139,10 +139,14 @@ jobs:
               "echo === 3. STOP AND REMOVE OLD CONTAINER ===",
               "docker stop 180workspace-core-backend 2>/dev/null || true",
               "docker rm 180workspace-core-backend 2>/dev/null || true",
-              "echo === 4. ENSURE DOCKER NETWORK ===",
+              "echo === 4. ENSURE DOCKER NETWORKS ===",
+              "docker network create app_180workspace-net 2>/dev/null || true",
               "docker network create 180workspace-net 2>/dev/null || true",
               "echo === 5. LAUNCH 180CORE BACKEND CONTAINER ===",
-              ("docker run -d --name 180workspace-core-backend --restart always --network 180workspace-net --network-alias core-backend -p 4003:4003 --add-host host.docker.internal:host-gateway --env-file /home/ubuntu/app/.env -e PORT=4003 -e NODE_ENV=production -e REDIS_URL=redis://host.docker.internal:6379 -e REDIS_INTERNAL_URL=redis://host.docker.internal:6379 -e CORE_DATABASE_URL=" + ($coreDb | @sh) + " ghcr.io/simplicion/180core-core-backend:latest"),
+              ("docker run -d --name 180workspace-core-backend --restart always --network app_180workspace-net --network-alias core-backend -p 4003:4003 --add-host host.docker.internal:host-gateway --env-file /home/ubuntu/app/.env -e PORT=4003 -e NODE_ENV=production -e REDIS_URL=redis://host.docker.internal:6379 -e REDIS_INTERNAL_URL=redis://host.docker.internal:6379 -e CORE_DATABASE_URL=" + ($coreDb | @sh) + " ghcr.io/simplicion/180core-core-backend:latest"),
+              "docker network connect 180workspace-net 180workspace-core-backend --alias core-backend 2>/dev/null || true",
+              "docker network connect app_180workspace-net 180workspace-proxy 2>/dev/null || true",
+              "docker network connect 180workspace-net 180workspace-proxy 2>/dev/null || true",
               "echo === 6. WAIT FOR SERVER INITIALIZATION ===",
               "sleep 8",
               "echo === 7. DOCKER LOGS CORE-BACKEND ===",
@@ -151,10 +155,15 @@ jobs:
               "curl -i http://localhost:4003/health 2>&1 || true",
               "echo === 9. NGINX UPSTREAM CONFIG ===",
               "cat /home/ubuntu/app/nginx/nginx.conf 2>&1 || true",
-              "echo === 10. RESTART NGINX PROXY ===",
-              "docker restart 180workspace-proxy",
-              "sleep 3",
-              "echo === 11. TEST VIA NGINX ON PORT 80 ===",
+              "echo === 10. TEST AND RELOAD/RESTART NGINX PROXY ===",
+              "docker exec 180workspace-proxy nginx -t 2>&1 || true",
+              "docker restart 180workspace-proxy 2>&1 || docker start 180workspace-proxy 2>&1 || true",
+              "sleep 4",
+              "echo === 11. DOCKER PS STATUS ===",
+              "docker ps --format \"table {{.Names}}\t{{.Status}}\t{{.Ports}}\"",
+              "echo === 12. DOCKER LOGS PROXY ===",
+              "docker logs --tail 25 180workspace-proxy 2>&1 || true",
+              "echo === 13. TEST VIA NGINX ON PORT 80 ===",
               ("curl -i -H " + ($hostHdr | @sh) + " http://localhost/health 2>&1 || true")
             ]}')
 
@@ -183,13 +192,13 @@ jobs:
       - name: Verify Public Edge Healthcheck
         run: |
           echo "Testing public ingress endpoint..."
-          for i in {1..6}; do
-            echo "Attempt $i: Checking http://32.198.110.99/health..."
-            if curl -sf -H "Host: api.180core.cloud" http://32.198.110.99/health; then
+          for i in {1..10}; do
+            echo "Attempt $i: Checking https://api.180core.cloud/health & origin..."
+            if curl -sf https://api.180core.cloud/health || curl -sf -H "Host: api.180core.cloud" http://32.198.110.99/health; then
               echo "✅ Public ingress endpoint responded with 200 OK!"
               exit 0
             fi
-            sleep 3
+            sleep 4
           done
           echo "Edge warming up..."
 

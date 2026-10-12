@@ -55,7 +55,7 @@ export function BankDetailsDrawer({
           setLoadingInitial(true);
           const token = localStorage.getItem('platform_auth_token');
           const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost';
-          const apiBase = isLocal ? 'http://localhost:4003' : 'https://services.180workspace.com';
+          const apiBase = isLocal ? 'http://localhost:4003' : (process.env.NEXT_PUBLIC_CORE_BACKEND_URL || 'https://api.180core.cloud');
 
           const res = await fetch(`${apiBase}/api/v1/developer/apps/${projectId}/bank-details`, {
             headers: { Authorization: `Bearer ${token}` },
@@ -98,7 +98,7 @@ export function BankDetailsDrawer({
     try {
       const token = localStorage.getItem('platform_auth_token');
       const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost';
-      const apiBase = isLocal ? 'http://localhost:4003' : 'https://services.180workspace.com';
+      const apiBase = isLocal ? 'http://localhost:4003' : (process.env.NEXT_PUBLIC_CORE_BACKEND_URL || 'https://api.180core.cloud');
 
       // 1. Try PUT to /api/v1/developer/apps/:id/bank-details
       let res = await fetch(`${apiBase}/api/v1/developer/apps/${projectId}/bank-details`, {

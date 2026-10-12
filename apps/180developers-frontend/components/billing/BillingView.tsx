@@ -78,7 +78,7 @@ export function BillingView() {
         (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
       const apiBase = isLocal
         ? 'http://localhost:4003'
-        : process.env.NEXT_PUBLIC_CORE_BACKEND_URL || 'https://services.180workspace.com';
+        : process.env.NEXT_PUBLIC_CORE_BACKEND_URL || 'https://api.180core.cloud';
 
       const [appsRes, billingRes] = await Promise.all([
         fetch(`${apiBase}/api/v1/identity/developer/apps`, {
@@ -151,7 +151,7 @@ export function BillingView() {
         (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
       const apiBase = isLocal
         ? 'http://localhost:4003'
-        : process.env.NEXT_PUBLIC_CORE_BACKEND_URL || 'https://services.180workspace.com';
+        : process.env.NEXT_PUBLIC_CORE_BACKEND_URL || 'https://api.180core.cloud';
 
       const res = await fetch(`${apiBase}/api/v1/identity/developer/billing/autopay`, {
         method: 'POST',
@@ -186,7 +186,7 @@ export function BillingView() {
         (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
       const apiBase = isLocal
         ? 'http://localhost:4003'
-        : process.env.NEXT_PUBLIC_CORE_BACKEND_URL || 'https://services.180workspace.com';
+        : process.env.NEXT_PUBLIC_CORE_BACKEND_URL || 'https://api.180core.cloud';
 
       const res = await fetch(`${apiBase}/api/v1/identity/developer/billing/settle`, {
         method: 'POST',

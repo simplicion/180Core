@@ -89,7 +89,7 @@ export const OneEightyPricingTable: React.FC<PricingTableProps> = ({
         return 'http://localhost:4003';
       }
 
-      return 'https://services.180workspace.com';
+      return 'https://api.180core.cloud';
     }
     return process.env.CORE_BACKEND_URL || 'http://localhost:4003';
   }, [apiBase]);

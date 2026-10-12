@@ -167,6 +167,27 @@ const getAuthServerUrl = (customUrl?: string, envMode?: EnvironmentMode): string
   return 'https://profile.180core.cloud';
 };
 
+const getAuthApiServerUrl = (customUrl?: string, envMode?: EnvironmentMode): string => {
+  if (customUrl) return customUrl;
+  const mode = resolveEnvironmentMode(envMode);
+  if (mode === 'development') {
+    if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_CORE_BACKEND_URL) {
+      return process.env.NEXT_PUBLIC_CORE_BACKEND_URL;
+    }
+    if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_IDENTITY_SERVER_URL) {
+      return process.env.NEXT_PUBLIC_IDENTITY_SERVER_URL;
+    }
+    return 'http://localhost:4003';
+  }
+  if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_CORE_BACKEND_URL) {
+    return process.env.NEXT_PUBLIC_CORE_BACKEND_URL;
+  }
+  if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_IDENTITY_SERVER_URL) {
+    return process.env.NEXT_PUBLIC_IDENTITY_SERVER_URL;
+  }
+  return 'https://api.180core.cloud';
+};
+
 const getPayServerUrl = (customUrl?: string, envMode?: EnvironmentMode): string => {
   if (customUrl) return customUrl;
   const mode = resolveEnvironmentMode(envMode);
@@ -262,7 +283,7 @@ export async function prefetchAppConfig(clientId: string, customServerUrl?: stri
     return existing;
   }
 
-  const server = getAuthServerUrl(customServerUrl);
+  const server = getAuthApiServerUrl(customServerUrl);
   try {
     const res = await fetch(`${server}/api/oauth/client/${encodeURIComponent(clientId)}`, {
       method: 'GET',
