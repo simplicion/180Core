@@ -102,16 +102,14 @@ jobs:
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
             --parameters '{"commands":[
-              "echo \"=== HOST ENVIRONMENT ===\"",
-              "which node pm2 pnpm docker docker-compose git 2>&1 || true",
-              "echo \"=== HOST HOME DIRS ===\"",
-              "ls -la /home/ubuntu /var/www /root 2>/dev/null || true",
-              "echo \"=== DOCKER NETWORKS ===\"",
-              "docker network ls",
-              "echo \"=== PROXY NETWORKS ===\"",
-              "docker inspect 180workspace-proxy --format \"{{json .NetworkSettings.Networks}}\"",
-              "echo \"=== RUNNING PROCESSES ===\"",
-              "ps aux | grep -E \"node|pm2|core|180\" | head -n 30 || true"
+              "echo \"=== APP DIRECTORY ===\"",
+              "ls -la /home/ubuntu/app",
+              "echo \"=== COMPOSE FILE ===\"",
+              "cat /home/ubuntu/app/docker-compose.yml 2>/dev/null || cat /home/ubuntu/app/docker-compose.yaml 2>/dev/null || true",
+              "echo \"=== PM2 USER UBUNTU ===\"",
+              "su - ubuntu -c \"pm2 list\" 2>/dev/null || true",
+              "echo \"=== PM2 ROOT ===\"",
+              "pm2 list 2>/dev/null || true"
             ]}' \
             --query "Command.CommandId" \
             --output text)
