@@ -102,14 +102,14 @@ jobs:
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
             --parameters '{"commands":[
-              "echo \"=== APP DIRECTORY ===\"",
-              "ls -la /home/ubuntu/app",
-              "echo \"=== COMPOSE FILE ===\"",
-              "cat /home/ubuntu/app/docker-compose.yml 2>/dev/null || cat /home/ubuntu/app/docker-compose.yaml 2>/dev/null || true",
-              "echo \"=== PM2 USER UBUNTU ===\"",
-              "su - ubuntu -c \"pm2 list\" 2>/dev/null || true",
-              "echo \"=== PM2 ROOT ===\"",
-              "pm2 list 2>/dev/null || true"
+              "echo \"=== DOCKER COMPOSE STATUS IN /home/ubuntu/app ===\"",
+              "cd /home/ubuntu/app && docker compose ps -a",
+              "echo \"=== ATTEMPT UP CORE-BACKEND ===\"",
+              "cd /home/ubuntu/app && docker compose up -d core-backend 2>&1 || true",
+              "echo \"=== DOCKER LOGS CORE-BACKEND ===\"",
+              "docker logs --tail 30 180workspace-core-backend 2>&1 || true",
+              "echo \"=== TEST LOCAL 4003 ===\"",
+              "curl -i http://localhost:4003/health 2>&1 || true"
             ]}' \
             --query "Command.CommandId" \
             --output text)
