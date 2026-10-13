@@ -11,7 +11,7 @@ import {
     getJwks,
     ISSUER
 } from './oauth.service';
-import { FIRST_PARTY_APPS, isFirstPartyApp } from './seed-first-party';
+import { FIRST_PARTY_APPS, isFirstPartyApp, resolveCanonicalClientId } from './seed-first-party';
 import { UsernameService } from '../user/username.service';
 
 /**
@@ -72,17 +72,19 @@ export class OAuthController {
                 return res.status(400).json({ error: 'invalid_request', error_description: 'Missing client_id parameter' });
             }
 
+            const effectiveClientId = resolveCanonicalClientId(String(client_id));
+
             let app: any = null;
             try {
                 app = await prisma.oAuthApp.findUnique({
-                    where: { clientId: String(client_id) },
+                    where: { clientId: effectiveClientId },
                     include: { user: true }
                 });
             } catch (e) {
                 app = null;
             }
 
-            const fp = FIRST_PARTY_APPS.find(a => a.clientId === String(client_id));
+            const fp = FIRST_PARTY_APPS.find(a => a.clientId === effectiveClientId);
             if (fp) {
                 if (!app) {
                     app = {
@@ -331,17 +333,19 @@ export class OAuthController {
                 return res.status(400).json({ error: 'invalid_request', error_description: 'Missing clientId parameter' });
             }
 
+            const effectiveClientId = resolveCanonicalClientId(String(clientId));
+
             let app: any = null;
             try {
                 app = await prisma.oAuthApp.findUnique({
-                    where: { clientId: String(clientId) },
+                    where: { clientId: effectiveClientId },
                     include: { user: true }
                 });
             } catch (e) {
                 app = null;
             }
 
-            const fp = FIRST_PARTY_APPS.find(a => a.clientId === String(clientId));
+            const fp = FIRST_PARTY_APPS.find(a => a.clientId === effectiveClientId);
             if (fp) {
                 if (!app) {
                     app = {
@@ -404,16 +408,18 @@ export class OAuthController {
                 return res.status(400).json({ error: 'invalid_request', error_description: 'Missing client_id' });
             }
 
+            const effectiveClientId = resolveCanonicalClientId(String(client_id));
+
             let app: any = null;
             try {
                 app = await prisma.oAuthApp.findUnique({
-                    where: { clientId: String(client_id) }
+                    where: { clientId: effectiveClientId }
                 });
             } catch (e) {
                 app = null;
             }
 
-            const fp = FIRST_PARTY_APPS.find(a => a.clientId === String(client_id));
+            const fp = FIRST_PARTY_APPS.find(a => a.clientId === effectiveClientId);
             if (fp) {
                 if (!app) {
                     app = {
@@ -620,9 +626,12 @@ export class OAuthController {
                     return res.status(400).json({ error: 'invalid_grant', error_description: 'Authorization code has already been used or expired' });
                 }
 
-                // Verify client identification
+                // Verify client identification (supporting canonical aliases)
                 const targetClientId = client_id || authCode.app.clientId;
-                if (authCode.app.clientId !== targetClientId) {
+                if (
+                    authCode.app.clientId !== targetClientId &&
+                    resolveCanonicalClientId(authCode.app.clientId) !== resolveCanonicalClientId(targetClientId)
+                ) {
                     return res.status(400).json({ error: 'invalid_client', error_description: 'client_id does not match the authorization code' });
                 }
 

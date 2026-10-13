@@ -53,6 +53,7 @@ export class DeveloperBillingService {
     const platformApp = await prisma.oAuthApp.findFirst({
       where: {
         OR: [
+          { clientId: '180-workspace-platform' },
           { clientId: '180_client_70d751541f05347fe803ec8e128f5e83' },
           { name: '180workspace' },
           { name: { contains: 'Workspace', mode: 'insensitive' } },

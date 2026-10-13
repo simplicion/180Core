@@ -2,6 +2,7 @@
 
 import { developersPrisma as prisma } from '@workspace/db-180core';
 import { generateRandomToken, hashSecret } from '../oauth/oauth.service';
+import { LEGACY_FIRST_PARTY_ALIASES, resolveCanonicalClientId } from '../oauth/seed-first-party';
 import { DeveloperBillingService } from './developer-billing.service';
 
 export class DeveloperController {
@@ -50,7 +51,11 @@ export class DeveloperController {
                 orderBy: { createdAt: 'desc' }
             });
 
-            const sanitized = apps.map((app: any) => ({
+            // Filter out legacy first-party duplicate aliases so each official project only displays once
+            const legacyAliases = new Set(Object.keys(LEGACY_FIRST_PARTY_ALIASES));
+            const activeApps = apps.filter((app: any) => !legacyAliases.has(app.clientId));
+
+            const sanitized = activeApps.map((app: any) => ({
                 id: app.id,
                 name: app.name,
                 description: app.description,
@@ -100,12 +105,14 @@ export class DeveloperController {
                 return res.status(401).json({ success: false, message: 'Authentication required' });
             }
             const { id } = req.params;
+            const canonicalClientId = resolveCanonicalClientId(id);
 
             const app = await prisma.oAuthApp.findFirst({
                 where: {
                     OR: [
                         { id, userId: { in: userIds } },
-                        { clientId: id, userId: { in: userIds } }
+                        { clientId: id, userId: { in: userIds } },
+                        { clientId: canonicalClientId, userId: { in: userIds } }
                     ]
                 },
                 include: {
