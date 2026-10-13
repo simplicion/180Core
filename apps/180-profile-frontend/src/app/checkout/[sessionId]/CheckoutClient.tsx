@@ -1398,10 +1398,20 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
           </div>
         </div>
 
-        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/60 flex items-center gap-1.5 shrink-0 shadow-2xs">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          Verified
-        </span>
+        {/* Country & Currency Selector Trigger (In place of Verified badge) */}
+        <button
+          type="button"
+          onClick={openCountrySheet}
+          className="group px-2.5 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs font-bold text-slate-800 dark:text-zinc-200 hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 transition-all cursor-pointer flex items-center gap-1.5 sm:gap-2 shadow-2xs shrink-0"
+          title="Click to select billing country and currency"
+        >
+          <span className="text-base leading-none">{activeCountry.flag}</span>
+          <span className="max-w-[100px] sm:max-w-[140px] truncate">{activeCountry.name}</span>
+          <span className="font-mono text-[10.5px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-700 text-blue-600 dark:text-blue-400">
+            {activeCurrency}
+          </span>
+          <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-500 transition-colors shrink-0" />
+        </button>
       </div>
 
       {/* Item Summary */}
@@ -1450,53 +1460,6 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
               </div>
             )}
           </div>
-        </div>
-      </div>
-
-      {/* Dynamic Geolocation & Country Selector Card */}
-      <div className="rounded-2xl border border-slate-200/80 dark:border-zinc-800/80 bg-slate-50/70 dark:bg-zinc-900/40 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-blue-600/10 dark:bg-blue-400/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-            <Globe className="w-4 h-4" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-xs font-bold text-slate-900 dark:text-zinc-100">
-                Pricing for {activeCountry.name}
-              </span>
-              {selectedCountryCode ? (
-                <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded-full bg-blue-100 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/70">
-                  Selected ({activeCountry.code})
-                </span>
-              ) : (
-                <span className="text-[9.5px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/70">
-                  Auto-Detected ({activeCountry.code})
-                </span>
-              )}
-            </div>
-            <p className="text-[10.5px] text-slate-500 dark:text-zinc-400 leading-tight mt-0.5">
-              {activeCurrency !== developerOriginalCurrency
-                ? `1 ${developerOriginalCurrency} ≈ ${currencyService.format(currencyService.convert(1, developerOriginalCurrency, activeCurrency), activeCurrency)}. Click to select any country.`
-                : `Showing original ${developerOriginalCurrency} base price. Click to select any country.`}
-            </p>
-          </div>
-        </div>
-
-        {/* Country & Currency Selector Trigger */}
-        <div className="flex items-center gap-1.5 shrink-0 self-start sm:self-auto">
-          <button
-            type="button"
-            onClick={openCountrySheet}
-            className="group px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs font-bold text-slate-800 dark:text-zinc-200 hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 transition-all cursor-pointer flex items-center gap-2 shadow-2xs"
-            title="Click to select any country from all countries"
-          >
-            <span className="text-base">{activeCountry.flag}</span>
-            <span className="max-w-[130px] truncate">{activeCountry.name}</span>
-            <span className="font-mono text-[10.5px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-700 text-blue-600 dark:text-blue-400">
-              {activeCurrency}
-            </span>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-500 transition-colors" />
-          </button>
         </div>
       </div>
 
