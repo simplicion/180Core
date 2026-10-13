@@ -22,7 +22,6 @@ import {
   RefreshCw,
   Menu,
   X,
-  Tag,
 } from 'lucide-react';
 import { adminApi } from '@/lib/api';
 import { FloatingSupportWidget } from './FloatingSupportWidget';
@@ -48,13 +47,6 @@ const NAV_ITEMS: NavItem[] = [
     badgeColor: 'bg-amber-500/10 text-amber-500 border border-amber-500/20',
   },
   { name: 'Transactions Ledger', href: '/transactions', icon: Receipt },
-  {
-    name: 'Coupons & Promos',
-    href: '/coupons',
-    icon: Tag,
-    badge: 'Promo',
-    badgeColor: 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20',
-  },
   {
     name: 'Universal Support Desk',
     href: '/support',
@@ -319,7 +311,7 @@ export default function AdminShellLayout({ children }: { children: React.ReactNo
               </div>
               <div className="hidden sm:block text-left">
                 <div className="text-xs font-semibold text-zinc-900 dark:text-white leading-tight">Super Admin</div>
-                <div className="text-[10px] text-zinc-500 leading-tight">simplicion@root</div>
+                <div className="text-[10px] text-zinc-500 leading-tight">admin@180core.cloud</div>
               </div>
             </div>
           </div>

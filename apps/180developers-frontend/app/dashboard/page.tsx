@@ -652,12 +652,12 @@ function DeveloperDashboardContent() {
           setPlaygroundOutput({
             status: '200 OK (Simulated Sandbox Response)',
             sub: userProfile?.id || '180_usr_99a8b7c6d5e4f3a2',
-            name: userProfile?.name || 'Simplicion Developer',
-            email: userProfile?.email || 'developer@180workspace.com',
-            username: userProfile?.username || 'simplicion',
+            name: userProfile?.name || '180 Core Developer',
+            email: userProfile?.email || 'developer@180core.cloud',
+            username: userProfile?.username || 'developer',
             email_verified: true,
             auth_time: Math.floor(Date.now() / 1000) - 300,
-            iss: 'https://identity.180workspace.com',
+            iss: 'https://identity.180core.cloud',
             aud: apps.find((a) => a.id === playgroundSelectedAppId)?.clientId || '180_client_demo',
           });
           toast.success('Simulated Userinfo claims retrieved');
