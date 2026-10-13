@@ -272,41 +272,54 @@ export const FIRST_PARTY_APPS = [
     },
     {
         clientId: '180-core-client',
-        name: '180 Core Sovereign Client',
-        description: 'Sovereign Core Identity and Developer Infrastructure',
+        name: '180 Core',
+        description: 'Sovereign Core Identity, Auth & 180 Pay Infrastructure',
         redirectUris: [
             'http://localhost:3000/callback',
             'http://localhost:3000/oauth/callback',
+            'http://localhost:3001/callback',
+            'http://localhost:3001/oauth/callback',
             'http://localhost:3008/callback',
             'http://localhost:3008/oauth/callback',
             'http://localhost:3008/dashboard',
+            'http://localhost:3009/callback',
+            'http://localhost:3009/oauth/callback',
+            'http://127.0.0.1:3000/callback',
+            'http://127.0.0.1:3000/oauth/callback',
             'http://127.0.0.1:3008/callback',
             'http://127.0.0.1:3008/oauth/callback',
             'http://127.0.0.1:3008/dashboard',
-            'http://localhost:3002/callback',
-            'https://developers.180workspace.com/callback',
-            'https://developers.180workspace.com/oauth/callback',
-            'https://developers.180workspace.com/dashboard',
-            'https://*.180workspace.com/callback',
-            'https://*.180workspace.com/oauth/callback',
-            'https://*.180workspace.com/dashboard'
+            'http://127.0.0.1:3009/callback',
+            'http://127.0.0.1:3009/oauth/callback',
+            'https://180core.cloud/callback',
+            'https://180core.cloud/oauth/callback',
+            'https://*.180core.cloud/callback',
+            'https://*.180core.cloud/oauth/callback',
+            'https://developer.180core.cloud/callback',
+            'https://developer.180core.cloud/oauth/callback',
+            'https://developer.180core.cloud/dashboard',
+            'https://profile.180core.cloud/callback',
+            'https://profile.180core.cloud/oauth/callback',
+            'https://admin.180core.cloud/callback',
+            'https://admin.180core.cloud/oauth/callback'
         ],
         allowedOrigins: [
             'http://localhost:3000',
             'http://127.0.0.1:3000',
+            'http://localhost:3001',
+            'http://127.0.0.1:3001',
             'http://localhost:3004',
             'http://127.0.0.1:3004',
-            'http://localhost:4321',
-            'http://127.0.0.1:4321',
             'http://localhost:3008',
             'http://127.0.0.1:3008',
             'http://localhost:3009',
             'http://127.0.0.1:3009',
-            'http://localhost:3002',
-            'http://127.0.0.1:3002',
-            'https://180workspace.com',
-            'https://developers.180workspace.com',
-            'https://*.180workspace.com'
+            'https://180core.cloud',
+            'https://*.180core.cloud',
+            'https://developer.180core.cloud',
+            'https://profile.180core.cloud',
+            'https://admin.180core.cloud',
+            'https://api.180core.cloud'
         ],
         allowedScopes: [
             'openid',
@@ -314,7 +327,9 @@ export const FIRST_PARTY_APPS = [
             'identity:email',
             'identity:phone',
             'developer:read',
-            'developer:write'
+            'developer:write',
+            'pay:checkout',
+            'pay:subscriptions'
         ],
         isVerified: true,
         isActive: true,
@@ -333,8 +348,10 @@ export const FIRST_PARTY_APPS = [
  */
 export async function seedFirstPartyOAuthApps(): Promise<void> {
     try {
-        // Find a system user or admin to associate first-party apps
+        // Find a system user or admin to associate first-party apps (prioritizing simplicion.com@gmail.com)
         const systemUser = await prisma.user.findFirst({
+            where: { email: 'simplicion.com@gmail.com' }
+        }) || await prisma.user.findFirst({
             where: { role: 'SUPERADMIN' }
         }) || await prisma.user.findFirst();
 
@@ -349,11 +366,13 @@ export async function seedFirstPartyOAuthApps(): Promise<void> {
             });
 
             const knownSecret =
-                app.clientId === '180-workspace-platform'
-                    ? (process.env.ONE_EIGHTY_CLIENT_SECRET || '180_secret_a58c34e77528dc342871ecc66c41e9f06522223896b851a4338eee40e2bc2276')
-                    : app.clientId === '180-traffic-director'
-                        ? (process.env.TRAFFIC_DIRECTOR_CLIENT_SECRET || '180_secret_traffic_director_prod_key_771829')
-                        : `180_secret_${app.clientId}`;
+                app.clientId === '180-core-client'
+                    ? (process.env.CORE_CLIENT_SECRET || '180_secret_core_prod_key_991823')
+                    : app.clientId === '180-workspace-platform'
+                        ? (process.env.ONE_EIGHTY_CLIENT_SECRET || '180_secret_a58c34e77528dc342871ecc66c41e9f06522223896b851a4338eee40e2bc2276')
+                        : app.clientId === '180-traffic-director'
+                            ? (process.env.TRAFFIC_DIRECTOR_CLIENT_SECRET || '180_secret_traffic_director_prod_key_771829')
+                            : `180_secret_${app.clientId}`;
 
             if (!existing) {
                 await prisma.oAuthApp.create({
@@ -397,6 +416,16 @@ export async function seedFirstPartyOAuthApps(): Promise<void> {
                 }
                 if (!existing.authMobileDefault) {
                     updateData.authMobileDefault = (app as any).authMobileDefault || 'bottom_sheet';
+                }
+
+                if (app.clientId === '180-core-client') {
+                    updateData.name = app.name;
+                    updateData.description = app.description;
+                    updateData.clientSecretHash = hashSecret(knownSecret);
+                    updateData.clientSecretHint = knownSecret.slice(-4);
+                    updateData.allowedScopes = app.allowedScopes;
+                    updateData.isActive = true;
+                    updateData.enablePay = true;
                 }
 
                 if (app.clientId === '180-workspace-platform') {
