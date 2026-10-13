@@ -257,6 +257,7 @@ export class CheckoutService {
               id: sessionId,
               appId: platformApp.id,
               amount,
+              originalAmount: amount,
               currency: 'USD',
               status: 'PENDING',
               mode: 'subscription',
@@ -1312,7 +1313,8 @@ export class CheckoutService {
 
     const { gatewayType, keySecret } = this.resolveGatewayConfig(session.app);
     const hasLiveGateway = Boolean(keySecret && !keySecret.includes('simulated'));
-    if (hasLiveGateway) {
+    const isFreeCheckout = session.amount !== null && session.amount <= 0;
+    if (hasLiveGateway && !isFreeCheckout) {
       throw new Error(
         'Direct bypass payment is disabled in live environment. Please complete payment through Razorpay / Stripe gateway.'
       );

@@ -263,9 +263,9 @@ export class CouponService {
       }
     }
 
-    // 6. Minimum order threshold (Evaluated against the REAL monetary amount across currencies)
-    const couponBaseCurrency = 'INR';
-    const targetOrderCurrency = (input.orderCurrency || 'INR').toUpperCase();
+    // 6. Minimum order threshold (Platform default canonical base currency is strictly USD)
+    const couponBaseCurrency = 'USD';
+    const targetOrderCurrency = (input.orderCurrency || 'USD').toUpperCase();
     const minOrderThreshold = coupon.minOrderAmount && coupon.minOrderAmount > 0
       ? GeoPricingService.convertCurrency(coupon.minOrderAmount, couponBaseCurrency, targetOrderCurrency)
       : 0;

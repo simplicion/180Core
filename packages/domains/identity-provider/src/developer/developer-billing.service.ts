@@ -374,6 +374,7 @@ export class DeveloperBillingService {
           appId: targetPlan.appId,
           userId,
           amount,
+          originalAmount: amount,
           currency: 'USD',
           status: 'PENDING',
           mode: 'subscription',

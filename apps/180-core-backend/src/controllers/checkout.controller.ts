@@ -57,6 +57,7 @@ export class CheckoutApiController {
                 appId: app.id,
                 code: String(couponCode),
                 orderAmount: Number(amount),
+                orderCurrency: String(currency || 'USD').toUpperCase(),
                 origin: typeof rawOrigin === 'string' ? rawOrigin : '',
               });
               if (validation.valid) {
@@ -229,6 +230,7 @@ export class CheckoutApiController {
           appId: app.id,
           code: String(couponCode),
           orderAmount: Number(amount),
+          orderCurrency: String(currency || 'USD').toUpperCase(),
           origin: typeof rawOrigin === 'string' ? rawOrigin : '',
         });
         if (validation.valid) {
@@ -441,14 +443,19 @@ export class CheckoutApiController {
 
       const rawOrigin = req.headers.origin || req.headers.referer || '';
       const origin = typeof rawOrigin === 'string' ? rawOrigin : '';
-      const baseAmount = session.originalAmount && session.originalAmount > 0 ? session.originalAmount : session.amount;
-      const orderCurrency = String(req.body.currency || session.currency || 'USD').toUpperCase();
 
+      // Platform canonical base currency is ALWAYS strictly USD
+      const sessionCurrency = String(session.currency || 'USD').toUpperCase();
+      const sessionBaseAmount = session.originalAmount && session.originalAmount > 0 ? session.originalAmount : session.amount;
+      const clientRequestedCurrency = req.body.currency ? String(req.body.currency).toUpperCase() : sessionCurrency;
+      const clientOrderAmount = typeof req.body.orderAmount === 'number' && req.body.orderAmount > 0 ? req.body.orderAmount : null;
+
+      // 1. ALWAYS validate the coupon against the REAL platform base currency (USD) and REAL base amount server-side!
       const validation = await CouponService.validateCoupon({
         appId: session.appId,
         code: String(code),
-        orderAmount: typeof req.body.orderAmount === 'number' && req.body.orderAmount > 0 ? req.body.orderAmount : baseAmount,
-        orderCurrency,
+        orderAmount: sessionBaseAmount,
+        orderCurrency: sessionCurrency,
         customerEmail: customerEmail ? String(customerEmail) : undefined,
         origin,
         planId: session.planId || undefined,
@@ -462,30 +469,41 @@ export class CheckoutApiController {
         });
       }
 
-      const sessionCurrency = String(session.currency || 'USD').toUpperCase();
-      const discountInSessionCurrency = orderCurrency === sessionCurrency
-        ? validation.discountAmount
-        : GeoPricingService.convertCurrency(validation.discountAmount, orderCurrency, sessionCurrency);
+      // 2. Canonical base discount and final amounts strictly in session currency (USD)
+      const baseDiscountAmount = validation.discountAmount;
+      const baseFinalAmount = Math.max(0, Math.round((sessionBaseAmount - baseDiscountAmount) * 100) / 100);
 
-      const finalInSessionCurrency = Math.max(
-        0,
-        Math.round((baseAmount - discountInSessionCurrency) * 100) / 100
-      );
+      // 3. Display amounts converted for client active view
+      let displayDiscountAmount = baseDiscountAmount;
+      let displayFinalAmount = baseFinalAmount;
+
+      if (clientRequestedCurrency !== sessionCurrency) {
+        if (clientOrderAmount && clientOrderAmount > 0 && sessionBaseAmount > 0) {
+          const discountRatio = baseDiscountAmount / sessionBaseAmount;
+          displayDiscountAmount = Math.round(Math.min(clientOrderAmount, clientOrderAmount * discountRatio) * 100) / 100;
+          displayFinalAmount = Math.max(0, Math.round((clientOrderAmount - displayDiscountAmount) * 100) / 100);
+        } else {
+          displayDiscountAmount = GeoPricingService.convertCurrency(baseDiscountAmount, sessionCurrency, clientRequestedCurrency);
+          displayFinalAmount = GeoPricingService.convertCurrency(baseFinalAmount, sessionCurrency, clientRequestedCurrency);
+        }
+      }
 
       const updated = await prisma.checkoutSession.update({
         where: { id: session.id },
         data: {
-          originalAmount: baseAmount,
-          amount: finalInSessionCurrency,
+          originalAmount: sessionBaseAmount,
+          amount: baseFinalAmount,
           couponId: validation.couponId || null,
           couponCode: validation.code,
-          discountAmount: discountInSessionCurrency,
+          discountAmount: baseDiscountAmount,
           metadata: {
             ...((session.metadata as any) || {}),
-            appliedCurrency: orderCurrency,
-            couponOrderCurrency: orderCurrency,
-            couponDiscountInOrderCurrency: validation.discountAmount,
-            couponFinalInOrderCurrency: validation.finalAmount,
+            appliedCurrency: clientRequestedCurrency,
+            couponOrderCurrency: clientRequestedCurrency,
+            couponDiscountInOrderCurrency: displayDiscountAmount,
+            couponFinalInOrderCurrency: displayFinalAmount,
+            couponDiscountBaseUSD: baseDiscountAmount,
+            couponFinalBaseUSD: baseFinalAmount,
             razorpayOrderId: null,
             razorpayAmountPaise: null,
             razorpayCurrency: null,
@@ -497,8 +515,11 @@ export class CheckoutApiController {
       return res.status(200).json({
         success: true,
         session: updated,
-        discountAmount: validation.discountAmount,
-        finalAmount: validation.finalAmount,
+        discountAmount: displayDiscountAmount,
+        finalAmount: displayFinalAmount,
+        discountAmountUSD: baseDiscountAmount,
+        finalAmountUSD: baseFinalAmount,
+        currency: clientRequestedCurrency,
         code: validation.code,
       });
     } catch (err: any) {
@@ -538,6 +559,12 @@ export class CheckoutApiController {
           discountAmount: 0,
           metadata: {
             ...((session.metadata as any) || {}),
+            appliedCurrency: null,
+            couponOrderCurrency: null,
+            couponDiscountInOrderCurrency: 0,
+            couponFinalInOrderCurrency: revertedAmount,
+            couponDiscountBaseUSD: 0,
+            couponFinalBaseUSD: revertedAmount,
             razorpayOrderId: null,
             razorpayAmountPaise: null,
             razorpayCurrency: null,

@@ -421,10 +421,24 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
   }, [rawDeveloperOriginal, developerOriginalCurrency, activeCurrency]);
 
   const activeDiscountAmount = useMemo(() => {
-    if (!session?.discountAmount) return 0;
-    if (activeCurrency === developerOriginalCurrency) return session.discountAmount;
-    return currencyService.convert(session.discountAmount, developerOriginalCurrency, activeCurrency);
-  }, [session?.discountAmount, developerOriginalCurrency, activeCurrency]);
+    if (!session?.discountAmount || session.discountAmount <= 0) return 0;
+    let converted = session.discountAmount;
+    if (activeCurrency === developerOriginalCurrency) {
+      converted = session.discountAmount;
+    } else {
+      const meta = session.metadata as any;
+      if (meta?.couponOrderCurrency === activeCurrency && typeof meta?.couponDiscountInOrderCurrency === 'number') {
+        converted = meta.couponDiscountInOrderCurrency;
+      } else if (rawDeveloperOriginal > 0) {
+        const ratio = Math.min(1, session.discountAmount / rawDeveloperOriginal);
+        converted = activeOriginalAmount * ratio;
+      } else {
+        converted = currencyService.convert(session.discountAmount, developerOriginalCurrency, activeCurrency);
+      }
+    }
+    // Strict safety constraint: Discount can NEVER exceed active original amount
+    return Math.min(activeOriginalAmount, Math.round(converted * 100) / 100);
+  }, [session?.discountAmount, session?.metadata, developerOriginalCurrency, activeCurrency, activeOriginalAmount, rawDeveloperOriginal]);
 
   const activeFinalAmount = useMemo(() => {
     return Math.max(0, Math.round((activeOriginalAmount - activeDiscountAmount) * 100) / 100);
@@ -512,6 +526,13 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
           amount: data.session?.amount ?? finalAmt,
           couponCode: codeUsed,
           discountAmount: data.session?.discountAmount ?? 0,
+          metadata: {
+            ...((prev?.metadata as any) || {}),
+            ...((data.session?.metadata as any) || {}),
+            couponOrderCurrency: activeCurrency,
+            couponDiscountInOrderCurrency: discountAmt,
+            couponFinalInOrderCurrency: finalAmt,
+          },
           app: prev?.app || data.session?.app,
         }));
         toast.success(
@@ -557,6 +578,16 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
         setSession((prev: any) => ({
           ...prev,
           ...data.session,
+          couponCode: null,
+          couponId: null,
+          discountAmount: 0,
+          metadata: {
+            ...((prev?.metadata as any) || {}),
+            ...((data.session?.metadata as any) || {}),
+            couponOrderCurrency: null,
+            couponDiscountInOrderCurrency: 0,
+            couponFinalInOrderCurrency: data.session?.amount,
+          },
           app: prev?.app || data.session.app,
         }));
         toast.success('Coupon removed', { id: 'coupon-toast' });
@@ -632,7 +663,7 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
           (sessionId.startsWith('sess_dev_')
             ? (sessionId.includes('_pro_') ? '10 Projects Access with 180 Identity & 180 Pay' : '5 Projects Access with 180 Identity & 180 Pay')
             : 'Secure Online Checkout');
-        const queryCurrency = urlParams?.get('currency') || (sessionId.startsWith('sess_dev_') ? 'USD' : 'INR');
+        const queryCurrency = urlParams?.get('currency') || 'USD';
         const queryApp =
           urlParams?.get('appName') ||
           urlParams?.get('app') ||
@@ -861,6 +892,54 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
 
   const handleDirectPayment = async () => {
     if (!session) return;
+
+    // Free promotional checkout (100% off coupon / 0 charge)
+    if (activeFinalAmount <= 0) {
+      setTopupLoading(true);
+      const toastId = toast.loading('Completing promotional free checkout...');
+      try {
+        const res = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/direct-execute`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            paymentMethod: 'PROMO_FREE',
+            customerEmail: session?.customerEmail || (wallet?.user as any)?.email,
+          }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          toast.success('Promotional checkout completed successfully!', { id: toastId });
+          setCompleted(true);
+          setTopupLoading(false);
+          const txId = data.transactionId || 'tx_free_' + Math.random().toString(36).substring(2, 10);
+          const payload = {
+            type: '180_PAYMENT_SUCCESS',
+            sessionId,
+            transactionId: txId,
+            amount: 0,
+            currency: activeCurrency,
+          };
+          if (typeof window !== 'undefined') {
+            if (window.opener) window.opener.postMessage(payload, '*');
+            if (window.parent && window.parent !== window) window.parent.postMessage(payload, '*');
+            setTimeout(() => {
+              if (session?.returnUrl) {
+                window.location.href = session.returnUrl;
+              } else if (window.opener) {
+                window.close();
+              }
+            }, 1500);
+          }
+          return;
+        } else {
+          throw new Error(data.error || 'Failed to complete free promotional checkout');
+        }
+      } catch (err: any) {
+        toast.error(err.message || 'Free checkout error', { id: toastId });
+        setTopupLoading(false);
+        return;
+      }
+    }
 
     const isPureDemoSession = Boolean(
       sessionId && (sessionId === 'default' || sessionId.startsWith('sess_demo_') || sessionId.startsWith('sess_sandbox_'))
