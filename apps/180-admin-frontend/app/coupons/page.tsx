@@ -29,9 +29,22 @@ import {
   Eye,
   Sliders,
   Flame,
+  Info,
+  Code2,
+  Briefcase,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { adminApi, exportToCsv } from '@/lib/api';
+
+interface PlatformPlan {
+  id: string;
+  planCode: string;
+  name: string;
+  amount: number;
+  currency: string;
+  interval: string;
+  appId: string;
+}
 
 interface CouponItem {
   id: string;
@@ -54,19 +67,16 @@ interface CouponItem {
     name: string;
     clientId: string;
     logoUrl?: string;
-    user?: {
-      id: string;
-      name: string;
-      email: string;
-    };
   };
   _count?: {
     redemptions: number;
   };
 }
 
-export default function CouponsManagementPage() {
+export default function PlatformCouponsManagementPage() {
   const [coupons, setCoupons] = useState<CouponItem[]>([]);
+  const [platformPlans, setPlatformPlans] = useState<PlatformPlan[]>([]);
+  const [platformApps, setPlatformApps] = useState<any[]>([]);
   const [metrics, setMetrics] = useState({
     totalCoupons: 0,
     activeCoupons: 0,
@@ -77,7 +87,6 @@ export default function CouponsManagementPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [quickFilter, setQuickFilter] = useState<'ALL' | 'ACTIVE' | 'PERCENTAGE' | 'FIXED' | 'EXPIRED'>('ALL');
-  const [appsList, setAppsList] = useState<any[]>([]);
 
   // Action states
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
@@ -102,13 +111,13 @@ export default function CouponsManagementPage() {
     maxRedemptions: '100',
     perCustomerLimit: '1',
     validUntil: '',
-    appId: 'UNIVERSAL',
+    appId: '',
+    selectedPlan: 'ALL',
     isActive: true,
   });
 
   useEffect(() => {
     loadCoupons();
-    loadApps();
   }, [search, statusFilter]);
 
   const loadCoupons = async () => {
@@ -123,23 +132,21 @@ export default function CouponsManagementPage() {
         if (res.metrics) {
           setMetrics(res.metrics);
         }
+        if (res.platformPlans) {
+          setPlatformPlans(res.platformPlans);
+        }
+        if (res.platformApps) {
+          setPlatformApps(res.platformApps);
+          if (!formData.appId && res.platformApps.length > 0) {
+            setFormData((prev) => ({ ...prev, appId: res.platformApps[0].id }));
+          }
+        }
       }
     } catch (err) {
-      console.error('Failed to load coupons', err);
+      console.error('Failed to load 180 Core platform coupons', err);
       toast.error('Failed to fetch platform coupons');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadApps = async () => {
-    try {
-      const res = await adminApi.getApps({ limit: 100 });
-      if (res.success) {
-        setAppsList(res.apps || res.data?.apps || []);
-      }
-    } catch (e) {
-      console.error('Failed to fetch apps list for coupons', e);
     }
   };
 
@@ -156,7 +163,7 @@ export default function CouponsManagementPage() {
       setTogglingId(coupon.id);
       const res = await adminApi.updateCoupon(coupon.id, { isActive: nextActive });
       if (res.success) {
-        toast.success(`Coupon "${coupon.code}" is now ${nextActive ? 'ACTIVE' : 'PAUSED'}`);
+        toast.success(`Platform Coupon "${coupon.code}" is now ${nextActive ? 'ACTIVE' : 'PAUSED'}`);
         setCoupons((prev) =>
           prev.map((c) => (c.id === coupon.id ? { ...c, isActive: nextActive } : c))
         );
@@ -178,13 +185,13 @@ export default function CouponsManagementPage() {
       setDeletingId(couponToDelete.id);
       const res = await adminApi.deleteCoupon(couponToDelete.id);
       if (res.success) {
-        toast.success(`Coupon "${couponToDelete.code}" deleted permanently`);
+        toast.success(`Platform Coupon "${couponToDelete.code}" deleted permanently`);
         setCoupons((prev) => prev.filter((c) => c.id !== couponToDelete.id));
         setCouponToDelete(null);
         loadCoupons();
       }
     } catch (err: any) {
-      toast.error(err.message || 'Failed to delete coupon');
+      toast.error(err.message || 'Failed to delete platform coupon');
     } finally {
       setDeletingId(null);
     }
@@ -207,7 +214,7 @@ export default function CouponsManagementPage() {
   };
 
   const generateRandomCode = () => {
-    const prefixes = ['DEV', 'LAUNCH', 'SUPER', 'SUMMER', 'BUILD', 'PROMO', 'BOOST'];
+    const prefixes = ['DEV', 'BUILD', 'LAUNCH', 'SUPER', 'SUMMER', 'PROMO', 'SCALE'];
     const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
     const num = Math.floor(10 + Math.random() * 90);
     setFormData((prev) => ({ ...prev, code: `${prefix}${num}` }));
@@ -231,6 +238,8 @@ export default function CouponsManagementPage() {
 
     try {
       setIsSubmitting(true);
+      const validPlans = formData.selectedPlan && formData.selectedPlan !== 'ALL' ? [formData.selectedPlan] : [];
+
       const payload: any = {
         code: formData.code.trim().toUpperCase(),
         discountType: formData.discountType,
@@ -240,13 +249,14 @@ export default function CouponsManagementPage() {
         maxRedemptions: formData.maxRedemptions ? Number(formData.maxRedemptions) : null,
         perCustomerLimit: formData.perCustomerLimit ? Number(formData.perCustomerLimit) : 1,
         validUntil: formData.validUntil ? new Date(formData.validUntil).toISOString() : null,
+        validPlans,
         isActive: formData.isActive,
-        appId: formData.appId,
+        appId: formData.appId || undefined,
       };
 
       const res = await adminApi.createCoupon(payload);
       if (res.success) {
-        toast.success(`Coupon ${payload.code} created and live!`);
+        toast.success(`Platform coupon ${payload.code} deployed successfully!`);
         setIsCreateOpen(false);
         setFormData({
           code: '',
@@ -257,13 +267,14 @@ export default function CouponsManagementPage() {
           maxRedemptions: '100',
           perCustomerLimit: '1',
           validUntil: '',
-          appId: 'UNIVERSAL',
+          appId: platformApps[0]?.id || '',
+          selectedPlan: 'ALL',
           isActive: true,
         });
         loadCoupons();
       }
     } catch (err: any) {
-      toast.error(err.message || 'Failed to create coupon code');
+      toast.error(err.message || 'Failed to create platform coupon code');
     } finally {
       setIsSubmitting(false);
     }
@@ -294,7 +305,7 @@ export default function CouponsManagementPage() {
       Type: c.discountType,
       Value: c.discountType === 'PERCENTAGE' ? `${c.discountValue}%` : `$${c.discountValue}`,
       Status: c.isActive ? 'ACTIVE' : 'PAUSED',
-      ScopeApp: c.app?.name || 'Universal',
+      PlatformTarget: c.app?.name || '180 Core Platform',
       Redemptions: c._count?.redemptions || 0,
       MaxRedemptions: c.maxRedemptions || 'Unlimited',
       MinOrder: c.minOrderAmount ? `$${c.minOrderAmount}` : 'None',
@@ -302,8 +313,8 @@ export default function CouponsManagementPage() {
       ValidUntil: c.validUntil ? new Date(c.validUntil).toLocaleDateString() : 'Never',
       CreatedAt: new Date(c.createdAt).toLocaleDateString(),
     }));
-    exportToCsv('180core_coupons_report', rows);
-    toast.success('Coupons exported to CSV');
+    exportToCsv('180core_platform_coupons_report', rows);
+    toast.success('Platform coupons exported to CSV');
   };
 
   return (
@@ -314,17 +325,17 @@ export default function CouponsManagementPage() {
           <div className="flex items-center gap-2 mb-1">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
               <Sparkles className="h-3 w-3" />
-              Promotional Engine
+              180 Core Platform
             </span>
             <span className="text-xs text-zinc-500 dark:text-zinc-400">
-              Checkout & Developer Discounts
+              Developer Discounts & Subscriptions
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Coupons & Promo Codes
+            Platform Coupons & Developer Discounts
           </h1>
           <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400 max-w-2xl">
-            Create promotional discount codes for developer subscriptions, SDK usage, and 180 Pay checkout sessions with granular rate limits and app-level isolation.
+            Manage first-party 180 Core platform coupon codes for developers purchasing developer subscriptions, plans, and platform services.
           </p>
         </div>
 
@@ -342,9 +353,30 @@ export default function CouponsManagementPage() {
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20 transition active:scale-95"
           >
             <Plus className="h-4 w-4" />
-            Create Coupon
+            Create Platform Coupon
           </button>
         </div>
+      </div>
+
+      {/* ─── Architecture & Isolation Notice Banner ─── */}
+      <div className="p-4 rounded-2xl bg-blue-500/5 dark:bg-blue-500/10 border border-blue-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500 shrink-0">
+            <Info className="h-4 w-4" />
+          </div>
+          <div>
+            <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+              Strict Platform Isolation Active:
+            </span>{' '}
+            <span className="text-zinc-600 dark:text-zinc-400">
+              This console strictly manages official <strong className="text-zinc-900 dark:text-zinc-200">180 Core platform promotions</strong> for developer subscriptions and plans. Independent developers manage coupons for their own apps within their individual project portals.
+            </span>
+          </div>
+        </div>
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-800 shrink-0">
+          <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
+          Multi-Tenant Isolation
+        </span>
       </div>
 
       {/* ─── KPI Metrics Deck ─── */}
@@ -352,7 +384,7 @@ export default function CouponsManagementPage() {
         {/* Total Codes */}
         <div className="p-5 rounded-2xl bg-white dark:bg-zinc-950/70 border border-zinc-200 dark:border-zinc-800/80 shadow-sm backdrop-blur-sm relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Total Coupons</span>
+            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Platform Coupons</span>
             <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500 border border-blue-500/20">
               <Tag className="h-4 w-4" />
             </div>
@@ -364,7 +396,7 @@ export default function CouponsManagementPage() {
             <span className="text-xs text-zinc-500">campaigns</span>
           </div>
           <div className="mt-2 text-xs text-zinc-500 flex items-center gap-1">
-            <span className="text-emerald-500 font-medium">All-time</span> platform promotional codes
+            <span className="text-emerald-500 font-medium">180 Core</span> developer promotions
           </div>
         </div>
 
@@ -383,14 +415,14 @@ export default function CouponsManagementPage() {
             <span className="text-xs text-zinc-500">live now</span>
           </div>
           <div className="mt-2 text-xs text-zinc-500 flex items-center gap-1">
-            <span className="text-emerald-500 font-medium">Redeemable</span> in checkout right now
+            <span className="text-emerald-500 font-medium">Redeemable</span> by developers at checkout
           </div>
         </div>
 
         {/* Total Redemptions */}
         <div className="p-5 rounded-2xl bg-white dark:bg-zinc-950/70 border border-zinc-200 dark:border-zinc-800/80 shadow-sm backdrop-blur-sm relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Total Redemptions</span>
+            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Developer Redemptions</span>
             <div className="p-2 rounded-xl bg-purple-500/10 text-purple-500 border border-purple-500/20">
               <Users className="h-4 w-4" />
             </div>
@@ -403,14 +435,14 @@ export default function CouponsManagementPage() {
           </div>
           <div className="mt-2 text-xs text-zinc-500 flex items-center gap-1">
             <TrendingUp className="h-3 w-3 text-purple-500" />
-            Applied across 180 Pay sessions
+            Applied across platform checkout
           </div>
         </div>
 
         {/* Discount Granted */}
         <div className="p-5 rounded-2xl bg-white dark:bg-zinc-950/70 border border-zinc-200 dark:border-zinc-800/80 shadow-sm backdrop-blur-sm relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Value Granted</span>
+            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Developer Savings</span>
             <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20">
               <DollarSign className="h-4 w-4" />
             </div>
@@ -422,12 +454,12 @@ export default function CouponsManagementPage() {
             <span className="text-xs text-zinc-500">USD</span>
           </div>
           <div className="mt-2 text-xs text-zinc-500 flex items-center gap-1">
-            Developer subsidy & promotional savings
+            Platform subsidy granted to developers
           </div>
         </div>
       </div>
 
-      {/* ─── Search, Status Filters & Quick Selector ─── */}
+      {/* ─── Search & Status Filters ─── */}
       <div className="space-y-3">
         <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
           <div className="relative flex-1">
@@ -436,7 +468,7 @@ export default function CouponsManagementPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search coupon by code (e.g. DEV50, SUMMER20) or target app..."
+              placeholder="Search platform coupon by code (e.g. FREE0, FREE99, DEV50)..."
               className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition"
             />
             {search && (
@@ -464,7 +496,7 @@ export default function CouponsManagementPage() {
             <button
               onClick={loadCoupons}
               className="p-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition"
-              title="Refresh coupons"
+              title="Refresh platform coupons"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
@@ -474,7 +506,7 @@ export default function CouponsManagementPage() {
         {/* Quick Filter Chips */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
           {[
-            { id: 'ALL', label: 'All Codes', count: coupons.length },
+            { id: 'ALL', label: 'All Platform Codes', count: coupons.length },
             { id: 'ACTIVE', label: 'Active Promos', count: coupons.filter((c) => c.isActive && (!c.validUntil || new Date(c.validUntil) > new Date())).length },
             { id: 'PERCENTAGE', label: 'Percentage %', count: coupons.filter((c) => c.discountType === 'PERCENTAGE').length },
             { id: 'FIXED', label: 'Fixed Amount $', count: coupons.filter((c) => c.discountType === 'FIXED_AMOUNT').length },
@@ -510,9 +542,10 @@ export default function CouponsManagementPage() {
               <tr className="border-b border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/70 dark:bg-zinc-900/40 text-zinc-500 dark:text-zinc-400 uppercase tracking-wider font-semibold">
                 <th className="py-3.5 px-4">Coupon Code</th>
                 <th className="py-3.5 px-4">Discount</th>
-                <th className="py-3.5 px-4">Scope / App</th>
+                <th className="py-3.5 px-4">Target Scope</th>
+                <th className="py-3.5 px-4">Eligible Plans</th>
                 <th className="py-3.5 px-4">Redemptions</th>
-                <th className="py-3.5 px-4">Order Rules</th>
+                <th className="py-3.5 px-4">Rules</th>
                 <th className="py-3.5 px-4">Validity</th>
                 <th className="py-3.5 px-4">Status</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
@@ -521,25 +554,25 @@ export default function CouponsManagementPage() {
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/60">
               {loading && !coupons.length ? (
                 <tr>
-                  <td colSpan={8} className="py-16 text-center text-zinc-400">
+                  <td colSpan={9} className="py-16 text-center text-zinc-400">
                     <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-blue-500" />
                     Loading platform coupons...
                   </td>
                 </tr>
               ) : !filteredCoupons.length ? (
                 <tr>
-                  <td colSpan={8} className="py-16 text-center text-zinc-500 dark:text-zinc-400">
+                  <td colSpan={9} className="py-16 text-center text-zinc-500 dark:text-zinc-400">
                     <Tag className="h-8 w-8 mx-auto mb-3 opacity-30 text-zinc-400" />
-                    <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">No coupons found</p>
+                    <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">No platform coupons found</p>
                     <p className="text-xs text-zinc-500 mt-1">
-                      {search ? 'Try adjusting your search query or status filter.' : 'Create your first promo code to grant developer discounts.'}
+                      {search ? 'Try adjusting your search query or status filter.' : 'Deploy a promotional code for developers to use during platform checkout.'}
                     </p>
                     <button
                       onClick={() => setIsCreateOpen(true)}
                       className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-500 transition"
                     >
                       <Plus className="h-3.5 w-3.5" />
-                      Create Coupon
+                      Create Platform Coupon
                     </button>
                   </td>
                 </tr>
@@ -597,33 +630,43 @@ export default function CouponsManagementPage() {
                         </div>
                       </td>
 
-                      {/* Scope / App */}
+                      {/* Scope / Target */}
                       <td className="py-3.5 px-4">
-                        {c.app ? (
-                          <div className="flex items-center gap-2">
-                            <div className="h-6 w-6 rounded-md bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center font-bold text-[10px] text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
-                              {c.app.name.charAt(0).toUpperCase()}
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="font-medium text-zinc-900 dark:text-zinc-200 truncate max-w-[140px]">
-                                {c.app.name}
+                        <div className="flex items-center gap-2">
+                          <div className="h-6 w-6 rounded-md bg-blue-500/10 text-blue-500 flex items-center justify-center font-bold text-[10px] border border-blue-500/20">
+                            <Code2 className="h-3.5 w-3.5" />
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-medium text-zinc-900 dark:text-zinc-200">
+                              {c.app?.name || '180 Core Platform'}
+                            </span>
+                            <span className="text-[10px] text-zinc-400">
+                              Developer Portal & Checkout
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Eligible Plans */}
+                      <td className="py-3.5 px-4">
+                        {c.validPlans && c.validPlans.length > 0 ? (
+                          <div className="flex flex-wrap gap-1 max-w-[160px]">
+                            {c.validPlans.map((p) => (
+                              <span key={p} className="px-1.5 py-0.5 rounded text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-mono">
+                                {p}
                               </span>
-                              <span className="text-[10px] font-mono text-zinc-400">
-                                {c.app.clientId}
-                              </span>
-                            </div>
+                            ))}
                           </div>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
-                            <Layers className="h-3 w-3" />
-                            Universal
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            All Platform Plans
                           </span>
                         )}
                       </td>
 
                       {/* Redemptions */}
                       <td className="py-3.5 px-4">
-                        <div className="flex flex-col gap-1 min-w-[120px]">
+                        <div className="flex flex-col gap-1 min-w-[110px]">
                           <div className="flex items-center justify-between text-zinc-700 dark:text-zinc-300">
                             <span className="font-medium">{redemptionsCount}</span>
                             <span className="text-zinc-400 text-[11px]">
@@ -651,7 +694,7 @@ export default function CouponsManagementPage() {
                       <td className="py-3.5 px-4 text-zinc-600 dark:text-zinc-400">
                         <div className="flex flex-col text-[11px] gap-0.5">
                           <span>Min: {c.minOrderAmount ? `$${c.minOrderAmount}` : 'None'}</span>
-                          <span className="text-zinc-400">Limit: {c.perCustomerLimit} per customer</span>
+                          <span className="text-zinc-400">Limit: {c.perCustomerLimit}/dev</span>
                         </div>
                       </td>
 
@@ -705,7 +748,7 @@ export default function CouponsManagementPage() {
                                 ? 'bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-amber-500/20'
                                 : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20'
                             }`}
-                            title={c.isActive ? 'Pause coupon' : 'Activate coupon'}
+                            title={c.isActive ? 'Pause platform coupon' : 'Activate platform coupon'}
                           >
                             {togglingId === c.id ? (
                               <RefreshCw className="h-3 w-3 animate-spin" />
@@ -729,7 +772,7 @@ export default function CouponsManagementPage() {
                           <button
                             onClick={() => setCouponToDelete(c)}
                             className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-500 hover:bg-rose-500/10 transition"
-                            title="Delete Coupon"
+                            title="Delete Platform Coupon"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -744,7 +787,7 @@ export default function CouponsManagementPage() {
         </div>
       </div>
 
-      {/* ─── Create Coupon Modal ─── */}
+      {/* ─── Create Platform Coupon Modal ─── */}
       {isCreateOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-3xl max-w-xl w-full p-6 shadow-2xl relative overflow-hidden flex flex-col max-h-[92vh]">
@@ -756,10 +799,10 @@ export default function CouponsManagementPage() {
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
-                    Create Promotional Coupon
+                    Deploy Platform Coupon
                   </h3>
                   <p className="text-xs text-zinc-500">
-                    Configure promotional discount codes for checkout & developer accounts
+                    Create discount code for 180 Core developer subscriptions & workspace plans
                   </p>
                 </div>
               </div>
@@ -777,7 +820,7 @@ export default function CouponsManagementPage() {
                 {/* Code + Generator */}
                 <div>
                   <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                    Coupon Code *
+                    Platform Coupon Code *
                   </label>
                   <div className="flex gap-2">
                     <input
@@ -785,7 +828,7 @@ export default function CouponsManagementPage() {
                       required
                       value={formData.code}
                       onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase().replace(/\s+/g, '') })}
-                      placeholder="e.g. DEV50, WELCOME20, BLACKFRIDAY"
+                      placeholder="e.g. DEV50, WELCOME20, LIMITLESS"
                       className="flex-1 px-3.5 py-2.5 rounded-xl font-mono uppercase text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition"
                     />
                     <button
@@ -797,6 +840,30 @@ export default function CouponsManagementPage() {
                       Auto-Generate
                     </button>
                   </div>
+                </div>
+
+                {/* Target Platform App Scope */}
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                    Platform Target Scope *
+                  </label>
+                  <select
+                    value={formData.appId}
+                    onChange={(e) => setFormData({ ...formData, appId: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  >
+                    {platformApps.map((app) => (
+                      <option key={app.id} value={app.id}>
+                        {app.name} ({app.clientId})
+                      </option>
+                    ))}
+                    {!platformApps.length && (
+                      <option value="">180 Core Platform (Global Developer Portal)</option>
+                    )}
+                  </select>
+                  <p className="text-[11px] text-zinc-500 mt-1">
+                    Coupons created here apply strictly to official 180 Core developer plans and subscriptions.
+                  </p>
                 </div>
 
                 {/* Discount Type Toggle */}
@@ -819,7 +886,7 @@ export default function CouponsManagementPage() {
                       </div>
                       <div>
                         <div className="text-xs font-bold">Percentage (%)</div>
-                        <div className="text-[10px] opacity-75">e.g. 20% off whole cart</div>
+                        <div className="text-[10px] opacity-75">e.g. 50% off developer tier</div>
                       </div>
                     </button>
 
@@ -837,7 +904,7 @@ export default function CouponsManagementPage() {
                       </div>
                       <div>
                         <div className="text-xs font-bold">Fixed Amount ($)</div>
-                        <div className="text-[10px] opacity-75">e.g. $15.00 flat discount</div>
+                        <div className="text-[10px] opacity-75">e.g. $10.00 flat discount</div>
                       </div>
                     </button>
                   </div>
@@ -878,6 +945,25 @@ export default function CouponsManagementPage() {
                   </div>
                 </div>
 
+                {/* Eligible Plan Scope */}
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                    Eligible 180 Core Plans
+                  </label>
+                  <select
+                    value={formData.selectedPlan}
+                    onChange={(e) => setFormData({ ...formData, selectedPlan: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  >
+                    <option value="ALL">All 180 Core Plans & Developer Tiers</option>
+                    {platformPlans.map((plan) => (
+                      <option key={plan.id} value={plan.planCode}>
+                        {plan.name} (${plan.amount}/{plan.interval.toLowerCase()})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* Min Order & Max Redemptions */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -914,7 +1000,7 @@ export default function CouponsManagementPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                      Per-Customer Limit
+                      Per-Developer Limit
                     </label>
                     <input
                       type="number"
@@ -938,32 +1024,10 @@ export default function CouponsManagementPage() {
                   </div>
                 </div>
 
-                {/* Scope App */}
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                    App Target / Ecosystem Scope
-                  </label>
-                  <select
-                    value={formData.appId}
-                    onChange={(e) => setFormData({ ...formData, appId: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl text-sm bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                  >
-                    <option value="UNIVERSAL">Platform Universal (All Apps & Developer Portal)</option>
-                    {appsList.map((app) => (
-                      <option key={app.id} value={app.id}>
-                        App: {app.name} ({app.clientId})
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-[11px] text-zinc-500 mt-1">
-                    Universal coupons can be redeemed by developers on the developer portal and across any checkout session.
-                  </p>
-                </div>
-
                 {/* Live Preview Card */}
                 <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800/80">
                   <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider block mb-2">
-                    Live Checkout Preview
+                    Developer Checkout Preview
                   </span>
                   <div className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-black border border-emerald-500/30 shadow-sm">
                     <div className="flex items-center gap-2.5">
@@ -976,13 +1040,13 @@ export default function CouponsManagementPage() {
                         </div>
                         <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
                           {formData.discountType === 'PERCENTAGE'
-                            ? `${formData.discountValue || 0}% discount applied`
-                            : `$${formData.discountValue || 0} flat discount applied`}
+                            ? `${formData.discountValue || 0}% discount applied to platform tier`
+                            : `$${formData.discountValue || 0} flat discount applied to platform tier`}
                         </div>
                       </div>
                     </div>
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                      VERIFIED
+                      180 CORE
                     </span>
                   </div>
                 </div>
@@ -1003,7 +1067,7 @@ export default function CouponsManagementPage() {
                   className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/25 transition active:scale-95 disabled:opacity-50 flex items-center gap-2"
                 >
                   {isSubmitting && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
-                  {isSubmitting ? 'Creating Coupon...' : 'Deploy Coupon Code'}
+                  {isSubmitting ? 'Deploying...' : 'Deploy Platform Coupon'}
                 </button>
               </div>
             </form>
@@ -1021,16 +1085,16 @@ export default function CouponsManagementPage() {
               </div>
               <div>
                 <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-                  Delete Promotional Code?
+                  Delete Platform Coupon?
                 </h3>
                 <p className="text-xs text-zinc-500">
-                  This action permanently removes the coupon and its logs.
+                  Permanently removes this 180 Core promotion
                 </p>
               </div>
             </div>
 
             <p className="text-xs text-zinc-600 dark:text-zinc-400 mb-6">
-              Are you sure you want to delete coupon <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">{couponToDelete.code}</span>? Once deleted, developers and checkout sessions will no longer be able to claim this discount.
+              Are you sure you want to delete platform coupon <span className="font-mono font-bold text-zinc-900 dark:text-zinc-100">{couponToDelete.code}</span>? Developers will no longer be able to claim this discount on platform plans.
             </p>
 
             <div className="flex items-center justify-end gap-3">
@@ -1066,10 +1130,10 @@ export default function CouponsManagementPage() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
-                    Redemption Audit Logs
+                    Platform Redemption Logs
                   </h3>
                   <p className="text-xs font-mono text-zinc-500">
-                    Coupon: {inspectCoupon.code}
+                    Code: {inspectCoupon.code}
                   </p>
                 </div>
               </div>
@@ -1085,7 +1149,7 @@ export default function CouponsManagementPage() {
               {redemptionsLoading ? (
                 <div className="py-20 text-center text-zinc-400">
                   <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-purple-500" />
-                  Loading redemptions history...
+                  Loading redemption records...
                 </div>
               ) : !redemptions.length ? (
                 <div className="py-20 text-center text-zinc-500">
@@ -1094,7 +1158,7 @@ export default function CouponsManagementPage() {
                     No redemptions yet
                   </p>
                   <p className="text-xs text-zinc-500 mt-1">
-                    When developers or shoppers apply this promo code during checkout, their records will appear here.
+                    When developers apply this platform coupon during checkout, their redemption records will appear here.
                   </p>
                 </div>
               ) : (
@@ -1105,7 +1169,7 @@ export default function CouponsManagementPage() {
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-                        {r.customerEmail || 'Guest Developer'}
+                        {r.customerEmail || 'Platform Developer'}
                       </span>
                       <span className="font-bold text-emerald-600 dark:text-emerald-400">
                         -${r.discountApplied?.toFixed(2)} USD

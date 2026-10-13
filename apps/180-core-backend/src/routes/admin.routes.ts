@@ -2377,31 +2377,63 @@ router.patch('/settings/security', async (req: Request, res: Response) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// COUPONS & DISCOUNTS MANAGEMENT (ADMIN)
+// 180 CORE PLATFORM COUPONS & DISCOUNTS MANAGEMENT (ADMIN)
+// Developers manage their own project coupons in their developer dashboards.
+// Super Admin strictly manages 180 Core platform-level promotions & developer credits.
 // ─────────────────────────────────────────────────────────────────────────────
+
+async function getPlatformApps() {
+  const platformApps = await corePrisma.oAuthApp.findMany({
+    where: {
+      OR: [
+        { clientId: '180-developer-portal' },
+        { clientId: '180_client_70d751541f05347fe803ec8e128f5e83' },
+        { clientId: '180-workspace' },
+        { name: '180 Developers Console' },
+        { name: '180workspace' },
+      ],
+    },
+    select: { id: true, name: true, clientId: true },
+  });
+
+  const allPlatformAppIds = platformApps.map((a) => a.id);
+  const primaryApp = platformApps.find((a) => a.clientId === '180-developer-portal') || platformApps[0];
+
+  return { primaryApp, platformApps, allPlatformAppIds };
+}
 
 /**
  * GET /api/v1/admin/coupons
- * List all coupons across the platform with analytics & search
+ * List only 180 Core platform coupons with platform analytics & plans
  */
 router.get('/coupons', async (req: Request, res: Response) => {
   try {
-    const { search, status, appId, page, limit } = req.query;
+    const { search, status, page, limit } = req.query;
     const pageNum = Math.max(1, parseInt(String(page || '1'), 10));
     const take = Math.min(100, Math.max(1, parseInt(String(limit || '50'), 10)));
     const skip = (pageNum - 1) * take;
 
-    const where: any = {};
-    if (search) {
-      const q = String(search).trim();
-      where.OR = [
-        { code: { contains: q, mode: 'insensitive' } },
-        { app: { name: { contains: q, mode: 'insensitive' } } },
-      ];
+    const { primaryApp, platformApps, allPlatformAppIds } = await getPlatformApps();
+    if (!allPlatformAppIds.length) {
+      return res.status(200).json({
+        success: true,
+        data: [],
+        coupons: [],
+        platformApp: null,
+        platformApps: [],
+        platformPlans: [],
+        metrics: { totalCoupons: 0, activeCoupons: 0, totalRedemptions: 0, totalDiscountAmount: 0 },
+        pagination: { page: 1, limit: take, total: 0, totalPages: 0 },
+      });
     }
 
-    if (appId && appId !== 'ALL') {
-      where.appId = String(appId);
+    const where: any = {
+      appId: { in: allPlatformAppIds },
+    };
+
+    if (search) {
+      const q = String(search).trim();
+      where.code = { contains: q, mode: 'insensitive' };
     }
 
     const now = new Date();
@@ -2417,7 +2449,7 @@ router.get('/coupons', async (req: Request, res: Response) => {
       where.validUntil = { lte: now };
     }
 
-    const [coupons, total, redemptionsSum] = await Promise.all([
+    const [coupons, total, redemptionsSum, platformPlans] = await Promise.all([
       corePrisma.coupon.findMany({
         where,
         include: {
@@ -2427,9 +2459,6 @@ router.get('/coupons', async (req: Request, res: Response) => {
               name: true,
               clientId: true,
               logoUrl: true,
-              user: {
-                select: { id: true, name: true, email: true },
-              },
             },
           },
           _count: {
@@ -2442,13 +2471,19 @@ router.get('/coupons', async (req: Request, res: Response) => {
       }),
       corePrisma.coupon.count({ where }),
       corePrisma.couponRedemption.aggregate({
+        where: { coupon: { appId: { in: allPlatformAppIds } } },
         _sum: { discountApplied: true },
         _count: true,
+      }),
+      corePrisma.subscriptionPlan.findMany({
+        where: { appId: { in: allPlatformAppIds }, isActive: true },
+        select: { id: true, planCode: true, name: true, amount: true, currency: true, interval: true, appId: true },
       }),
     ]);
 
     const activeCount = await corePrisma.coupon.count({
       where: {
+        appId: { in: allPlatformAppIds },
         isActive: true,
         OR: [{ validUntil: null }, { validUntil: { gt: now } }],
       },
@@ -2461,6 +2496,9 @@ router.get('/coupons', async (req: Request, res: Response) => {
       success: true,
       data: coupons,
       coupons,
+      platformApp: primaryApp,
+      platformApps,
+      platformPlans,
       metrics: {
         totalCoupons: total,
         activeCoupons: activeCount,
@@ -2482,7 +2520,7 @@ router.get('/coupons', async (req: Request, res: Response) => {
 
 /**
  * POST /api/v1/admin/coupons
- * Create a new coupon code
+ * Create a new 180 Core platform coupon code
  */
 router.post('/coupons', async (req: Request, res: Response) => {
   try {
@@ -2520,32 +2558,18 @@ router.post('/coupons', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Percentage discount cannot exceed 100%' });
     }
 
-    // Resolve target appId: if universal or not given, find the platform app (180 Developer Portal or 180workspace)
-    let targetAppId = appId;
-    if (!targetAppId || targetAppId === 'ALL' || targetAppId === 'UNIVERSAL') {
-      const platformApp = await corePrisma.oAuthApp.findFirst({
-        where: {
-          OR: [
-            { clientId: '180-developer-portal' },
-            { clientId: '180-workspace' },
-            { name: { contains: '180workspace', mode: 'insensitive' } },
-            { name: { contains: 'Developer', mode: 'insensitive' } },
-          ],
-        },
-        select: { id: true },
-      });
-      if (platformApp) {
-        targetAppId = platformApp.id;
-      } else {
-        const anyApp = await corePrisma.oAuthApp.findFirst({ select: { id: true } });
-        if (!anyApp) {
-          return res.status(400).json({ success: false, error: 'No OAuth application found to attach coupon to' });
-        }
-        targetAppId = anyApp.id;
-      }
+    const { primaryApp, allPlatformAppIds } = await getPlatformApps();
+    if (!allPlatformAppIds.length) {
+      return res.status(400).json({ success: false, error: '180 Core platform application not configured' });
     }
 
-    // Check uniqueness for this appId and code
+    // Target one of the 180 Core platform apps
+    let targetAppId = appId;
+    if (!targetAppId || !allPlatformAppIds.includes(targetAppId)) {
+      targetAppId = primaryApp?.id || allPlatformAppIds[0];
+    }
+
+    // Check uniqueness for 180 Core platform coupons
     const existing = await corePrisma.coupon.findUnique({
       where: {
         appId_code: {
@@ -2556,7 +2580,7 @@ router.post('/coupons', async (req: Request, res: Response) => {
     });
 
     if (existing) {
-      return res.status(409).json({ success: false, error: `Coupon code "${normalizedCode}" already exists for this app` });
+      return res.status(409).json({ success: false, error: `Platform coupon code "${normalizedCode}" already exists` });
     }
 
     const newCoupon = await corePrisma.coupon.create({
@@ -2584,7 +2608,7 @@ router.post('/coupons', async (req: Request, res: Response) => {
 
     await recordAuditLog(
       'admin@180core.cloud',
-      'CREATE_COUPON',
+      'CREATE_PLATFORM_COUPON',
       'COUPON',
       newCoupon.id,
       { code: normalizedCode, discountType, discountValue: val, targetAppId },
@@ -2593,7 +2617,7 @@ router.post('/coupons', async (req: Request, res: Response) => {
 
     return res.status(201).json({
       success: true,
-      message: `Coupon "${normalizedCode}" created successfully`,
+      message: `180 Core Platform Coupon "${normalizedCode}" deployed successfully`,
       data: newCoupon,
       coupon: newCoupon,
     });
@@ -2605,7 +2629,7 @@ router.post('/coupons', async (req: Request, res: Response) => {
 
 /**
  * PATCH /api/v1/admin/coupons/:id
- * Update coupon status, limits, or parameters
+ * Update 180 Core platform coupon status, limits, or parameters
  */
 router.patch('/coupons/:id', async (req: Request, res: Response) => {
   try {
@@ -2617,11 +2641,20 @@ router.patch('/coupons/:id', async (req: Request, res: Response) => {
       validUntil,
       minOrderAmount,
       maxDiscountAmount,
+      validPlans,
     } = req.body;
 
+    const { allPlatformAppIds } = await getPlatformApps();
     const coupon = await corePrisma.coupon.findUnique({ where: { id } });
     if (!coupon) {
       return res.status(404).json({ success: false, error: 'Coupon not found' });
+    }
+
+    if (!allPlatformAppIds.includes(coupon.appId)) {
+      return res.status(403).json({
+        success: false,
+        error: 'This coupon belongs to an independent developer project. Developer coupons must be managed within the developer project dashboard.',
+      });
     }
 
     const updateData: any = {};
@@ -2631,6 +2664,7 @@ router.patch('/coupons/:id', async (req: Request, res: Response) => {
     if (minOrderAmount !== undefined) updateData.minOrderAmount = Number(minOrderAmount);
     if (maxDiscountAmount !== undefined) updateData.maxDiscountAmount = maxDiscountAmount ? Number(maxDiscountAmount) : null;
     if (validUntil !== undefined) updateData.validUntil = validUntil ? new Date(validUntil) : null;
+    if (validPlans !== undefined) updateData.validPlans = Array.isArray(validPlans) ? validPlans : [];
 
     const updated = await corePrisma.coupon.update({
       where: { id },
@@ -2644,7 +2678,7 @@ router.patch('/coupons/:id', async (req: Request, res: Response) => {
 
     await recordAuditLog(
       'admin@180core.cloud',
-      'UPDATE_COUPON',
+      'UPDATE_PLATFORM_COUPON',
       'COUPON',
       id,
       { changes: updateData },
@@ -2653,7 +2687,7 @@ router.patch('/coupons/:id', async (req: Request, res: Response) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Coupon updated successfully',
+      message: '180 Core Platform Coupon updated successfully',
       data: updated,
       coupon: updated,
     });
@@ -2665,14 +2699,22 @@ router.patch('/coupons/:id', async (req: Request, res: Response) => {
 
 /**
  * DELETE /api/v1/admin/coupons/:id
- * Permanently delete a coupon
+ * Permanently delete a 180 Core platform coupon
  */
 router.delete('/coupons/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const { allPlatformAppIds } = await getPlatformApps();
     const coupon = await corePrisma.coupon.findUnique({ where: { id } });
     if (!coupon) {
       return res.status(404).json({ success: false, error: 'Coupon not found' });
+    }
+
+    if (!allPlatformAppIds.includes(coupon.appId)) {
+      return res.status(403).json({
+        success: false,
+        error: 'This coupon belongs to an independent developer project and cannot be deleted from the platform admin panel.',
+      });
     }
 
     await corePrisma.$transaction([
@@ -2682,7 +2724,7 @@ router.delete('/coupons/:id', async (req: Request, res: Response) => {
 
     await recordAuditLog(
       'admin@180core.cloud',
-      'DELETE_COUPON',
+      'DELETE_PLATFORM_COUPON',
       'COUPON',
       id,
       { code: coupon.code, appId: coupon.appId },
@@ -2691,7 +2733,7 @@ router.delete('/coupons/:id', async (req: Request, res: Response) => {
 
     return res.status(200).json({
       success: true,
-      message: `Coupon "${coupon.code}" deleted permanently`,
+      message: `180 Core Platform Coupon "${coupon.code}" deleted permanently`,
     });
   } catch (err: any) {
     console.error('[AdminRoutes:deleteCoupon] Error:', err);
