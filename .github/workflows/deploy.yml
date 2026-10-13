@@ -40,6 +40,7 @@ jobs:
               - 'packages/payment-provider/**'
               - 'packages/integrations/**'
               - 'packages/keys/**'
+              - 'scripts/**'
               - 'Dockerfile'
               - 'docker-compose.yml'
             developers:
@@ -128,6 +129,7 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: |
           echo "Preparing zero-downtime SSM parameters for EC2 ($INSTANCE_ID)..."
+          SYNC_NGINX_SCRIPT=$(cat scripts/sync-nginx-config.py)
           SSM_PARAMS=$(jq -n \
             --arg token "$GH_TOKEN" \
             --arg actor "$GH_ACTOR" \
@@ -135,6 +137,7 @@ jobs:
             --arg googleId "$GOOGLE_CLIENT_ID" \
             --arg googleSecret "$GOOGLE_CLIENT_SECRET" \
             --arg hostHdr "Host: api.180core.cloud" \
+            --arg nginxScript "$SYNC_NGINX_SCRIPT" \
             '{commands: [
               "echo === 1. DOCKER LOGIN GHCR ===",
               ("echo " + ($token | @sh) + " | docker login ghcr.io -u " + ($actor | @sh) + " --password-stdin 2>&1 || true"),
@@ -159,18 +162,20 @@ jobs:
               "docker logs --tail 40 180workspace-core-backend 2>&1 || true",
               "echo === 8. TEST LOCAL PORT 4003 ===",
               "curl -i http://localhost:4003/health 2>&1 || true",
-              "echo === 9. NGINX UPSTREAM CONFIG ===",
-              "cat /home/ubuntu/app/nginx/nginx.conf 2>&1 || true",
+              "echo === 9. SYNC NGINX CONFIG FOR 180CORE ===",
+              ("python3 -c " + ($nginxScript | @sh)),
               "echo === 10. TEST AND RELOAD/RESTART NGINX PROXY ===",
               "docker exec 180workspace-proxy nginx -t 2>&1 || true",
-              "docker restart 180workspace-proxy 2>&1 || docker start 180workspace-proxy 2>&1 || true",
+              "docker exec 180workspace-proxy nginx -s reload 2>&1 || docker restart 180workspace-proxy 2>&1 || true",
               "sleep 4",
               "echo === 11. DOCKER PS STATUS ===",
               "docker ps --format \"table {{.Names}}\t{{.Status}}\t{{.Ports}}\"",
               "echo === 12. DOCKER LOGS PROXY ===",
               "docker logs --tail 25 180workspace-proxy 2>&1 || true",
               "echo === 13. TEST VIA NGINX ON PORT 80 ===",
-              ("curl -i -H " + ($hostHdr | @sh) + " http://localhost/health 2>&1 || true")
+              ("curl -i -H " + ($hostHdr | @sh) + " http://localhost/health 2>&1 || true"),
+              "echo === 14. TEST CORS PREFLIGHT ON NGINX ===",
+              ("curl -i -X OPTIONS -H " + ($hostHdr | @sh) + " -H \"Origin: https://developer.180core.cloud\" -H \"Access-Control-Request-Method: GET\" http://localhost/api/oauth/userinfo 2>&1 || true")
             ]}')
 
           echo "Triggering zero-downtime reload on EC2..."
@@ -199,9 +204,9 @@ jobs:
         run: |
           echo "Testing public ingress endpoint..."
           for i in {1..10}; do
-            echo "Attempt $i: Checking https://api.180core.cloud/health & origin..."
-            if curl -sf https://api.180core.cloud/health || curl -sf -H "Host: api.180core.cloud" http://32.198.110.99/health; then
-              echo "✅ Public ingress endpoint responded with 200 OK!"
+            echo "Attempt $i: Checking https://api.180core.cloud/health & CORS preflight..."
+            if curl -sf https://api.180core.cloud/health && curl -sf -X OPTIONS -H "Origin: https://developer.180core.cloud" -H "Access-Control-Request-Method: GET" https://api.180core.cloud/api/oauth/userinfo; then
+              echo "✅ Public ingress endpoint responded with 200 OK and CORS Preflight 204!"
               exit 0
             fi
             sleep 4
