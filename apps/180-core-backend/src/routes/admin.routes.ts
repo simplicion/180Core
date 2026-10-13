@@ -2376,4 +2376,345 @@ router.patch('/settings/security', async (req: Request, res: Response) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// COUPONS & DISCOUNTS MANAGEMENT (ADMIN)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/v1/admin/coupons
+ * List all coupons across the platform with analytics & search
+ */
+router.get('/coupons', async (req: Request, res: Response) => {
+  try {
+    const { search, status, appId, page, limit } = req.query;
+    const pageNum = Math.max(1, parseInt(String(page || '1'), 10));
+    const take = Math.min(100, Math.max(1, parseInt(String(limit || '50'), 10)));
+    const skip = (pageNum - 1) * take;
+
+    const where: any = {};
+    if (search) {
+      const q = String(search).trim();
+      where.OR = [
+        { code: { contains: q, mode: 'insensitive' } },
+        { app: { name: { contains: q, mode: 'insensitive' } } },
+      ];
+    }
+
+    if (appId && appId !== 'ALL') {
+      where.appId = String(appId);
+    }
+
+    const now = new Date();
+    if (status === 'active') {
+      where.isActive = true;
+      where.OR = [
+        { validUntil: null },
+        { validUntil: { gt: now } },
+      ];
+    } else if (status === 'inactive') {
+      where.isActive = false;
+    } else if (status === 'expired') {
+      where.validUntil = { lte: now };
+    }
+
+    const [coupons, total, redemptionsSum] = await Promise.all([
+      corePrisma.coupon.findMany({
+        where,
+        include: {
+          app: {
+            select: {
+              id: true,
+              name: true,
+              clientId: true,
+              logoUrl: true,
+              user: {
+                select: { id: true, name: true, email: true },
+              },
+            },
+          },
+          _count: {
+            select: { redemptions: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+      }),
+      corePrisma.coupon.count({ where }),
+      corePrisma.couponRedemption.aggregate({
+        _sum: { discountApplied: true },
+        _count: true,
+      }),
+    ]);
+
+    const activeCount = await corePrisma.coupon.count({
+      where: {
+        isActive: true,
+        OR: [{ validUntil: null }, { validUntil: { gt: now } }],
+      },
+    });
+
+    const totalRedemptions = redemptionsSum._count || 0;
+    const totalDiscountAmount = redemptionsSum._sum.discountApplied || 0;
+
+    return res.status(200).json({
+      success: true,
+      data: coupons,
+      coupons,
+      metrics: {
+        totalCoupons: total,
+        activeCoupons: activeCount,
+        totalRedemptions,
+        totalDiscountAmount: Math.round(totalDiscountAmount * 100) / 100,
+      },
+      pagination: {
+        page: pageNum,
+        limit: take,
+        total,
+        totalPages: Math.ceil(total / take),
+      },
+    });
+  } catch (err: any) {
+    console.error('[AdminRoutes:getCoupons] Error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/v1/admin/coupons
+ * Create a new coupon code
+ */
+router.post('/coupons', async (req: Request, res: Response) => {
+  try {
+    const {
+      code,
+      discountType,
+      discountValue,
+      maxDiscountAmount,
+      minOrderAmount,
+      maxRedemptions,
+      perCustomerLimit,
+      allowedOrigins,
+      validPlans,
+      validFrom,
+      validUntil,
+      isActive,
+      appId,
+    } = req.body;
+
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    if (!normalizedCode) {
+      return res.status(400).json({ success: false, error: 'Coupon code is required' });
+    }
+
+    if (!discountType || !['PERCENTAGE', 'FIXED_AMOUNT'].includes(discountType)) {
+      return res.status(400).json({ success: false, error: 'Valid discount type (PERCENTAGE or FIXED_AMOUNT) is required' });
+    }
+
+    const val = Number(discountValue);
+    if (isNaN(val) || val <= 0) {
+      return res.status(400).json({ success: false, error: 'Discount value must be greater than 0' });
+    }
+
+    if (discountType === 'PERCENTAGE' && val > 100) {
+      return res.status(400).json({ success: false, error: 'Percentage discount cannot exceed 100%' });
+    }
+
+    // Resolve target appId: if universal or not given, find the platform app (180 Developer Portal or 180workspace)
+    let targetAppId = appId;
+    if (!targetAppId || targetAppId === 'ALL' || targetAppId === 'UNIVERSAL') {
+      const platformApp = await corePrisma.oAuthApp.findFirst({
+        where: {
+          OR: [
+            { clientId: '180-developer-portal' },
+            { clientId: '180-workspace' },
+            { name: { contains: '180workspace', mode: 'insensitive' } },
+            { name: { contains: 'Developer', mode: 'insensitive' } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (platformApp) {
+        targetAppId = platformApp.id;
+      } else {
+        const anyApp = await corePrisma.oAuthApp.findFirst({ select: { id: true } });
+        if (!anyApp) {
+          return res.status(400).json({ success: false, error: 'No OAuth application found to attach coupon to' });
+        }
+        targetAppId = anyApp.id;
+      }
+    }
+
+    // Check uniqueness for this appId and code
+    const existing = await corePrisma.coupon.findUnique({
+      where: {
+        appId_code: {
+          appId: targetAppId,
+          code: normalizedCode,
+        },
+      },
+    });
+
+    if (existing) {
+      return res.status(409).json({ success: false, error: `Coupon code "${normalizedCode}" already exists for this app` });
+    }
+
+    const newCoupon = await corePrisma.coupon.create({
+      data: {
+        appId: targetAppId,
+        code: normalizedCode,
+        discountType,
+        discountValue: val,
+        maxDiscountAmount: maxDiscountAmount ? Number(maxDiscountAmount) : null,
+        minOrderAmount: minOrderAmount ? Number(minOrderAmount) : 0,
+        maxRedemptions: maxRedemptions ? Number(maxRedemptions) : null,
+        perCustomerLimit: perCustomerLimit ? Number(perCustomerLimit) : 1,
+        allowedOrigins: Array.isArray(allowedOrigins) ? allowedOrigins : [],
+        validPlans: Array.isArray(validPlans) ? validPlans : [],
+        validFrom: validFrom ? new Date(validFrom) : new Date(),
+        validUntil: validUntil ? new Date(validUntil) : null,
+        isActive: isActive !== undefined ? Boolean(isActive) : true,
+      },
+      include: {
+        app: {
+          select: { id: true, name: true, clientId: true },
+        },
+      },
+    });
+
+    await recordAuditLog(
+      'admin@180core.cloud',
+      'CREATE_COUPON',
+      'COUPON',
+      newCoupon.id,
+      { code: normalizedCode, discountType, discountValue: val, targetAppId },
+      req.ip
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: `Coupon "${normalizedCode}" created successfully`,
+      data: newCoupon,
+      coupon: newCoupon,
+    });
+  } catch (err: any) {
+    console.error('[AdminRoutes:createCoupon] Error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * PATCH /api/v1/admin/coupons/:id
+ * Update coupon status, limits, or parameters
+ */
+router.patch('/coupons/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const {
+      isActive,
+      discountValue,
+      maxRedemptions,
+      validUntil,
+      minOrderAmount,
+      maxDiscountAmount,
+    } = req.body;
+
+    const coupon = await corePrisma.coupon.findUnique({ where: { id } });
+    if (!coupon) {
+      return res.status(404).json({ success: false, error: 'Coupon not found' });
+    }
+
+    const updateData: any = {};
+    if (isActive !== undefined) updateData.isActive = Boolean(isActive);
+    if (discountValue !== undefined) updateData.discountValue = Number(discountValue);
+    if (maxRedemptions !== undefined) updateData.maxRedemptions = maxRedemptions ? Number(maxRedemptions) : null;
+    if (minOrderAmount !== undefined) updateData.minOrderAmount = Number(minOrderAmount);
+    if (maxDiscountAmount !== undefined) updateData.maxDiscountAmount = maxDiscountAmount ? Number(maxDiscountAmount) : null;
+    if (validUntil !== undefined) updateData.validUntil = validUntil ? new Date(validUntil) : null;
+
+    const updated = await corePrisma.coupon.update({
+      where: { id },
+      data: updateData,
+      include: {
+        app: {
+          select: { id: true, name: true, clientId: true },
+        },
+      },
+    });
+
+    await recordAuditLog(
+      'admin@180core.cloud',
+      'UPDATE_COUPON',
+      'COUPON',
+      id,
+      { changes: updateData },
+      req.ip
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'Coupon updated successfully',
+      data: updated,
+      coupon: updated,
+    });
+  } catch (err: any) {
+    console.error('[AdminRoutes:updateCoupon] Error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * DELETE /api/v1/admin/coupons/:id
+ * Permanently delete a coupon
+ */
+router.delete('/coupons/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const coupon = await corePrisma.coupon.findUnique({ where: { id } });
+    if (!coupon) {
+      return res.status(404).json({ success: false, error: 'Coupon not found' });
+    }
+
+    await corePrisma.$transaction([
+      corePrisma.couponRedemption.deleteMany({ where: { couponId: id } }),
+      corePrisma.coupon.delete({ where: { id } }),
+    ]);
+
+    await recordAuditLog(
+      'admin@180core.cloud',
+      'DELETE_COUPON',
+      'COUPON',
+      id,
+      { code: coupon.code, appId: coupon.appId },
+      req.ip
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: `Coupon "${coupon.code}" deleted permanently`,
+    });
+  } catch (err: any) {
+    console.error('[AdminRoutes:deleteCoupon] Error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/v1/admin/coupons/:id/redemptions
+ * Get redemption logs for a coupon
+ */
+router.get('/coupons/:id/redemptions', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const redemptions = await corePrisma.couponRedemption.findMany({
+      where: { couponId: id },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    return res.status(200).json({ success: true, redemptions });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 export default router;

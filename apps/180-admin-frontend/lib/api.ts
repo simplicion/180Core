@@ -264,6 +264,60 @@ export const adminApi = {
     if (params?.limit) query.set('limit', String(params.limit));
     return fetchJson<any>(`${ADMIN_API_URL}/audit-logs?${query.toString()}`);
   },
+
+  // Coupons & Promo Management
+  getCoupons: async (params?: { search?: string; status?: string; appId?: string; page?: number; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.search) query.set('search', params.search);
+    if (params?.status) query.set('status', params.status);
+    if (params?.appId) query.set('appId', params.appId);
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.limit) query.set('limit', String(params.limit));
+    return fetchJson<any>(`${ADMIN_API_URL}/coupons?${query.toString()}`);
+  },
+
+  createCoupon: async (data: {
+    code: string;
+    discountType: 'PERCENTAGE' | 'FIXED_AMOUNT';
+    discountValue: number;
+    maxDiscountAmount?: number | null;
+    minOrderAmount?: number;
+    maxRedemptions?: number | null;
+    perCustomerLimit?: number;
+    validPlans?: string[];
+    validUntil?: string | null;
+    isActive?: boolean;
+    appId?: string;
+  }) => {
+    return fetchJson<any>(`${ADMIN_API_URL}/coupons`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateCoupon: async (id: string, data: {
+    isActive?: boolean;
+    discountValue?: number;
+    maxRedemptions?: number | null;
+    minOrderAmount?: number;
+    maxDiscountAmount?: number | null;
+    validUntil?: string | null;
+  }) => {
+    return fetchJson<any>(`${ADMIN_API_URL}/coupons/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteCoupon: async (id: string) => {
+    return fetchJson<any>(`${ADMIN_API_URL}/coupons/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
+  getCouponRedemptions: async (id: string) => {
+    return fetchJson<any>(`${ADMIN_API_URL}/coupons/${id}/redemptions`);
+  },
 };
 
 /**
