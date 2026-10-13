@@ -112,6 +112,40 @@ export class IdentityAuthController {
             });
 
             if (!user) {
+                // Check if this credential was deleted due to suspicious activity
+                try {
+                    const cleanLower = cleanInput.toLowerCase();
+                    const cleanUserLower = cleanUsername.toLowerCase();
+                    const lastDigits = digits.length >= 10 ? digits.slice(-10) : '';
+
+                    const terminationLogs = await prisma.adminAuditLog.findMany({
+                        where: { action: 'DELETE_USER_SUSPICIOUS' },
+                        orderBy: { createdAt: 'desc' },
+                        take: 100
+                    });
+
+                    const matchedLog = terminationLogs.find((log: any) => {
+                        const d = (log.details as any) || {};
+                        const email = String(d.email || '').toLowerCase();
+                        const username = String(d.username || '').toLowerCase();
+                        const phone = String(d.phone || '').replace(/[^\d]/g, '');
+
+                        if (email && email === cleanLower) return true;
+                        if (username && username === cleanUserLower) return true;
+                        if (lastDigits && phone && phone.endsWith(lastDigits)) return true;
+                        return false;
+                    });
+
+                    if (matchedLog) {
+                        const reason = (matchedLog.details as any)?.reason || 'Automated security monitoring detected suspicious activity violating platform integrity.';
+                        return res.status(403).json({
+                            success: false,
+                            error: 'account_terminated_suspicious_activity',
+                            message: `Your account was deleted because we detected suspicious activity. (${reason})`
+                        });
+                    }
+                } catch (_) {}
+
                 return res.status(401).json({
                     success: false,
                     error: 'user_not_found',
@@ -163,6 +197,37 @@ export class IdentityAuthController {
             const cleanInput = String(rawContact).trim();
             const isEmail = cleanInput.includes('@');
             const digits = cleanInput.replace(/[^\d]/g, '');
+
+            // Check if credential was terminated due to suspicious activity
+            try {
+                const cleanLower = cleanInput.toLowerCase();
+                const lastDigits = digits.length >= 10 ? digits.slice(-10) : '';
+
+                const terminationLogs = await prisma.adminAuditLog.findMany({
+                    where: { action: 'DELETE_USER_SUSPICIOUS' },
+                    orderBy: { createdAt: 'desc' },
+                    take: 100
+                });
+
+                const matchedLog = terminationLogs.find((log: any) => {
+                    const d = (log.details as any) || {};
+                    const email = String(d.email || '').toLowerCase();
+                    const phone = String(d.phone || '').replace(/[^\d]/g, '');
+
+                    if (isEmail && email && email === cleanLower) return true;
+                    if (!isEmail && lastDigits && phone && phone.endsWith(lastDigits)) return true;
+                    return false;
+                });
+
+                if (matchedLog) {
+                    const reason = (matchedLog.details as any)?.reason || 'Automated security monitoring detected suspicious activity violating platform integrity.';
+                    return res.status(403).json({
+                        success: false,
+                        error: 'account_terminated_suspicious_activity',
+                        message: `Your account was deleted because we detected suspicious activity. (${reason})`
+                    });
+                }
+            } catch (_) {}
 
             // Verify contact not already registered
             if (isEmail) {

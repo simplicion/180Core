@@ -80,7 +80,7 @@ export default function AdminShellLayout({ children }: { children: React.ReactNo
       setIsRefreshing(true);
       const res = await adminApi.getOverview();
       if (res.success) {
-        setPulseData(res.data);
+        setPulseData(res.data || res);
       }
     } catch (e) {
       console.error('Failed to load pulse metrics', e);
@@ -153,7 +153,7 @@ export default function AdminShellLayout({ children }: { children: React.ReactNo
             <span className="text-zinc-600 dark:text-zinc-400 font-medium">Core Cluster</span>
           </div>
           <span className="font-mono text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
-            {pulseData?.overview?.totalDevelopers ? `${pulseData.overview.totalDevelopers} Devs Online` : 'Operational'}
+            {(pulseData?.totalDevelopers ?? pulseData?.overview?.totalDevelopers) ? `${pulseData?.totalDevelopers ?? pulseData?.overview?.totalDevelopers} Devs Online` : 'Operational'}
           </span>
         </div>
 
@@ -203,7 +203,7 @@ export default function AdminShellLayout({ children }: { children: React.ReactNo
           <div className="text-[11px] text-zinc-500 flex items-center justify-between">
             <span>Sovereign Treasury</span>
             <span className="font-mono font-semibold text-zinc-900 dark:text-white">
-              ${(pulseData?.overview?.totalGmv || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              ${((pulseData?.totalGmv ?? pulseData?.overview?.totalGmv) || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
             </span>
           </div>
 
@@ -245,10 +245,44 @@ export default function AdminShellLayout({ children }: { children: React.ReactNo
             </button>
 
             <span className="text-zinc-400 dark:text-zinc-500 hidden sm:inline">180 Core</span>
-            <ChevronRight className="h-3.5 w-3.5 text-zinc-400 hidden sm:inline" />
-            <span className="font-semibold text-zinc-900 dark:text-white capitalize">
-              {pathname === '/' ? 'Executive Pulse' : pathname.replace('/', '').replace('-', ' ')}
-            </span>
+            {pathname === '/' ? (
+              <>
+                <ChevronRight className="h-3.5 w-3.5 text-zinc-400 hidden sm:inline" />
+                <span className="font-semibold text-zinc-900 dark:text-white">Executive Pulse</span>
+              </>
+            ) : pathname.startsWith('/developers') ? (
+              <>
+                <ChevronRight className="h-3.5 w-3.5 text-zinc-400 hidden sm:inline" />
+                <Link href="/developers" className="hover:text-blue-500 transition-colors">
+                  Developers
+                </Link>
+                {pathname.includes('/projects/') ? (
+                  <>
+                    <ChevronRight className="h-3.5 w-3.5 text-zinc-400 hidden sm:inline" />
+                    <Link
+                      href={`/developers/${pathname.split('/')[2]}`}
+                      className="hover:text-blue-500 transition-colors"
+                    >
+                      Developer Profile
+                    </Link>
+                    <ChevronRight className="h-3.5 w-3.5 text-zinc-400 hidden sm:inline" />
+                    <span className="font-semibold text-zinc-900 dark:text-white">Project Deep-Dive</span>
+                  </>
+                ) : pathname !== '/developers' ? (
+                  <>
+                    <ChevronRight className="h-3.5 w-3.5 text-zinc-400 hidden sm:inline" />
+                    <span className="font-semibold text-zinc-900 dark:text-white">Developer Profile</span>
+                  </>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <ChevronRight className="h-3.5 w-3.5 text-zinc-400 hidden sm:inline" />
+                <span className="font-semibold text-zinc-900 dark:text-white capitalize">
+                  {pathname.replace('/', '').replace(/-/g, ' ')}
+                </span>
+              </>
+            )}
           </div>
 
           {/* Quick Actions & Header Profile */}

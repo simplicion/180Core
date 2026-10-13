@@ -38,7 +38,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 min-h-screen antialiased selection:bg-blue-600 selection:text-white">
+      <body suppressHydrationWarning className="bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 min-h-screen antialiased selection:bg-blue-600 selection:text-white">
         <Toaster
           position="top-right"
           toastOptions={{

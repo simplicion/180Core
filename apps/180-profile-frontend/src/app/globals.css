@@ -30,6 +30,15 @@ body {
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  @apply font-bold tracking-tight;
+}
+
+pre, code, kbd {
+  font-family: var(--font-mono, 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
 }
 
 *::-webkit-scrollbar,

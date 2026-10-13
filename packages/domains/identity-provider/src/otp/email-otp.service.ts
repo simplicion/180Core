@@ -281,4 +281,71 @@ export class EmailOtpService {
   static async sendLoginOtp(email: string, otp: string) {
     return this.sendEmailOtp({ email, otp, purpose: 'login' });
   }
+
+  /**
+   * Helper: Send Automated Suspicious Activity Termination Notice
+   */
+  static async sendSuspiciousActivityTerminationNotice(email: string, userName?: string, reason?: string) {
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      return { success: false, message: 'Invalid recipient email' };
+    }
+
+    const title = 'Account Termination Notice — Suspicious Activity Detected';
+    const detail = reason || 'Our automated security monitoring systems detected activity violating 180 Workspace Platform Terms of Service and security integrity policies.';
+
+    const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>${title}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #09090b; color: #f4f4f5; margin: 0; padding: 32px 16px; }
+    .card { max-width: 540px; margin: 0 auto; background: #121215; border: 1px solid rgba(244,63,94,0.3); border-radius: 20px; padding: 36px 28px; box-shadow: 0 16px 40px rgba(0,0,0,0.6); }
+    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; background: rgba(244,63,94,0.15); color: #f43f5e; border: 1px solid rgba(244,63,94,0.3); border-radius: 9999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 20px; }
+    h1 { font-size: 20px; font-weight: 800; color: #ffffff; margin: 0 0 12px; }
+    p { color: #a1a1aa; font-size: 14px; line-height: 1.6; margin: 0 0 16px; }
+    .alert-box { background: rgba(244,63,94,0.08); border: 1px solid rgba(244,63,94,0.25); border-radius: 14px; padding: 18px; margin: 20px 0; color: #fecdd3; font-size: 13px; line-height: 1.6; }
+    .footer { text-align: center; color: #71717a; font-size: 11px; margin-top: 28px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 18px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">Security Alert</div>
+    <h1>Account Terminated & Deleted</h1>
+    <p>Dear ${userName || 'User'},</p>
+    <p>We are writing to notify you that your 180 Workspace and Sovereign Developer account associated with <strong>${cleanEmail}</strong> has been terminated and permanently deleted from our platform systems.</p>
+    <div class="alert-box">
+      <strong>Reason for Termination:</strong><br />
+      We detected suspicious activity associated with this account that violates 180 Workspace platform security, anti-abuse, and operational policies.<br /><br />
+      <strong>Incident Summary:</strong> ${detail}
+    </div>
+    <p>All registered OAuth applications, sovereign developer wallets, and active API credentials have been permanently deleted from platform databases.</p>
+    <div class="footer">
+      180 Core Global Platform Security & Compliance Team<br />
+      https://180workspace.com
+    </div>
+  </div>
+</body>
+</html>
+`;
+
+    try {
+      const transporter = this.getTransporter();
+      const fromAddress = process.env.EMAIL_FROM || process.env.SMTP_USER || 'security@180workspace.com';
+      await transporter.sendMail({
+        from: `"180 Platform Security" <${fromAddress}>`,
+        to: cleanEmail,
+        subject: `[ALERT] Account Terminated: Suspicious Activity Detected - 180 Workspace`,
+        html,
+        text: `Dear ${userName || 'User'},\n\nYour 180 Workspace account (${cleanEmail}) has been terminated and permanently deleted because our automated security systems detected suspicious activity.\n\nReason: We detected suspicious activity associated with this account that violates platform security. (${detail})\n\nAll registered apps, wallets, and credentials have been permanently deleted.\n\n— 180 Workspace Platform Security`,
+      });
+      console.log(`[EmailOtpService] Termination notice dispatched to ${cleanEmail}`);
+      return { success: true, message: 'Termination notification dispatched' };
+    } catch (err: any) {
+      console.warn(`[EmailOtpService] Failed to dispatch termination email to ${cleanEmail}:`, err.message);
+      return { success: false, message: err.message };
+    }
+  }
 }

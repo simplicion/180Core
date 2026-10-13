@@ -2,7 +2,7 @@ const isDev = process.env.NODE_ENV === 'development';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export',
+  output: isDev ? undefined : 'export',
   env: {
     NEXT_PUBLIC_CORE_BACKEND_URL: process.env.NEXT_PUBLIC_CORE_BACKEND_URL || (isDev ? 'http://localhost:4003' : 'https://api.180core.cloud'),
     NEXT_PUBLIC_ADMIN_API_URL: process.env.NEXT_PUBLIC_ADMIN_API_URL || (isDev ? 'http://localhost:4003/api/v1/admin' : 'https://api.180core.cloud/api/v1/admin'),

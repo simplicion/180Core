@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import {
   Wallet,
@@ -119,7 +119,105 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
   const [selectedCurrency, setSelectedCurrency] = useState<string | null>(null);
   const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(null);
   const [showCountryModal, setShowCountryModal] = useState<boolean>(false);
+  const [isCountrySheetVisible, setIsCountrySheetVisible] = useState<boolean>(false);
   const [countrySearch, setCountrySearch] = useState<string>('');
+
+  // ─── Country Selection Bottom Sheet Smooth Open / Close & Drag State ────────
+  const [countryDragY, setCountryDragY] = useState(0);
+  const [isDraggingCountry, setIsDraggingCountry] = useState(false);
+  const countryDragStartY = React.useRef(0);
+  const closeTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  const openCountrySheet = useCallback(() => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    setShowCountryModal(true);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setIsCountrySheetVisible(true);
+      });
+    });
+  }, []);
+
+  const closeCountrySheet = useCallback(() => {
+    setIsCountrySheetVisible(false);
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = setTimeout(() => {
+      setShowCountryModal(false);
+      setCountrySearch('');
+      setCountryDragY(0);
+      closeTimerRef.current = null;
+    }, 300);
+  }, []);
+
+  useEffect(() => {
+    if (!isDraggingCountry) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const delta = e.clientY - countryDragStartY.current;
+      setCountryDragY(delta < 0 ? delta * 0.2 : delta);
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingCountry(false);
+      setCountryDragY((prev) => {
+        if (prev > 75) {
+          closeCountrySheet();
+          return prev;
+        }
+        return 0;
+      });
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches && e.touches[0]) {
+        const delta = e.touches[0].clientY - countryDragStartY.current;
+        setCountryDragY(delta < 0 ? delta * 0.2 : delta);
+      }
+    };
+
+    const handleTouchEnd = () => {
+      setIsDraggingCountry(false);
+      setCountryDragY((prev) => {
+        if (prev > 75) {
+          closeCountrySheet();
+          return prev;
+        }
+        return 0;
+      });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [isDraggingCountry, closeCountrySheet]);
+
+  // Lock background scroll & handle ESC key for Country Bottom Sheet
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showCountryModal) {
+        closeCountrySheet();
+      }
+    };
+    if (showCountryModal) {
+      document.body.style.overflow = 'hidden';
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showCountryModal, closeCountrySheet]);
 
   const allCountries = useMemo(() => {
     return locationService.getAllCountries();
@@ -295,8 +393,7 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
     setSelectedCountryCode(country.code);
     const newCurr = currencyService.getCurrencyForCountry(country.code);
     setSelectedCurrency(newCurr);
-    setShowCountryModal(false);
-    setCountrySearch('');
+    closeCountrySheet();
     prewarmedOrderRef.current = null;
     prewarmingPromiseRef.current = null;
     const meta = currencyService.getCurrencyMeta(newCurr);
@@ -1389,7 +1486,7 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
         <div className="flex items-center gap-1.5 shrink-0 self-start sm:self-auto">
           <button
             type="button"
-            onClick={() => setShowCountryModal(true)}
+            onClick={openCountrySheet}
             className="group px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs font-bold text-slate-800 dark:text-zinc-200 hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 transition-all cursor-pointer flex items-center gap-2 shadow-2xs"
             title="Click to select any country from all countries"
           >
@@ -1403,49 +1500,98 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
         </div>
       </div>
 
-      {/* Interactive Country Selection Modal */}
+      {/* Interactive Country Selection Bottom Sheet */}
       {showCountryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-md rounded-3xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xl p-5 space-y-4 max-h-[85vh] flex flex-col">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Globe className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                  Select Billing Country
-                </h3>
-                <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-0.5">
-                  Choose any country to convert prices and load regional payment methods.
-                </p>
+        <div className="fixed inset-0 z-50 flex items-end justify-center pointer-events-auto">
+          {/* Backdrop with Fade In / Fade Out */}
+          <div
+            onClick={closeCountrySheet}
+            className={`fixed inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-xs transition-opacity duration-300 ease-out ${
+              isCountrySheetVisible ? 'opacity-100' : 'opacity-0'
+            }`}
+          />
+
+          {/* Bottom Sheet Drawer with Smooth Slide Up / Slide Down Animation */}
+          <div
+            style={{
+              transform: !isCountrySheetVisible
+                ? 'translateY(100%)'
+                : isDraggingCountry
+                ? `translateY(${Math.max(0, countryDragY)}px)`
+                : 'translateY(0)',
+              transition: isDraggingCountry
+                ? 'none'
+                : isCountrySheetVisible
+                ? 'transform 0.32s cubic-bezier(0.16, 1, 0.3, 1)'
+                : 'transform 0.28s cubic-bezier(0.32, 0, 0.67, 0)',
+              willChange: 'transform',
+            }}
+            className="relative z-10 w-full max-w-lg bg-white dark:bg-zinc-900 rounded-t-[32px] border-t border-slate-200/90 dark:border-zinc-800 shadow-2xl flex flex-col max-h-[85vh] sm:max-h-[80vh] overflow-hidden p-5 sm:p-6 pb-7 sm:pb-8"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="billing-country-sheet-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Tactile Drag Handle Bar */}
+            <div
+              onMouseDown={(e) => {
+                e.preventDefault();
+                countryDragStartY.current = e.clientY;
+                setIsDraggingCountry(true);
+              }}
+              onTouchStart={(e) => {
+                if (e.touches && e.touches[0]) {
+                  countryDragStartY.current = e.touches[0].clientY;
+                  setIsDraggingCountry(true);
+                }
+              }}
+              className="flex justify-center -mt-2 pt-1 pb-3 cursor-grab active:cursor-grabbing touch-none select-none"
+              title="Drag down to close"
+            >
+              <div className="w-12 h-1.5 rounded-full bg-slate-300 dark:bg-zinc-700 transition-all hover:bg-slate-400 dark:hover:bg-zinc-600" />
+            </div>
+
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 shadow-2xs">
+                  <Globe className="w-4.5 h-4.5" />
+                </div>
+                <div>
+                  <h3 id="billing-country-sheet-title" className="text-sm font-bold text-slate-900 dark:text-white">
+                    Select Billing Country
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+                    Choose any country to convert prices and load regional payment methods.
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  setShowCountryModal(false);
-                  setCountrySearch('');
-                }}
+                onClick={closeCountrySheet}
                 className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                title="Close"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Search Input */}
-            <div className="relative">
+            <div className="relative pt-3 pb-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 dark:text-zinc-500" />
               <input
                 type="text"
                 value={countrySearch}
                 onChange={(e) => setCountrySearch(e.target.value)}
                 placeholder="Search country name, ISO code, or currency..."
-                className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-zinc-800/80 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-blue-500"
+                className="w-full pl-9 pr-12 py-2.5 bg-slate-50 dark:bg-zinc-800/80 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-blue-500 transition-all"
                 autoFocus
               />
               {countrySearch && (
                 <button
                   type="button"
                   onClick={() => setCountrySearch('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 font-medium"
                 >
                   Clear
                 </button>
@@ -1454,10 +1600,13 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
 
             {/* Quick Pick Popular Regions */}
             {!countrySearch && (
-              <div className="space-y-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">
-                  Popular Regions
-                </span>
+              <div className="space-y-1.5 py-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">
+                    Popular Regions
+                  </span>
+                  <span className="text-[10px] text-slate-400 dark:text-zinc-500">Quick selection</span>
+                </div>
                 <div className="flex flex-wrap gap-1.5">
                   {[
                     { code: 'IN', label: 'India' },
@@ -1479,15 +1628,15 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
                         key={c.code}
                         type="button"
                         onClick={() => handleSelectCountry(c)}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
+                        className={`px-2.5 py-1.5 rounded-xl text-[11px] font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
                           isSelected
-                            ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                            : 'bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border-slate-200 dark:border-zinc-700 hover:border-slate-300'
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-xs ring-2 ring-blue-500/20'
+                            : 'bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 border-slate-200 dark:border-zinc-700 hover:border-slate-300 dark:hover:border-zinc-600 hover:bg-slate-100 dark:hover:bg-zinc-700/60'
                         }`}
                       >
                         <span>{c.flag}</span>
                         <span>{c.name}</span>
-                        <span className={`text-[10px] font-mono ${isSelected ? 'text-blue-200' : 'text-slate-400'}`}>
+                        <span className={`text-[10px] font-mono ${isSelected ? 'text-blue-100 font-bold' : 'text-slate-400 dark:text-zinc-500'}`}>
                           ({curr})
                         </span>
                       </button>
@@ -1498,9 +1647,9 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
             )}
 
             {/* Scrollable List of All Countries */}
-            <div className="overflow-y-auto flex-1 space-y-1 pr-1 divide-y divide-slate-100 dark:divide-zinc-800/60 max-h-[300px]">
+            <div className="overflow-y-auto flex-1 space-y-1 pr-1 divide-y divide-slate-100 dark:divide-zinc-800/60 min-h-[160px] max-h-[300px] sm:max-h-[340px] mt-1 overscroll-contain">
               {filteredCountries.length === 0 ? (
-                <div className="p-6 text-center text-xs text-slate-500 dark:text-zinc-400">
+                <div className="p-8 text-center text-xs text-slate-500 dark:text-zinc-400">
                   No countries found matching "{countrySearch}"
                 </div>
               ) : (
@@ -1512,26 +1661,30 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
                       key={c.code}
                       type="button"
                       onClick={() => handleSelectCountry(c)}
-                      className={`w-full px-3 py-2 rounded-xl flex items-center justify-between text-left transition-all cursor-pointer ${
+                      className={`w-full px-3 py-2.5 rounded-xl flex items-center justify-between text-left transition-all cursor-pointer ${
                         isSelected
-                          ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-100 font-bold'
+                          ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-100 font-bold border border-blue-200/60 dark:border-blue-900/40'
                           : 'hover:bg-slate-50 dark:hover:bg-zinc-800/60 text-slate-700 dark:text-zinc-300'
                       }`}
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="text-lg shrink-0">{c.flag}</span>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="text-xl shrink-0">{c.flag}</span>
                         <div className="min-w-0">
-                          <div className="text-xs truncate">{c.name}</div>
-                          <div className="text-[10px] text-slate-400 dark:text-zinc-500">
+                          <div className="text-xs font-medium truncate text-slate-900 dark:text-zinc-100">{c.name}</div>
+                          <div className="text-[10.5px] text-slate-400 dark:text-zinc-500">
                             {c.code} • Dial {c.dialCode}
                           </div>
                         </div>
                       </div>
                       <div className="text-right shrink-0 flex items-center gap-2">
-                        <span className="text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
+                        <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded-md ${
+                          isSelected
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400'
+                        }`}>
                           {curr}
                         </span>
-                        {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />}
+                        {isSelected && <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
                       </div>
                     </button>
                   );

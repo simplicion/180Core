@@ -88,20 +88,13 @@ export default function TreasuryPage() {
   const settledToDate = Number(treasury.totalCompletedPayouts || treasury.settledToDate || 0);
   const platformFees = Number(treasury.platformTakeRateEstimated || treasury.platformFeeCut || (totalGmv * feeRate) / 100);
 
-  // Multi-Currency Distribution computed from live volume
-  const multiCurrencyVolume = totalGmv > 0 ? [
-    { code: 'USD', symbol: '$', volume: totalGmv * 0.65, share: 65, flag: '🇺🇸' },
-    { code: 'INR', symbol: '₹', volume: totalGmv * 0.22 * 83.5, share: 22, flag: '🇮🇳' },
-    { code: 'EUR', symbol: '€', volume: totalGmv * 0.08 * 0.92, share: 8, flag: '🇪🇺' },
-    { code: 'NPR', symbol: 'Rs.', volume: totalGmv * 0.05 * 133.5, share: 5, flag: '🇳🇵' },
-  ] : [];
+  const volumeVelocity = Number(treasury.volumeVelocity ?? data?.volumeVelocity ?? 0);
 
-  // Gateway Share Distribution computed from live volume
-  const gatewayShares = totalGmv > 0 ? [
-    { name: '180 Pay Direct / Unified Checkout', share: 54, volume: totalGmv * 0.54, color: 'bg-blue-500' },
-    { name: 'Razorpay Gateway (UPI QR & Cards)', share: 31, volume: totalGmv * 0.31, color: 'bg-emerald-500' },
-    { name: 'Stripe International Gateway', share: 15, volume: totalGmv * 0.15, color: 'bg-purple-500' },
-  ] : [];
+  // Multi-Currency Distribution computed from live database checkout sessions
+  const multiCurrencyVolume: any[] = data?.currencyDistribution || [];
+
+  // Gateway Share Distribution computed from live database checkout sessions
+  const gatewayShares: any[] = data?.gatewayDistribution || [];
 
   // Tax & TDS calculations (1% TDS on Indian payouts, 18% GST on platform fee cut)
   const estimatedTdsWithheld = pendingPayouts * 0.01;
@@ -196,7 +189,9 @@ export default function TreasuryPage() {
             ${totalGmv.toLocaleString('en-US', { minimumFractionDigits: 2 })}
           </div>
           <div className="text-[11px] text-zinc-500 mt-1 flex items-center gap-1.5">
-            <span className="text-emerald-500 font-bold">+18.4%</span> vs previous cycle
+            <span className={`font-bold ${volumeVelocity >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+              {volumeVelocity >= 0 ? `+${volumeVelocity}%` : `${volumeVelocity}%`}
+            </span> vs previous cycle
           </div>
         </div>
 

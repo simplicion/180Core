@@ -32,6 +32,7 @@ export default function TransactionsLedgerPage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [loading, setLoading] = useState(true);
   const [selectedTx, setSelectedTx] = useState<any | null>(null);
+  const [serverMetrics, setServerMetrics] = useState<any | null>(null);
 
   // Refund Modal State
   const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
@@ -54,6 +55,9 @@ export default function TransactionsLedgerPage() {
       });
       if (res.success) {
         setTransactions(res.transactions || res.data?.transactions || []);
+        if (res.metrics) {
+          setServerMetrics(res.metrics);
+        }
       }
     } catch (err) {
       console.error('Failed to load transactions ledger', err);
@@ -125,17 +129,46 @@ export default function TransactionsLedgerPage() {
     toast.success(`Exported ${transactions.length} transaction records to CSV`);
   };
 
-  // Metrics
-  const totalVolume = transactions
-    .filter((t) => t.status === 'PAID' || t.status === 'COMPLETED' || t.status === 'CAPTURED')
-    .reduce((acc, t) => acc + (t.amount || 0), 0);
-  const successCount = transactions.filter(
-    (t) => t.status === 'PAID' || t.status === 'COMPLETED' || t.status === 'CAPTURED'
-  ).length;
-  const refundedVolume = transactions
-    .filter((t) => t.status === 'REFUNDED')
-    .reduce((acc, t) => acc + (t.amount || 0), 0);
-  const successRate = transactions.length > 0 ? Math.round((successCount / transactions.length) * 100) : 100;
+  // Currency normalization helper for client-side fallback
+  const toUsd = (amount: number, curr: string = 'USD') => {
+    if (!amount || isNaN(amount)) return 0;
+    const c = String(curr || 'USD').toUpperCase();
+    if (c === 'INR') return Math.round((amount / 83.5) * 100) / 100;
+    if (c === 'EUR') return Math.round((amount / 0.92) * 100) / 100;
+    if (c === 'NPR') return Math.round((amount / 133.5) * 100) / 100;
+    return Math.round(amount * 100) / 100;
+  };
+
+  // Metrics (prioritize authoritative server metrics calculated across full DB)
+  const totalVolume = serverMetrics
+    ? serverMetrics.totalCapturedVolume
+    : transactions
+        .filter((t) => t.status === 'PAID' || t.status === 'COMPLETED' || t.status === 'CAPTURED')
+        .reduce((acc, t) => acc + toUsd(t.amount || 0, t.currency), 0);
+
+  const successCount = serverMetrics
+    ? serverMetrics.capturedCount
+    : transactions.filter(
+        (t) => t.status === 'PAID' || t.status === 'COMPLETED' || t.status === 'CAPTURED'
+      ).length;
+
+  const refundedVolume = serverMetrics
+    ? serverMetrics.refundedVolume
+    : transactions
+        .filter((t) => t.status === 'REFUNDED')
+        .reduce((acc, t) => acc + toUsd(t.amount || 0, t.currency), 0);
+
+  const refundedCount = serverMetrics
+    ? serverMetrics.refundedCount
+    : transactions.filter((t) => t.status === 'REFUNDED').length;
+
+  const totalInitiated = serverMetrics ? serverMetrics.totalInitiatedCount : transactions.length;
+
+  const successRate = serverMetrics
+    ? serverMetrics.conversionRate
+    : totalInitiated > 0
+    ? Math.round((successCount / totalInitiated) * 100)
+    : 0;
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
@@ -207,7 +240,7 @@ export default function TransactionsLedgerPage() {
           <div>
             <div className="text-xs text-zinc-500">Checkout Conversion Rate</div>
             <div className="text-2xl font-black font-mono text-blue-500 mt-1">{successRate}%</div>
-            <div className="text-[11px] text-zinc-500">Based on {transactions.length} initiated sessions</div>
+            <div className="text-[11px] text-zinc-500">Based on {totalInitiated} initiated sessions</div>
           </div>
           <div className="h-12 w-12 rounded-2xl bg-blue-500/10 text-blue-500 flex items-center justify-center">
             <Radio className="h-6 w-6" />
@@ -221,7 +254,7 @@ export default function TransactionsLedgerPage() {
               ${refundedVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })}
             </div>
             <div className="text-[11px] text-zinc-500">
-              {transactions.filter((t) => t.status === 'REFUNDED').length} reversals processed
+              {refundedCount} reversals processed
             </div>
           </div>
           <div className="h-12 w-12 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center">

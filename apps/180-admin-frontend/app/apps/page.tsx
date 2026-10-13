@@ -20,6 +20,7 @@ import {
   X,
   CreditCard,
   Settings,
+  DollarSign,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { adminApi, exportToCsv } from '@/lib/api';
@@ -28,6 +29,7 @@ export default function AppsFleetPage() {
   const [apps, setApps] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [quickFilter, setQuickFilter] = useState<'ALL' | 'ACTIVE' | 'SUSPENDED' | 'PAY_ENABLED' | 'WITH_VOLUME'>('ALL');
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
@@ -49,6 +51,7 @@ export default function AppsFleetPage() {
       const res = await adminApi.getApps({
         search: search || undefined,
         status: statusFilter !== 'ALL' ? statusFilter : undefined,
+        limit: 100,
       });
       if (res.success) {
         setApps(res.data?.apps || res.apps || []);
@@ -102,9 +105,27 @@ export default function AppsFleetPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Real fleet aggregate telemetry
+  const totalApps = apps.length;
+  const activeApps = apps.filter((a) => a.isActive !== false).length;
+  const activePct = totalApps > 0 ? Math.round((activeApps / totalApps) * 100) : 0;
+  const payApps = apps.filter((a) => a.enablePay).length;
+  const totalFleetGmv = apps.reduce((sum, a) => sum + (a.totalGmv || 0), 0);
+  const totalWalletEscrow = apps.reduce((sum, a) => sum + (a.walletBalance || 0), 0);
+
+  // Client-side quick filter
+  const filteredApps = apps.filter((a) => {
+    if (quickFilter === 'ACTIVE') return a.isActive !== false;
+    if (quickFilter === 'SUSPENDED') return a.isActive === false;
+    if (quickFilter === 'PAY_ENABLED') return a.enablePay;
+    if (quickFilter === 'WITH_VOLUME') return (a.totalGmv || 0) > 0;
+    return true;
+  });
+
   const handleExportCsv = () => {
-    if (!apps.length) return;
-    const rows = apps.map((a) => ({
+    const listToExport = filteredApps.length > 0 ? filteredApps : apps;
+    if (!listToExport.length) return;
+    const rows = listToExport.map((a) => ({
       ID: a.id,
       Name: a.name,
       ClientID: a.clientId,
@@ -117,7 +138,7 @@ export default function AppsFleetPage() {
       CreatedAt: new Date(a.createdAt).toLocaleDateString(),
     }));
     exportToCsv('180_apps_fleet', rows);
-    toast.success(`Exported ${apps.length} applications to CSV`);
+    toast.success(`Exported ${listToExport.length} applications to CSV`);
   };
 
   return (
@@ -127,8 +148,8 @@ export default function AppsFleetPage() {
         <div>
           <h1 className="text-2xl font-black tracking-tight text-zinc-900 dark:text-white flex items-center gap-3">
             Global App Fleet & Policy Center
-            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
-              {apps.length} Applications
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 font-mono">
+              {totalApps} Applications
             </span>
           </h1>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
@@ -169,16 +190,117 @@ export default function AppsFleetPage() {
         </div>
       </div>
 
+      {/* 4-Card Real Metric Summary Ribbon */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="p-5 rounded-3xl bg-white dark:bg-zinc-950 border border-zinc-200/80 dark:border-white/10 shadow-sm relative overflow-hidden group">
+          <div className="text-xs text-zinc-500 flex items-center justify-between">
+            <span className="font-medium">Total App Fleet</span>
+            <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-500">
+              <Layers className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="text-2xl font-black font-mono text-zinc-900 dark:text-white mt-3">
+            {totalApps}
+          </div>
+          <div className="text-[11px] text-zinc-500 mt-1 flex items-center gap-1.5">
+            <span className="text-indigo-500 font-semibold font-mono">100% genuine</span> OAuth 2.1 apps
+          </div>
+        </div>
+
+        <div className="p-5 rounded-3xl bg-white dark:bg-zinc-950 border border-zinc-200/80 dark:border-white/10 shadow-sm relative overflow-hidden group">
+          <div className="text-xs text-zinc-500 flex items-center justify-between">
+            <span className="font-medium">Operational Status</span>
+            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500">
+              <CheckCircle2 className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="text-2xl font-black font-mono text-zinc-900 dark:text-white mt-3">
+            {activeApps}{' '}
+            <span className="text-xs font-medium text-emerald-500 font-sans">
+              ({activePct}%)
+            </span>
+          </div>
+          <div className="text-[11px] text-zinc-500 mt-1 flex items-center gap-1.5">
+            <span className="text-emerald-500 font-semibold font-mono">{activeApps}</span> active, {totalApps - activeApps} suspended
+          </div>
+        </div>
+
+        <div className="p-5 rounded-3xl bg-white dark:bg-zinc-950 border border-zinc-200/80 dark:border-white/10 shadow-sm relative overflow-hidden group">
+          <div className="text-xs text-zinc-500 flex items-center justify-between">
+            <span className="font-medium">180 Pay Enabled</span>
+            <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500">
+              <CreditCard className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="text-2xl font-black font-mono text-zinc-900 dark:text-white mt-3">
+            {payApps}{' '}
+            <span className="text-xs font-medium text-blue-500 font-sans">
+              ({Math.round((payApps / (totalApps || 1)) * 100)}%)
+            </span>
+          </div>
+          <div className="text-[11px] text-zinc-500 mt-1 flex items-center gap-1.5">
+            <span className="text-blue-500 font-semibold font-mono">{payApps}</span> checkout enabled
+          </div>
+        </div>
+
+        <div className="p-5 rounded-3xl bg-white dark:bg-zinc-950 border border-zinc-200/80 dark:border-white/10 shadow-sm relative overflow-hidden group">
+          <div className="text-xs text-zinc-500 flex items-center justify-between">
+            <span className="font-medium">Fleet GMV Collected</span>
+            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500">
+              <DollarSign className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="text-2xl font-black font-mono text-zinc-900 dark:text-white mt-3">
+            ${totalFleetGmv.toFixed(2)}
+          </div>
+          <div className="text-[11px] text-zinc-500 mt-1 flex items-center gap-1.5">
+            <span className="text-amber-500 font-semibold font-mono">
+              ${totalWalletEscrow.toFixed(2)}
+            </span>{' '}
+            settled balance
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Filter Chips */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mr-1">
+          Quick Filters:
+        </span>
+        {[
+          { id: 'ALL', label: `All Apps (${totalApps})` },
+          { id: 'ACTIVE', label: `Active (${activeApps})` },
+          { id: 'SUSPENDED', label: `Suspended (${totalApps - activeApps})` },
+          { id: 'PAY_ENABLED', label: `Pay Enabled (${payApps})` },
+          {
+            id: 'WITH_VOLUME',
+            label: `With Volume (${apps.filter((a) => (a.totalGmv || 0) > 0).length})`,
+          },
+        ].map((chip) => (
+          <button
+            key={chip.id}
+            onClick={() => setQuickFilter(chip.id as any)}
+            className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all ${
+              quickFilter === chip.id
+                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/20'
+                : 'bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 text-zinc-600 dark:text-zinc-400 border border-zinc-200/60 dark:border-white/5'
+            }`}
+          >
+            {chip.label}
+          </button>
+        ))}
+      </div>
+
       {/* Main Apps Grid */}
       {loading ? (
         <div className="p-16 text-center text-xs text-zinc-500">Loading app fleet telemetry...</div>
-      ) : apps.length === 0 ? (
+      ) : filteredApps.length === 0 ? (
         <div className="p-16 text-center text-xs text-zinc-500">
-          No applications found matching query.
+          No applications found matching current criteria.
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {apps.map((app) => (
+          {filteredApps.map((app) => (
             <div
               key={app.id}
               className={`p-6 rounded-3xl bg-white dark:bg-zinc-950 border transition-all flex flex-col justify-between group ${

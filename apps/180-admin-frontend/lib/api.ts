@@ -47,8 +47,11 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 
 export const adminApi = {
   // Overview & KPIs
-  getOverview: async () => {
-    return fetchJson<any>(`${ADMIN_API_URL}/overview`);
+  getOverview: async (params?: { timeRange?: string; currency?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.timeRange) query.set('timeRange', params.timeRange);
+    if (params?.currency) query.set('currency', params.currency);
+    return fetchJson<any>(`${ADMIN_API_URL}/overview?${query.toString()}`);
   },
 
   // Developers Directory
@@ -65,12 +68,22 @@ export const adminApi = {
     return fetchJson<any>(`${ADMIN_API_URL}/developers/${id}`);
   },
 
+  getDeveloperProject: async (developerId: string, projectId: string) => {
+    return fetchJson<any>(`${ADMIN_API_URL}/developers/${developerId}/projects/${projectId}`);
+  },
+
+  getProject: async (projectId: string) => {
+    return fetchJson<any>(`${ADMIN_API_URL}/apps/${projectId}`);
+  },
+
   // App Fleet
-  getApps: async (params?: { search?: string; status?: string; developerId?: string }) => {
+  getApps: async (params?: { search?: string; status?: string; developerId?: string; page?: number; limit?: number }) => {
     const query = new URLSearchParams();
     if (params?.search) query.set('search', params.search);
     if (params?.status) query.set('status', params.status);
     if (params?.developerId) query.set('developerId', params.developerId);
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.limit) query.set('limit', String(params.limit));
     return fetchJson<any>(`${ADMIN_API_URL}/apps?${query.toString()}`);
   },
 
@@ -97,25 +110,29 @@ export const adminApi = {
     return fetchJson<any>(`${ADMIN_API_URL}/payouts?${query.toString()}`);
   },
 
-  settlePayout: async (payoutId: string, data: { utrReference?: string; adminNotes?: string }) => {
+  settlePayout: async (payoutId: string, data: { transactionRef?: string; utrReference?: string; adminNotes?: string; adminNote?: string }) => {
     return fetchJson<any>(`${ADMIN_API_URL}/payouts/${payoutId}/settle`, {
       method: 'PATCH',
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        transactionRef: data.transactionRef || data.utrReference,
+        adminNote: data.adminNote || data.adminNotes,
+      }),
     });
   },
 
   rejectPayout: async (payoutId: string, reason: string) => {
     return fetchJson<any>(`${ADMIN_API_URL}/payouts/${payoutId}/reject`, {
       method: 'PATCH',
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({ adminNote: reason }),
     });
   },
 
   // Ledger Transactions
-  getTransactions: async (params?: { search?: string; status?: string; page?: number; limit?: number }) => {
+  getTransactions: async (params?: { search?: string; status?: string; currency?: string; page?: number; limit?: number }) => {
     const query = new URLSearchParams();
     if (params?.search) query.set('search', params.search);
     if (params?.status) query.set('status', params.status);
+    if (params?.currency) query.set('currency', params.currency);
     if (params?.page) query.set('page', String(params.page));
     if (params?.limit) query.set('limit', String(params.limit));
     return fetchJson<any>(`${ADMIN_API_URL}/transactions?${query.toString()}`);
@@ -171,6 +188,24 @@ export const adminApi = {
       method: 'PATCH',
       body: JSON.stringify({ isLocked, reason }),
     });
+  },
+
+  deleteDeveloper: async (id: string, reason?: string) => {
+    return fetchJson<any>(`${ADMIN_API_URL}/developers/${id}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  deleteUser: async (id: string, reason?: string) => {
+    return fetchJson<any>(`${ADMIN_API_URL}/users/${id}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  getDeletionQueue: async () => {
+    return fetchJson<any>(`${ADMIN_API_URL}/deletion-queue`);
   },
 
   // App Actions

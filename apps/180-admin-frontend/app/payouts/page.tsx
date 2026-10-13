@@ -164,17 +164,26 @@ export default function PayoutsSettlementDeskPage() {
     toast.success(`Exported ${filteredPayouts.length} payout records to CSV`);
   };
 
+  const toUsd = (amount: number, curr: string = 'USD') => {
+    if (!amount || isNaN(amount)) return 0;
+    const c = String(curr || 'USD').toUpperCase();
+    if (c === 'INR') return Math.round((amount / 83.5) * 100) / 100;
+    if (c === 'EUR') return Math.round((amount / 0.92) * 100) / 100;
+    if (c === 'NPR') return Math.round((amount / 133.5) * 100) / 100;
+    return Math.round(amount * 100) / 100;
+  };
+
   // Metrics
   const pendingCount = payouts.filter((p) => p.status === 'PENDING_REVIEW' || p.status === 'PENDING').length;
   const pendingVolume = payouts
     .filter((p) => p.status === 'PENDING_REVIEW' || p.status === 'PENDING')
-    .reduce((acc, p) => acc + (p.amount || 0), 0);
+    .reduce((acc, p) => acc + toUsd(p.amount || 0, p.currency), 0);
   const processingVolume = payouts
     .filter((p) => p.status === 'PROCESSING' || p.status === 'APPROVED')
-    .reduce((acc, p) => acc + (p.amount || 0), 0);
+    .reduce((acc, p) => acc + toUsd(p.amount || 0, p.currency), 0);
   const settledVolume = payouts
     .filter((p) => p.status === 'PAID' || p.status === 'SETTLED')
-    .reduce((acc, p) => acc + (p.amount || 0), 0);
+    .reduce((acc, p) => acc + toUsd(p.amount || 0, p.currency), 0);
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
