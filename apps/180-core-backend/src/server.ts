@@ -33,20 +33,6 @@ import { RecurringBillingEngine } from '@workspace/payment-provider';
 const app = express();
 const server = http.createServer(app);
 
-// Security & Performance Middlewares
-app.use(
-  helmet({
-    contentSecurityPolicy: false,
-    crossOriginEmbedderPolicy: false,
-    crossOriginOpenerPolicy: false,
-  })
-);
-app.use(compression() as any);
-app.use(morgan('dev') as any);
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(generalApiLimiter);
-
 // CORS configuration supporting 180 Profile, Developers, Admin, and external origins
 const allowedOrigins = [
   'http://localhost:3000',
@@ -64,36 +50,53 @@ const allowedOrigins = [
   'https://api.180core.cloud',
 ];
 
+const corsMiddleware = cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, curl, server-to-server) or matching allowed
+    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('180workspace.com') || origin.endsWith('180core.cloud')) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow all for 3rd-party checkout and OAuth integrations
+    }
+  },
+  credentials: true,
+  optionsSuccessStatus: 204,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'X-180-Signature',
+    'X-180-Timestamp',
+    'X-180-Event',
+    'x-device-token',
+    'x-desktop-device-token',
+    'x-company-id',
+    'x-workspace-id',
+    'idempotency-key',
+    'Idempotency-Key',
+    'x-client-platform',
+    'x-app-version',
+  ],
+});
+
+// Mount CORS before any body parsers or rate-limiters so OPTIONS preflights never fail
+app.use(corsMiddleware);
+app.options('*', corsMiddleware as any);
+
+// Security & Performance Middlewares
 app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, server-to-server) or matching allowed
-      if (!origin || allowedOrigins.includes(origin) || origin.endsWith('180workspace.com') || origin.endsWith('180core.cloud')) {
-        callback(null, true);
-      } else {
-        callback(null, true); // Allow all for 3rd-party checkout and OAuth integrations
-      }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'X-Requested-With',
-      'X-180-Signature',
-      'X-180-Timestamp',
-      'X-180-Event',
-      'x-device-token',
-      'x-desktop-device-token',
-      'x-company-id',
-      'x-workspace-id',
-      'idempotency-key',
-      'Idempotency-Key',
-      'x-client-platform',
-      'x-app-version',
-    ],
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: false,
   })
 );
+app.use(compression() as any);
+app.use(morgan('dev') as any);
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(generalApiLimiter);
 
 // Root & Healthcheck
 app.get('/', (req, res) => {

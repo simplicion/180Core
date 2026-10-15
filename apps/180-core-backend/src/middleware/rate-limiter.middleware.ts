@@ -46,7 +46,7 @@ export const generalApiLimiter = rateLimit({
   max: 300,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req: any) => req.path === '/health',
+  skip: (req: any) => req.method === 'OPTIONS' || req.path === '/health',
   message: {
     success: false,
     error: 'Too many requests. Please slow down.',
