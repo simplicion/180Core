@@ -5,17 +5,12 @@ import { PrismaClient, Prisma } from '../generated/client/index.js';
 export { PrismaClient, Prisma };
 
 function getCoreDatabaseUrl(): string {
-  let url = (
-    process.env.CORE_DATABASE_URL ||
-    process.env.DEVELOPERS_DATABASE_URL ||
-    process.env.IDENTITY_DATABASE_URL ||
-    process.env.DATABASE_URL
-  );
+  let url = process.env.DATABASE_URL;
 
   if (!url) {
     if (process.env.NODE_ENV === 'production') {
       throw new Error(
-        'CRITICAL: CORE_DATABASE_URL environment variable is missing in production. Hardcoded database fallback credentials are strictly prohibited.'
+        'CRITICAL: DATABASE_URL environment variable is missing in production. Hardcoded database fallback credentials are strictly prohibited.'
       );
     }
     // Safe local development fallback

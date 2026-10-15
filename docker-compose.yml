@@ -31,7 +31,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4003
-      CORE_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-180core_db}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-180core_db}?schema=public
       JWT_SECRET: ${JWT_SECRET:-sovereign_core_jwt_secret_key_production_180}
       CORS_ALLOWED_ORIGINS: http://localhost:3008,http://localhost:3009,https://profile.180workspace.com,https://developers.180workspace.com
     ports:

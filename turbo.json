@@ -3,7 +3,7 @@
   "globalEnv": [
     "BUILD_STANDALONE",
     "NODE_ENV",
-    "CORE_DATABASE_URL",
+    "DATABASE_URL",
     "JWT_SECRET",
     "RSA_PRIVATE_KEY"
   ],

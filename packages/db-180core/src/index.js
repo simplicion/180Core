@@ -18,14 +18,11 @@ exports.developersPrisma = exports.db180core = exports.corePrisma = void 0;
 const client_1 = require("../generated/client");
 __exportStar(require("../generated/client"), exports);
 function getCoreDatabaseUrl() {
-    let url = (process.env.CORE_DATABASE_URL ||
-        process.env.DEVELOPERS_DATABASE_URL ||
-        process.env.IDENTITY_DATABASE_URL ||
-        process.env.DATABASE_URL);
+    let url = process.env.DATABASE_URL;
 
     if (!url) {
         if (process.env.NODE_ENV === 'production') {
-            throw new Error('CRITICAL: CORE_DATABASE_URL environment variable is missing in production. Hardcoded database fallback credentials are strictly prohibited.');
+            throw new Error('CRITICAL: DATABASE_URL environment variable is missing in production. Hardcoded database fallback credentials are strictly prohibited.');
         }
         url = 'postgresql://postgres:postgres@localhost:5432/180core_db?schema=public';
     }

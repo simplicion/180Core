@@ -86,7 +86,8 @@ jobs:
 
       - name: Run Prisma DB Push (AWS RDS Postgres)
         env:
-          CORE_DATABASE_URL: ${{ secrets.CORE_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.CORE_DATABASE_URL }}
+          CORE_DATABASE_URL: ${{ secrets.DATABASE_URL || secrets.CORE_DATABASE_URL }}
         run: |
           pnpm db:generate
           pnpm db:push
@@ -124,7 +125,7 @@ jobs:
           INSTANCE_ID: ${{ secrets.AWS_INSTANCE_ID }}
           GH_ACTOR: ${{ github.actor }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CORE_DB_URL: ${{ secrets.CORE_DATABASE_URL }}
+          CORE_DB_URL: ${{ secrets.DATABASE_URL || secrets.CORE_DATABASE_URL }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: |
@@ -152,7 +153,7 @@ jobs:
               ("if [ -n " + ($googleId | @sh) + " ]; then sed -i \"s/^GOOGLE_CLIENT_ID=.*/GOOGLE_CLIENT_ID=\"$googleId\"/\" /home/ubuntu/app/.env 2>/dev/null || true; fi"),
               ("if [ -n " + ($googleSecret | @sh) + " ]; then sed -i \"s/^GOOGLE_CLIENT_SECRET=.*/GOOGLE_CLIENT_SECRET=\"$googleSecret\"/\" /home/ubuntu/app/.env 2>/dev/null || true; fi"),
               "echo === 5. LAUNCH 180CORE BACKEND CONTAINER ===",
-              ("docker run -d --name 180workspace-core-backend --restart always --network app_180workspace-net --network-alias core-backend -p 4003:4003 --add-host host.docker.internal:host-gateway --env-file /home/ubuntu/app/.env " + (if ($googleId | length) > 0 then "-e GOOGLE_CLIENT_ID=" + ($googleId | @sh) + " " else "" end) + (if ($googleSecret | length) > 0 then "-e GOOGLE_CLIENT_SECRET=" + ($googleSecret | @sh) + " " else "" end) + "-e PORT=4003 -e NODE_ENV=production -e REDIS_URL=redis://host.docker.internal:6379 -e REDIS_INTERNAL_URL=redis://host.docker.internal:6379 -e CORE_DATABASE_URL=" + ($coreDb | @sh) + " ghcr.io/simplicion/180core-core-backend:latest"),
+              ("docker run -d --name 180workspace-core-backend --restart always --network app_180workspace-net --network-alias core-backend -p 4003:4003 --add-host host.docker.internal:host-gateway --env-file /home/ubuntu/app/.env " + (if ($googleId | length) > 0 then "-e GOOGLE_CLIENT_ID=" + ($googleId | @sh) + " " else "" end) + (if ($googleSecret | length) > 0 then "-e GOOGLE_CLIENT_SECRET=" + ($googleSecret | @sh) + " " else "" end) + "-e PORT=4003 -e NODE_ENV=production -e REDIS_URL=redis://host.docker.internal:6379 -e REDIS_INTERNAL_URL=redis://host.docker.internal:6379 -e DATABASE_URL=" + ($coreDb | @sh) + " -e CORE_DATABASE_URL=" + ($coreDb | @sh) + " ghcr.io/simplicion/180core-core-backend:latest"),
               "docker network connect 180workspace-net 180workspace-core-backend --alias core-backend 2>/dev/null || true",
               "docker network connect app_180workspace-net 180workspace-proxy 2>/dev/null || true",
               "docker network connect 180workspace-net 180workspace-proxy 2>/dev/null || true",

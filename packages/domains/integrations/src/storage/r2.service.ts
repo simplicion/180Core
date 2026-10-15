@@ -5,9 +5,9 @@ let _s3Client: S3Client | null = null;
 
 export const getS3Client = (): S3Client => {
     if (!_s3Client) {
-        const endpoint = process.env.CLOUDFLARE_R2_ENDPOINT || process.env.R2_ENDPOINT || '';
-        const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || process.env.R2_ACCESS_KEY || '';
-        const secretAccessKey = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || process.env.R2_SECRET_KEY || '';
+        const endpoint = process.env.R2_ENDPOINT || process.env.CLOUDFLARE_R2_ENDPOINT || '';
+        const accessKeyId = process.env.R2_ACCESS_KEY || process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || '';
+        const secretAccessKey = process.env.R2_SECRET_KEY || process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || '';
 
         _s3Client = new S3Client({
             region: 'auto',
@@ -54,8 +54,8 @@ export const buildR2Key = (category: R2StorageCategory | string, companyId: stri
  * Computes public CDN URL for an R2 object key
  */
 export const getR2PublicUrl = (key: string): string => {
-    const bucketName = process.env.CLOUDFLARE_R2_BUCKET_NAME || process.env.R2_BUCKET_NAME || '180workspace';
-    const publicUrlBase = process.env.CLOUDFLARE_R2_PUBLIC_URL || process.env.REELS_CDN_URL;
+    const bucketName = process.env.R2_BUCKET_NAME || process.env.CLOUDFLARE_R2_BUCKET_NAME || '180core';
+    const publicUrlBase = process.env.REELS_CDN_URL || process.env.CLOUDFLARE_R2_PUBLIC_URL;
     return publicUrlBase 
         ? `${publicUrlBase}/${key}`
         : `https://${bucketName}.r2.dev/${key}`;

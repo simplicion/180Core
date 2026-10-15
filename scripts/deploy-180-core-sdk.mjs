@@ -50,7 +50,7 @@ for (const dir of targetDirs) {
 const r2Endpoint = process.env.CLOUDFLARE_R2_ENDPOINT || process.env.R2_ENDPOINT;
 const r2AccessKey = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || process.env.R2_ACCESS_KEY;
 const r2SecretKey = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || process.env.R2_SECRET_KEY;
-const r2Bucket = process.env.CLOUDFLARE_R2_BUCKET_NAME || process.env.R2_BUCKET_NAME || '180workspace';
+const r2Bucket = process.env.R2_BUCKET_NAME || process.env.CLOUDFLARE_R2_BUCKET_NAME || '180core';
 
 if (r2Endpoint && r2AccessKey && r2SecretKey) {
   console.log('\n2️⃣ Cloudflare R2 Global CDN Credentials Detected — Synchronizing Edge Bucket...');
