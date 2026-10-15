@@ -23,6 +23,8 @@ import {
   ShieldCheck,
   Sparkles,
   AlertCircle,
+  Wallet,
+  ExternalLink,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -32,11 +34,33 @@ import {
   PlatformDrawer,
   LogoLoader,
 } from '@workspace/ui';
-import { use180Identity } from '@workspace/identity-sdk';
+import { use180Identity, use180Pay } from '@workspace/identity-sdk';
 import { AppLogoUploader } from '@/components/apps/AppLogoUploader';
 import DeveloperSidebar from '@/components/layout/DeveloperSidebar';
 import DeveloperHeader from '@/components/layout/DeveloperHeader';
 import { purgeAuthSession, getStoredAuthToken } from '@/lib/auth';
+
+export interface DeveloperBillingStatus {
+  totalProjects: number;
+  maxProjectsAllowed: number;
+  freeProjects: number;
+  billableProjects: number;
+  ratePerProject: number;
+  currentMonthlyTotal: number;
+  monthlyAmount: number;
+  status: 'TRIAL_ACTIVE' | 'TRIAL_EXPIRED' | 'ACTIVE' | 'WARNING_7_DAYS' | 'GRACE_PERIOD' | 'LOCKED';
+  planTier: 'TRIAL' | 'STARTER' | 'PRO' | 'ENTERPRISE';
+  planName: string;
+  isTrial: boolean;
+  contactFormUrl: string;
+  canCreateMore?: boolean;
+  message?: string;
+  nextBillingDate?: string | null;
+  daysUntilRenewal?: number | null;
+  subscriptionId?: string | null;
+}
+
+const ENTERPRISE_FORM_URL = 'https://app.180workspace.com/f/9hbzy4u62s';
 
 interface DeveloperApp {
   id: string;
@@ -99,8 +123,19 @@ function DeveloperDashboardContent() {
   const [filterType, setFilterType] = useState<'all' | 'confidential' | 'public'>('all');
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
 
-  // 180 Identity SDK Hook
+  // 180 Identity & 180 Pay SDK Hooks
   const { launch180Identity, isOpeningIdentity } = use180Identity();
+  const { launch180Pay, isOpeningPay } = use180Pay();
+
+  // Developer Billing & Plan Limit State
+  const [billingStatus, setBillingStatus] = useState<DeveloperBillingStatus | null>(null);
+  const [showPlanLimitModal, setShowPlanLimitModal] = useState(false);
+  const [subscribingTier, setSubscribingTier] = useState<'STARTER' | 'PRO' | null>(null);
+
+  const billingStatusRef = React.useRef<DeveloperBillingStatus | null>(null);
+  billingStatusRef.current = billingStatus;
+  const appsLengthRef = React.useRef<number>(0);
+  appsLengthRef.current = apps.length;
 
   // Create App Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -194,17 +229,7 @@ function DeveloperDashboardContent() {
       }
     };
 
-    const handleOpenCreateModal = () => {
-      let token =
-        localStorage.getItem('platform_auth_token') ||
-        localStorage.getItem('auth_token') ||
-        localStorage.getItem('token');
-      if (token) {
-        setShowCreateModal(true);
-      } else {
-        launch180Identity(() => checkAuthAndFetchApps());
-      }
-    };
+    const onOpenModalEvent = () => handleOpenCreateModal();
 
     const handleSignoutEvent = () => {
       setIsAuthenticated(false);
@@ -213,15 +238,43 @@ function DeveloperDashboardContent() {
     };
 
     window.addEventListener('message', handleMessage);
-    window.addEventListener('180_OPEN_CREATE_APP_MODAL', handleOpenCreateModal);
+    window.addEventListener('180_OPEN_CREATE_APP_MODAL', onOpenModalEvent);
     window.addEventListener('180_SIGNOUT', handleSignoutEvent);
 
     return () => {
       window.removeEventListener('message', handleMessage);
-      window.removeEventListener('180_OPEN_CREATE_APP_MODAL', handleOpenCreateModal);
+      window.removeEventListener('180_OPEN_CREATE_APP_MODAL', onOpenModalEvent);
       window.removeEventListener('180_SIGNOUT', handleSignoutEvent);
     };
   }, []);
+
+  const handleOpenCreateModal = () => {
+    let token =
+      localStorage.getItem('platform_auth_token') ||
+      localStorage.getItem('auth_token') ||
+      localStorage.getItem('token');
+    if (!token) {
+      launch180Identity(() => checkAuthAndFetchApps());
+      return;
+    }
+
+    const currentBilling = billingStatusRef.current;
+    const currentAppsCount = appsLengthRef.current;
+
+    // Strictly enforce project limits:
+    // Free tier allows exactly 1 project. If limit reached, open PlanLimitModal with 1-click upgrades
+    if (currentBilling && !currentBilling.canCreateMore) {
+      setShowPlanLimitModal(true);
+      return;
+    }
+
+    if (!currentBilling && currentAppsCount >= 1) {
+      setShowPlanLimitModal(true);
+      return;
+    }
+
+    setShowCreateModal(true);
+  };
 
   const getApiBase = () => {
     if (typeof window === 'undefined') return process.env.NEXT_PUBLIC_CORE_BACKEND_URL || 'http://localhost:4003';
@@ -355,11 +408,25 @@ function DeveloperDashboardContent() {
         return;
       }
 
-      // Step 4: Fetch Apps
+      // Step 4: Fetch Apps & Developer Billing Status in Parallel
       let parsedApps: DeveloperApp[] = [];
-      const appsRes = await fetchWithTimeout(`${apiBase}/api/v1/identity/developer/apps`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const [appsRes, billingRes] = await Promise.all([
+        fetchWithTimeout(`${apiBase}/api/v1/identity/developer/apps`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetchWithTimeout(`${apiBase}/api/v1/identity/developer/billing/status`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+
+      if (billingRes && billingRes.ok) {
+        try {
+          const bData = await billingRes.json();
+          if (bData.billing) {
+            setBillingStatus(bData.billing);
+          }
+        } catch (_) {}
+      }
 
       if (appsRes && appsRes.ok) {
         const data = await appsRes.json();
@@ -493,12 +560,15 @@ function DeveloperDashboardContent() {
       const data = await res.json();
       if (!res.ok) {
         if (res.status === 402 || data.code === 'PAYMENT_REQUIRED' || data.code === 'LIMIT_REACHED') {
+          if (data.billing) {
+            setBillingStatus(data.billing);
+          }
+          setShowCreateModal(false);
+          setShowPlanLimitModal(true);
           toast.error(
             data.message ||
-              'Payment required: You have reached your project limit or trial has expired. Please visit Billing to choose a plan with 180 Pay.'
+              'Project limit reached. Please upgrade your developer plan with 180 Pay to register more projects.'
           );
-          setShowCreateModal(false);
-          router.push('/billing');
           return;
         }
         throw new Error(data.message || data.error || 'Failed to register application');
@@ -547,6 +617,80 @@ function DeveloperDashboardContent() {
       toast.error(err.message || 'Error registering application');
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  /**
+   * Launch 180 Pay Sovereign Checkout for Starter ($2/mo) or Pro ($5/mo)
+   */
+  const handleSubscribeWith180Pay = async (tier: 'STARTER' | 'PRO') => {
+    setSubscribingTier(tier);
+    try {
+      const token = localStorage.getItem('platform_auth_token') || getStoredAuthToken();
+      const apiBase = getApiBase();
+
+      const checkoutRes = await fetch(`${apiBase}/api/v1/identity/developer/billing/checkout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ planTier: tier }),
+      });
+
+      const checkoutData = await checkoutRes.json();
+      if (!checkoutRes.ok) {
+        throw new Error(checkoutData.message || 'Failed to initialize 180 Pay checkout session');
+      }
+
+      await launch180Pay({
+        sessionId: checkoutData.sessionId,
+        amount: checkoutData.amount,
+        currency: checkoutData.currency || 'USD',
+        title: checkoutData.title,
+        description: checkoutData.description,
+        onSuccess: async (payRes) => {
+          try {
+            const confirmRes = await fetch(
+              `${apiBase}/api/v1/identity/developer/billing/confirm-subscription`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                  planTier: tier,
+                  sessionId: payRes.sessionId || checkoutData.sessionId,
+                  transactionId: payRes.transactionId,
+                  paymentSource: '180_PAY',
+                }),
+              }
+            );
+
+            const confirmData = await confirmRes.json();
+            if (!confirmRes.ok) {
+              throw new Error(confirmData.message || 'Failed to activate subscription tier');
+            }
+
+            toast.success(
+              `Successfully upgraded to ${tier === 'PRO' ? 'Pro ($5/mo for 10 projects)' : 'Starter ($2/mo for 5 projects)'} Plan!`
+            );
+            setShowPlanLimitModal(false);
+            await checkAuthAndFetchApps();
+            setShowCreateModal(true);
+          } catch (confirmErr: any) {
+            toast.error(confirmErr.message || 'Error finalizing subscription activation.');
+          }
+        },
+        onError: () => {
+          toast.error('180 Pay checkout was not completed.');
+        },
+      });
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to initiate 180 Pay checkout');
+    } finally {
+      setSubscribingTier(null);
     }
   };
 
@@ -826,8 +970,9 @@ function DeveloperDashboardContent() {
         onSignOut={handleSignOut}
         appCount={apps.length}
         apps={apps}
-        onOpenRegisterModal={() => setShowCreateModal(true)}
+        onOpenRegisterModal={handleOpenCreateModal}
         onExpandChange={setIsSidebarExpanded}
+        canCreateMore={billingStatus?.canCreateMore ?? (apps.length < 1)}
       />
 
       {/* 2. Main Viewport Container */}
@@ -846,7 +991,7 @@ function DeveloperDashboardContent() {
           onTabChange={handleTabChange}
           searchQuery={searchQuery}
           onSearchChange={activeTab === 'apps' ? setSearchQuery : undefined}
-          onOpenRegisterModal={() => setShowCreateModal(true)}
+          onOpenRegisterModal={handleOpenCreateModal}
           userProfile={userProfile}
           onSignOut={handleSignOut}
         />
@@ -906,7 +1051,62 @@ function DeveloperDashboardContent() {
                     Public (PKCE)
                   </button>
                 </div>
+
+                {/* + New Project Action Button */}
+                <Button
+                  onClick={handleOpenCreateModal}
+                  className="rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200 font-bold text-xs py-3 px-4 shadow-sm flex items-center gap-2 shrink-0 cursor-pointer min-h-[44px]"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>New Project</span>
+                  {billingStatus && !billingStatus.canCreateMore && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold">
+                      Upgrade
+                    </span>
+                  )}
+                </Button>
               </div>
+
+              {/* Plan Limit / Capacity Alert Banner */}
+              {billingStatus && !billingStatus.canCreateMore && (
+                <div className="rounded-2xl p-4 sm:p-5 border border-amber-500/30 bg-amber-500/5 dark:bg-amber-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in duration-200">
+                  <div className="flex items-start sm:items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                      <Sparkles className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-bold text-zinc-950 dark:text-white">
+                          Project Limit Reached ({billingStatus.totalProjects}/{billingStatus.maxProjectsAllowed})
+                        </h4>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold">
+                          {billingStatus.planName}
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
+                        {billingStatus.message ||
+                          'You have reached your included project limit. Upgrade with 180 Pay to create more applications.'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <Button
+                      onClick={() => setShowPlanLimitModal(true)}
+                      size="sm"
+                      className="rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs px-4 py-2 shadow-sm cursor-pointer"
+                    >
+                      <Wallet className="w-3.5 h-3.5 mr-1.5" />
+                      <span>Upgrade Plan</span>
+                    </Button>
+                    <Link
+                      href="/billing"
+                      className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white px-3 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 transition-colors"
+                    >
+                      View Billing
+                    </Link>
+                  </div>
+                </div>
+              )}
 
               {/* Applications Grid */}
               {filteredApps.length === 0 ? (
@@ -925,7 +1125,7 @@ function DeveloperDashboardContent() {
                     </p>
                   </div>
                   <Button
-                    onClick={() => setShowCreateModal(true)}
+                    onClick={handleOpenCreateModal}
                     size="sm"
                     className="rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md shadow-blue-500/20"
                   >
@@ -1636,6 +1836,141 @@ function DeveloperDashboardContent() {
             >
               {isRotating ? <LogoLoader className="w-4 h-4 animate-spin text-white" /> : <RotateCw className="w-4 h-4" />}
               <span>Confirm Rotation</span>
+            </Button>
+          </div>
+        </div>
+      </PlatformModal>
+
+      {/* ─────────────────────────────────────────────────────────────────────────────
+          CENTRALIZED MODAL: PLAN LIMIT REACHED & 180 PAY UPGRADE
+          ───────────────────────────────────────────────────────────────────────────── */}
+      <PlatformModal
+        isOpen={showPlanLimitModal}
+        onClose={() => setShowPlanLimitModal(false)}
+        title="Project Limit Reached"
+        icon={Sparkles}
+        iconBgClass="bg-amber-500/10"
+        iconColorClass="text-amber-600 dark:text-amber-400"
+        maxWidthClass="max-w-xl"
+      >
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                {billingStatus?.planName || 'Free Tier'}
+              </span>
+              <span className="text-xs font-mono text-zinc-500">
+                {billingStatus?.totalProjects ?? apps.length} of {billingStatus?.maxProjectsAllowed ?? 1} project slots used
+              </span>
+            </div>
+            <h3 className="text-base font-bold text-zinc-950 dark:text-white">
+              Upgrade your Developer Plan with 180 Pay
+            </h3>
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+              The Free Tier strictly includes exactly <strong>1 active project</strong>. To register additional applications, choose a plan below to checkout instantly via <strong>180 Pay</strong>:
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Starter Plan Card */}
+            <div className="p-5 rounded-2xl border border-zinc-200 dark:border-white/10 bg-zinc-50/50 dark:bg-zinc-900/40 space-y-4 flex flex-col justify-between hover:border-blue-500/40 transition-all">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-zinc-900 dark:text-white">Starter Plan</span>
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                    5 Projects
+                  </span>
+                </div>
+                <div className="font-mono">
+                  <span className="text-2xl font-black text-zinc-950 dark:text-white">$2.00</span>
+                  <span className="text-xs text-zinc-400"> / month</span>
+                </div>
+                <ul className="text-[11px] space-y-1.5 text-zinc-600 dark:text-zinc-400 pt-1">
+                  <li className="flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>Up to 5 active applications</span>
+                  </li>
+                  <li className="flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>180 Identity & Pay SDKs</span>
+                  </li>
+                  <li className="flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>Recurring 180 Pay auto-renewal</span>
+                  </li>
+                </ul>
+              </div>
+
+              <Button
+                onClick={() => handleSubscribeWith180Pay('STARTER')}
+                disabled={subscribingTier !== null || isOpeningPay}
+                className="w-full py-2 rounded-xl text-xs font-bold bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200 cursor-pointer flex items-center justify-center gap-1.5 shadow-sm min-h-[38px]"
+              >
+                <Wallet className="w-3.5 h-3.5" />
+                <span>{subscribingTier === 'STARTER' ? 'Opening 180 Pay...' : 'Upgrade to Starter ($2)'}</span>
+              </Button>
+            </div>
+
+            {/* Pro Plan Card */}
+            <div className="p-5 rounded-2xl border border-blue-500/30 bg-blue-500/5 dark:bg-blue-500/10 space-y-4 flex flex-col justify-between hover:border-blue-500 transition-all">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-zinc-900 dark:text-white">Pro Plan</span>
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white">
+                    10 Projects
+                  </span>
+                </div>
+                <div className="font-mono">
+                  <span className="text-2xl font-black text-zinc-950 dark:text-white">$5.00</span>
+                  <span className="text-xs text-zinc-400"> / month</span>
+                </div>
+                <ul className="text-[11px] space-y-1.5 text-zinc-600 dark:text-zinc-400 pt-1">
+                  <li className="flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>Up to 10 active applications</span>
+                  </li>
+                  <li className="flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>Priority webhook dispatch</span>
+                  </li>
+                  <li className="flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>Full telemetry & analytics</span>
+                  </li>
+                </ul>
+              </div>
+
+              <Button
+                onClick={() => handleSubscribeWith180Pay('PRO')}
+                disabled={subscribingTier !== null || isOpeningPay}
+                className="w-full py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/20 min-h-[38px]"
+              >
+                <Wallet className="w-3.5 h-3.5" />
+                <span>{subscribingTier === 'PRO' ? 'Opening 180 Pay...' : 'Upgrade to Pro ($5)'}</span>
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-zinc-200 dark:border-white/10 text-xs text-zinc-500">
+            <span>
+              Need 15+ projects?{' '}
+              <a
+                href={ENTERPRISE_FORM_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-bold text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1"
+              >
+                <span>Contact Enterprise</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setShowPlanLimitModal(false)}
+              className="text-xs min-h-[36px]"
+            >
+              Cancel
             </Button>
           </div>
         </div>

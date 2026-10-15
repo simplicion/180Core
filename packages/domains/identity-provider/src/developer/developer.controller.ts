@@ -191,12 +191,12 @@ export class DeveloperController {
                     paymentSource: req.body.paymentSource
                 });
             } catch (billingErr: any) {
-                if (billingErr.statusCode === 402 || billingErr.code === 'PAYMENT_REQUIRED') {
+                if (billingErr.statusCode === 402 || billingErr.code === 'PAYMENT_REQUIRED' || billingErr.code === 'LIMIT_REACHED') {
                     return res.status(402).json({
                         success: false,
-                        code: 'PAYMENT_REQUIRED',
+                        code: billingErr.code || 'PAYMENT_REQUIRED',
                         message: billingErr.message,
-                        billing: billingErr.data
+                        billing: billingErr.data?.billing || billingErr.data
                     });
                 }
                 throw billingErr;

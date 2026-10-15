@@ -240,20 +240,20 @@ export class DeveloperBillingService {
 
     // ─── CASE 2: 30-DAY FREE TRIAL ACTIVE ────────────────────────────────────
     if (isTrial) {
-      const maxProjectsAllowed = DEV_STARTER_MAX_PROJECTS; // 5 projects allowed in trial
+      const maxProjectsAllowed = FREE_PROJECTS_LIMIT; // Strictly 1 project allowed in Free Tier
       const canCreateMore = totalProjects < maxProjectsAllowed;
 
       return {
         totalProjects,
         maxProjectsAllowed,
-        freeProjects: totalProjects,
-        billableProjects: 0,
+        freeProjects: Math.min(totalProjects, FREE_PROJECTS_LIMIT),
+        billableProjects: Math.max(0, totalProjects - FREE_PROJECTS_LIMIT),
         ratePerProject: 0,
         currentMonthlyTotal: 0.0,
         monthlyAmount: 0.0,
         status: 'TRIAL_ACTIVE',
         planTier: 'TRIAL',
-        planName: '30-Day Free Trial',
+        planName: 'Free Tier (1 Project)',
         isTrial: true,
         trialDaysLeft,
         trialEndsAt: trialEndsAt.toISOString(),
@@ -267,7 +267,9 @@ export class DeveloperBillingService {
         gracePeriodEndsAt: null,
         isLocked: false,
         canCreateMore,
-        message: `30-Day Free Trial Active (${trialDaysLeft} days remaining). You have used ${totalProjects} of ${maxProjectsAllowed} included projects.`,
+        message: canCreateMore
+          ? `Free Tier Active: 1 project included (${trialDaysLeft} days trial). Upgrade to Starter ($2/mo for 5 projects) or Pro ($5/mo for 10 projects) for more projects.`
+          : `Free tier project limit reached (1/1 project used). Upgrade to Starter ($2/mo for 5 projects) or Pro ($5/mo for 10 projects) with 180 Pay to create more projects.`,
         contactFormUrl: ENTERPRISE_FORM_URL,
       };
     }
@@ -275,15 +277,15 @@ export class DeveloperBillingService {
     // ─── CASE 3: TRIAL EXPIRED (NO ACTIVE SUBSCRIPTION) ───────────────────────
     return {
       totalProjects,
-      maxProjectsAllowed: totalProjects,
-      freeProjects: 0,
-      billableProjects: totalProjects,
+      maxProjectsAllowed: Math.min(totalProjects, FREE_PROJECTS_LIMIT),
+      freeProjects: Math.min(totalProjects, FREE_PROJECTS_LIMIT),
+      billableProjects: Math.max(0, totalProjects - FREE_PROJECTS_LIMIT),
       ratePerProject: 0,
       currentMonthlyTotal: 0.0,
       monthlyAmount: 0.0,
       status: 'TRIAL_EXPIRED',
       planTier: 'TRIAL',
-      planName: 'Free Trial Expired',
+      planName: 'Free Tier (Expired)',
       isTrial: false,
       trialDaysLeft: 0,
       trialEndsAt: trialEndsAt.toISOString(),
@@ -334,11 +336,11 @@ export class DeveloperBillingService {
     if (billing.totalProjects >= billing.maxProjectsAllowed) {
       let limitMsg = '';
       if (billing.planTier === 'PRO') {
-        limitMsg = `Pro plan project limit reached (${DEV_PRO_MAX_PROJECTS} projects). For custom scaling and unlimited capacity, please contact us: ${ENTERPRISE_FORM_URL}`;
+        limitMsg = `Pro plan project limit reached (${DEV_PRO_MAX_PROJECTS} projects). For custom scaling and unlimited capacity (15+ projects), please contact us: ${ENTERPRISE_FORM_URL}`;
       } else if (billing.planTier === 'STARTER') {
         limitMsg = `Starter plan project limit reached (${DEV_STARTER_MAX_PROJECTS} projects). Upgrade to Pro ($5/mo for 10 projects) with 180 Pay to create more projects.`;
       } else {
-        limitMsg = `Trial project limit reached (${DEV_STARTER_MAX_PROJECTS} projects). Upgrade to Pro ($5/mo for 10 projects) with 180 Pay to create more projects.`;
+        limitMsg = `Free tier project limit reached (1/1 project used). Upgrade to Starter ($2/mo for 5 projects) or Pro ($5/mo for 10 projects) with 180 Pay to create more projects.`;
       }
 
       const err: any = new Error(limitMsg);

@@ -47,6 +47,7 @@ export interface DeveloperSidebarProps {
   currentAppId?: string;
   onOpenRegisterModal?: () => void;
   onExpandChange?: (expanded: boolean) => void;
+  canCreateMore?: boolean;
 }
 
 interface NavToolItem {
@@ -71,6 +72,7 @@ export function DeveloperSidebar({
   currentAppId,
   onOpenRegisterModal,
   onExpandChange,
+  canCreateMore,
 }: DeveloperSidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -316,12 +318,19 @@ export function DeveloperSidebar({
               <button
                 type="button"
                 onClick={handleRegisterNewProject}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-zinc-900 dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900 border border-dashed border-zinc-300 dark:border-zinc-700 transition-colors cursor-pointer min-h-[38px] group"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-zinc-900 dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900 border border-dashed border-zinc-300 dark:border-zinc-700 transition-colors cursor-pointer min-h-[38px] group"
               >
-                <div className="w-5 h-5 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 flex items-center justify-center shrink-0">
-                  <Plus className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-200" />
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-5 h-5 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 flex items-center justify-center shrink-0">
+                    <Plus className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-200" />
+                  </div>
+                  <span className="truncate">Register New Project</span>
                 </div>
-                <span className="truncate">Register New Project</span>
+                {canCreateMore === false && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25 shrink-0 ml-1">
+                    Upgrade
+                  </span>
+                )}
               </button>
 
               {/* Option 2: Registered Projects List */}

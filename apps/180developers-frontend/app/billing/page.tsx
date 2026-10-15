@@ -13,6 +13,7 @@ export default function BillingPage() {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [apps, setApps] = useState<any[]>([]);
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [billingStatus, setBillingStatus] = useState<any>(null);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -23,11 +24,14 @@ export default function BillingPage() {
         const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
         const apiBase = isLocal ? 'http://localhost:4003' : (process.env.NEXT_PUBLIC_CORE_BACKEND_URL || 'https://api.180core.cloud');
 
-        const [userRes, appsRes] = await Promise.all([
+        const [userRes, appsRes, billingRes] = await Promise.all([
           fetch(`${apiBase}/api/oauth/userinfo`, {
             headers: { Authorization: `Bearer ${token}` },
           }).catch(() => null),
           fetch(`${apiBase}/api/v1/identity/developer/apps`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }).catch(() => null),
+          fetch(`${apiBase}/api/v1/identity/developer/billing/status`, {
             headers: { Authorization: `Bearer ${token}` },
           }).catch(() => null),
         ]);
@@ -40,6 +44,13 @@ export default function BillingPage() {
         if (appsRes && appsRes.ok) {
           const a = await appsRes.json();
           setApps(a.apps || a || []);
+        }
+
+        if (billingRes && billingRes.ok) {
+          const b = await billingRes.json();
+          if (b.billing) {
+            setBillingStatus(b.billing);
+          }
         }
       } catch (_) {}
     };
@@ -64,6 +75,7 @@ export default function BillingPage() {
         onExpandChange={setIsSidebarExpanded}
         userProfile={userProfile}
         onSignOut={handleSignOut}
+        canCreateMore={billingStatus?.canCreateMore ?? (apps.length < 1)}
       />
       <div
         className={`flex-1 ${
