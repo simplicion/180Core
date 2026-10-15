@@ -8,11 +8,12 @@ import { hashSecret } from './oauth.service';
  * Ensures 100% backwards compatibility for legacy OAuth callbacks and external integrations.
  */
 export const LEGACY_FIRST_PARTY_ALIASES: Record<string, string> = {
-    '180-developer-portal': '180-developers-portal',
-    '180_client_70d751541f05347fe803ec8e128f5e83': '180-workspace-platform',
-    '180_client_5cc136397553836e34eb37ce22d13a53': '180-workspace-platform',
-    '180_client_266753c1171df1e2c4a391483fd2e02e': '180-social-studio-mobile',
-    '180_client_b26aee801c22cb3295f041ff2a3597db': '180-traffic-director',
+    '180-developer-portal': '180-core-client',
+    '180-developers-portal': '180-core-client',
+    '180_client_70d751541f05347fe803ec8e128f5e83': '180-core-client',
+    '180_client_5cc136397553836e34eb37ce22d13a53': '180-core-client',
+    '180_client_266753c1171df1e2c4a391483fd2e02e': '180-core-client',
+    '180_client_b26aee801c22cb3295f041ff2a3597db': '180-core-client',
 };
 
 /**
