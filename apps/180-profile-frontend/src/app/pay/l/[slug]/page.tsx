@@ -17,9 +17,9 @@ export default async function PayLinkAliasPage({ params }: PageProps) {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-4">
-          <LogoLoader size={40} className="w-10 h-10 text-indigo-500" />
-          <p className="text-xs text-zinc-400 font-medium mt-3">Loading checkout link...</p>
+        <div className="w-full py-16 text-center space-y-4 flex flex-col items-center justify-center font-sans">
+          <LogoLoader size={40} className="w-10 h-10 text-blue-600" />
+          <p className="text-xs text-slate-500 font-medium">Loading 180 Pay checkout...</p>
         </div>
       }
     >

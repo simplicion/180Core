@@ -15,6 +15,7 @@ router.post('/sessions/:id/direct-order', CheckoutApiController.createDirectOrde
 router.get('/sessions/:id/status', CheckoutApiController.checkSessionStatus);
 router.post('/sessions/:id/direct-verify', CheckoutApiController.verifyDirectPayment);
 router.post('/sessions/:id/direct-pay', optionalAuth, CheckoutApiController.executeDirectPayment);
+router.post('/sessions/:id/direct-execute', optionalAuth, CheckoutApiController.executeDirectPayment);
 router.post('/webhook', CheckoutApiController.handleWebhook);
 router.post('/sessions/:id/apply-coupon', CheckoutApiController.applyCoupon);
 router.post('/sessions/:id/remove-coupon', CheckoutApiController.removeCoupon);

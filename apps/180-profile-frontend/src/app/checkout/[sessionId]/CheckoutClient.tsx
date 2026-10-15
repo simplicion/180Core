@@ -25,6 +25,7 @@ import {
   Globe,
   Search,
   X,
+  Download,
 } from 'lucide-react';
 import { Button, LogoLoader, AILogoIcon } from '@workspace/ui';
 import toast from 'react-hot-toast';
@@ -41,17 +42,19 @@ declare global {
 export function CheckoutClient({ initialSessionId }: { initialSessionId?: string } = {}) {
   const params = useParams();
   
-  // Resilient sessionId extraction for static SSG exports (Cloudflare Pages rewrites)
-  const getInitialSessionId = () => {
+  // Resilient sessionId extraction for static SSG exports (Cloudflare Pages rewrites & Payment Link resolution)
+  const getInitialSessionId = useCallback(() => {
     if (initialSessionId && initialSessionId !== 'default') return initialSessionId;
-    const pId = params?.sessionId as string;
+    const pId = (params?.sessionId || params?.slug) as string;
     if (pId && pId !== 'default') return pId;
     if (typeof window !== 'undefined') {
       const match = window.location.pathname.match(/\/checkout\/([^\/\?#]+)/);
       if (match && match[1] && match[1] !== 'default') return match[1];
+      const matchLink = window.location.pathname.match(/\/(?:link|pay\/l)\/([^/?#]+)/i);
+      if (matchLink && matchLink[1] && matchLink[1] !== 'default') return decodeURIComponent(matchLink[1]);
     }
     return pId || '';
-  };
+  }, [initialSessionId, params?.sessionId, params?.slug]);
 
   const [sessionId, setSessionId] = useState<string>(getInitialSessionId);
 
@@ -60,7 +63,7 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
     if (currentId && currentId !== sessionId) {
       setSessionId(currentId);
     }
-  }, [params?.sessionId]);
+  }, [getInitialSessionId]);
 
   const clientSessionId = useMemo(() => {
     if (typeof window === 'undefined') return '';
@@ -687,6 +690,9 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
 
       if (sessionInfo) {
         setSession(sessionInfo);
+        if (sessionInfo.id && sessionInfo.id !== sessionId) {
+          setSessionId(sessionInfo.id);
+        }
       } else {
         throw new Error('Failed to load checkout details');
       }
@@ -909,6 +915,15 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
         const data = await res.json();
         if (data.success) {
           toast.success('Promotional checkout completed successfully!', { id: toastId });
+          if (data.fulfillment || data.session?.metadata?.fulfillment) {
+            setSession((prev: any) => ({
+              ...prev,
+              metadata: {
+                ...(prev?.metadata || {}),
+                fulfillment: data.fulfillment || data.session?.metadata?.fulfillment,
+              },
+            }));
+          }
           setCompleted(true);
           setTopupLoading(false);
           const txId = data.transactionId || 'tx_free_' + Math.random().toString(36).substring(2, 10);
@@ -1103,6 +1118,15 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
             }
 
             toast.success('Payment authorized & completed!', { id: verifyToastId });
+            if (verifyData.fulfillment || verifyData.session?.metadata?.fulfillment) {
+              setSession((prev: any) => ({
+                ...prev,
+                metadata: {
+                  ...(prev?.metadata || {}),
+                  fulfillment: verifyData.fulfillment || verifyData.session?.metadata?.fulfillment,
+                },
+              }));
+            }
             setCompleted(true);
 
             const liveSuccessPayload = {
@@ -1191,6 +1215,7 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
   }
 
   if (completed) {
+    const fulfillment = session?.metadata?.fulfillment;
     return (
       <div 
         role="alert" 
@@ -1206,7 +1231,62 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
             {currencyService.format(activeFinalAmount, activeCurrency)} paid to <strong className="text-slate-900">{session?.app?.name}</strong>.
           </p>
         </div>
-        <p className="text-[11px] text-slate-500">Redirecting back to application...</p>
+
+        {/* Fulfillment Secret Message / License Key */}
+        {fulfillment?.fulfillmentMessage && (
+          <div className="rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4 text-left space-y-2 max-w-sm mx-auto">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5" />
+                Digital Access / License Key
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(fulfillment.fulfillmentMessage);
+                  toast.success('Copied to clipboard');
+                }}
+                className="text-xs text-slate-500 hover:text-slate-900 flex items-center gap-1 transition-colors cursor-pointer"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copy</span>
+              </button>
+            </div>
+            <div className="p-3 rounded-xl bg-white font-mono text-xs text-slate-800 select-all break-all border border-slate-200">
+              {fulfillment.fulfillmentMessage}
+            </div>
+          </div>
+        )}
+
+        {/* Fulfillment Download File */}
+        {fulfillment?.fulfillmentFileUrl && (
+          <div className="pt-2 max-w-sm mx-auto">
+            <a
+              href={fulfillment.fulfillmentFileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-all shadow-lg shadow-indigo-600/20"
+            >
+              <Download className="w-4 h-4" />
+              Download Digital Asset
+            </a>
+          </div>
+        )}
+
+        {/* Redirect to store / merchant */}
+        {fulfillment?.redirectUrl ? (
+          <div className="pt-1">
+            <a
+              href={fulfillment.redirectUrl}
+              className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:underline font-semibold"
+            >
+              <span>Continue to {session?.app?.name || 'Merchant'}</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          </div>
+        ) : (
+          <p className="text-[11px] text-slate-500">Redirecting back to application...</p>
+        )}
       </div>
     );
   }

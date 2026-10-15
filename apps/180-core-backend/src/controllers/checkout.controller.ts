@@ -163,6 +163,7 @@ export class CheckoutApiController {
           return cleanAo === '*' || cleanAo === cleanOrigin;
         });
         const isInternalDomain = cleanOrigin.endsWith('180workspace.com') ||
+                                 cleanOrigin.endsWith('180core.cloud') ||
                                  cleanOrigin.includes('localhost') ||
                                  cleanOrigin.includes('127.0.0.1');
 
@@ -451,8 +452,11 @@ export class CheckoutApiController {
       const clientOrderAmount = typeof req.body.orderAmount === 'number' && req.body.orderAmount > 0 ? req.body.orderAmount : null;
 
       // 1. ALWAYS validate the coupon against the REAL platform base currency (USD) and REAL base amount server-side!
+      const sessionMeta = (session.metadata as any) || {};
       const validation = await CouponService.validateCoupon({
         appId: session.appId,
+        linkId: sessionMeta.paymentLinkId || (req.body as any).linkId || undefined,
+        linkSlug: sessionMeta.paymentLinkSlug || (req.body as any).linkSlug || undefined,
         code: String(code),
         orderAmount: sessionBaseAmount,
         orderCurrency: sessionCurrency,

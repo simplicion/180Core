@@ -617,8 +617,11 @@ export function PayAppDetail({
           const capturedVolume = paymentAnalytics?.grossVolume || 0;
           const conversionRate = paymentAnalytics?.conversionRate || (totalIntentsCount > 0 ? Math.round((capturedCount / totalIntentsCount) * 1000) / 10 : 0);
 
-          const gatewayPct = totalIntentsCount > 0 ? Math.min(100, Math.round(((gatewayAttemptsCount + capturedCount) / totalIntentsCount) * 100)) : 0;
-          const capturedPct = totalIntentsCount > 0 ? Math.min(100, Math.round((capturedCount / totalIntentsCount) * 100)) : 0;
+          // Exact segmented percentages of the total funnel
+          const capturedPct = totalIntentsCount > 0 ? Math.round((capturedCount / totalIntentsCount) * 100) : 0;
+          const gatewayDropPct = totalIntentsCount > 0 ? Math.round((gatewayAttemptsCount / totalIntentsCount) * 100) : 0;
+          const intentOnlyCount = paymentAnalytics?.intentOnlyCount || Math.max(0, totalIntentsCount - gatewayAttemptsCount - capturedCount);
+          const intentOnlyPct = totalIntentsCount > 0 ? Math.max(0, 100 - capturedPct - gatewayDropPct) : 0;
 
           return (
             <div className="p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/5 space-y-4">
@@ -696,21 +699,27 @@ export function PayAppDetail({
               {/* Visual Funnel Bar */}
               <div className="space-y-1.5 pt-1">
                 <div className="h-3 w-full bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden flex">
-                  <div
-                    style={{ width: `${Math.max(10, capturedPct)}%` }}
-                    className="bg-emerald-500 h-full transition-all"
-                    title={`Captured: ${capturedPct}%`}
-                  />
-                  <div
-                    style={{ width: `${Math.max(0, gatewayPct - capturedPct)}%` }}
-                    className="bg-amber-500 h-full transition-all"
-                    title={`Gateway Dropped: ${Math.max(0, gatewayPct - capturedPct)}%`}
-                  />
-                  <div
-                    style={{ width: `${Math.max(0, 100 - gatewayPct)}%` }}
-                    className="bg-blue-500/40 h-full transition-all"
-                    title={`Intent Only: ${Math.max(0, 100 - gatewayPct)}%`}
-                  />
+                  {capturedPct > 0 && (
+                    <div
+                      style={{ width: `${capturedPct}%` }}
+                      className="bg-emerald-500 h-full transition-all"
+                      title={`Captured: ${capturedPct}%`}
+                    />
+                  )}
+                  {gatewayDropPct > 0 && (
+                    <div
+                      style={{ width: `${gatewayDropPct}%` }}
+                      className="bg-rose-500 h-full transition-all"
+                      title={`Gateway Dropped: ${gatewayDropPct}%`}
+                    />
+                  )}
+                  {intentOnlyPct > 0 && (
+                    <div
+                      style={{ width: `${intentOnlyPct}%` }}
+                      className="bg-blue-500/40 h-full transition-all"
+                      title={`Intent Only: ${intentOnlyPct}%`}
+                    />
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400 pt-0.5">
@@ -719,12 +728,12 @@ export function PayAppDetail({
                     <span>Captured ({capturedCount})</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    <span className="w-2 h-2 rounded-full bg-rose-500" />
                     <span>Gateway Dropped ({gatewayAttemptsCount})</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-blue-500" />
-                    <span>Intent Only ({paymentAnalytics?.intentOnlyCount || Math.max(0, totalIntentsCount - gatewayAttemptsCount - capturedCount)})</span>
+                    <span>Intent Only ({intentOnlyCount})</span>
                   </div>
                 </div>
               </div>

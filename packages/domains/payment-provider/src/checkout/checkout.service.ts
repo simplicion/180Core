@@ -288,6 +288,111 @@ export class CheckoutService {
       }
     }
 
+    // Auto-resolve or auto-create checkout session for Payment Links by slug or ID
+    if (!session) {
+      try {
+        const paymentLink = await prisma.paymentLink.findFirst({
+          where: {
+            OR: [
+              { slug: sessionId },
+              { id: sessionId },
+            ],
+            isActive: true,
+          },
+          include: {
+            app: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                logoUrl: true,
+                isVerified: true,
+              },
+            },
+          },
+        });
+
+        if (paymentLink) {
+          if (paymentLink.maxPurchases && paymentLink.purchasesCount >= paymentLink.maxPurchases) {
+            throw new Error('This payment link has reached its maximum purchase capacity and is sold out.');
+          }
+
+          const linkExpiry = (paymentLink as any).expiresAt;
+          if (linkExpiry && new Date(linkExpiry) < new Date()) {
+            throw new Error('This payment link has expired.');
+          }
+
+          const activeSessions = await prisma.checkoutSession.findMany({
+            where: {
+              appId: paymentLink.appId,
+              status: 'PENDING',
+              expiresAt: { gt: new Date() },
+            },
+            include: {
+              app: {
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                  logoUrl: true,
+                  isVerified: true,
+                },
+              },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+          });
+
+          const matchingSession = activeSessions.find(
+            (s) => (s.metadata as any)?.paymentLinkId === paymentLink.id || (s.metadata as any)?.paymentLinkSlug === paymentLink.slug
+          );
+
+          if (matchingSession) {
+            session = matchingSession;
+          } else {
+            const isCustomAmount = Number(paymentLink.amount) === 0 || Boolean((paymentLink as any).allowCustomAmount) || Boolean((paymentLink.metadata as any)?.allowCustomAmount);
+            session = await prisma.checkoutSession.create({
+              data: {
+                appId: paymentLink.appId,
+                amount: paymentLink.amount,
+                originalAmount: paymentLink.amount,
+                currency: (paymentLink.currency || 'INR').toUpperCase(),
+                status: 'PENDING',
+                title: paymentLink.title,
+                description: paymentLink.description || '',
+                metadata: {
+                  paymentLinkId: paymentLink.id,
+                  paymentLinkSlug: paymentLink.slug,
+                  source: 'PAYMENT_LINK',
+                  allowCoupons: paymentLink.allowCoupons,
+                  allowCustomAmount: isCustomAmount,
+                  collectPhone: paymentLink.collectPhone,
+                  collectAddress: paymentLink.collectAddress,
+                },
+                expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+              },
+              include: {
+                app: {
+                  select: {
+                    id: true,
+                    name: true,
+                    description: true,
+                    logoUrl: true,
+                    isVerified: true,
+                  },
+                },
+              },
+            });
+          }
+        }
+      } catch (linkHealErr: any) {
+        if (linkHealErr.message && (linkHealErr.message.includes('capacity') || linkHealErr.message.includes('expired'))) {
+          throw linkHealErr;
+        }
+        console.warn('[CheckoutService:getSession] Could not auto-resolve payment link session:', linkHealErr);
+      }
+    }
+
     if (!session) {
       throw new Error('Checkout session not found');
     }
@@ -295,7 +400,7 @@ export class CheckoutService {
     if (session.status === 'EXPIRED' || session.expiresAt < new Date()) {
       if (session.status !== 'EXPIRED' && session.status === 'PENDING') {
         await prisma.checkoutSession.update({
-          where: { id: sessionId },
+          where: { id: session.id },
           data: { status: 'EXPIRED' },
         });
       }
@@ -1239,6 +1344,31 @@ export class CheckoutService {
 
     // Dispatch webhook to merchant
     if (!result.alreadyCaptured) {
+      if ((result.session.metadata as any)?.paymentLinkId) {
+        try {
+          const PaymentLinkService = require('../payment-link/payment-link.service').PaymentLinkService;
+          const fulfillment = await PaymentLinkService.completeLinkPurchase(
+            (result.session.metadata as any).paymentLinkId,
+            result.session.id
+          );
+          if (fulfillment) {
+            await prisma.checkoutSession.update({
+              where: { id: result.session.id },
+              data: {
+                metadata: {
+                  ...((result.session.metadata as any) || {}),
+                  fulfillment,
+                },
+              },
+            });
+            (result as any).fulfillment = fulfillment;
+            (result.session as any).fulfillment = fulfillment;
+          }
+        } catch (linkErr: any) {
+          console.warn('[CheckoutService:verifyDirectPayment] PaymentLink fulfillment error:', linkErr.message);
+        }
+      }
+
       const webhookData = {
         sessionId: result.session.id,
         transactionId: paymentId,
@@ -1269,8 +1399,10 @@ export class CheckoutService {
       sessionId,
       transactionId: paymentId,
       status: 'CAPTURED',
+      session: result.session,
       gateway: activeGatewayName,
       returnUrl: result.session.returnUrl,
+      fulfillment: (result as any).fulfillment,
     };
   }
 
@@ -1412,6 +1544,31 @@ export class CheckoutService {
 
     // Dispatch webhook to merchant (Social Studio / Traffic Director / 3rd party apps)
     if (!result.alreadyCaptured) {
+      if ((result.session.metadata as any)?.paymentLinkId) {
+        try {
+          const PaymentLinkService = require('../payment-link/payment-link.service').PaymentLinkService;
+          const fulfillment = await PaymentLinkService.completeLinkPurchase(
+            (result.session.metadata as any).paymentLinkId,
+            result.session.id
+          );
+          if (fulfillment) {
+            await prisma.checkoutSession.update({
+              where: { id: result.session.id },
+              data: {
+                metadata: {
+                  ...((result.session.metadata as any) || {}),
+                  fulfillment,
+                },
+              },
+            });
+            (result as any).fulfillment = fulfillment;
+            (result.session as any).fulfillment = fulfillment;
+          }
+        } catch (linkErr: any) {
+          console.warn('[CheckoutService:executeDirectPayment] PaymentLink fulfillment error:', linkErr.message);
+        }
+      }
+
       const webhookData = {
         sessionId: result.session.id,
         transactionId,
@@ -1446,6 +1603,7 @@ export class CheckoutService {
       session: result.session,
       gateway: resolvedGateway,
       returnUrl: result.session.returnUrl,
+      fulfillment: (result as any).fulfillment,
     };
   }
 }

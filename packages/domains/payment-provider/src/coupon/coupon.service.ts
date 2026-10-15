@@ -11,6 +11,8 @@ export interface CouponValidationInput {
   customerEmail?: string;
   origin?: string;
   planId?: string;
+  linkId?: string;
+  linkSlug?: string;
 }
 
 export interface CouponValidationResult {
@@ -137,13 +139,24 @@ export class CouponService {
       };
     }
 
-    // 1. Fetch Coupon record scoped to appId (supporting candidate sibling app IDs)
-    const candidateAppIds = await this.getCandidateAppIds(appId);
+    // 1. Fetch Coupon record scoped to appId (supporting candidate sibling app IDs and payment links)
+    const candidateAppIds = await this.getCandidateAppIds(appId, input.linkId || input.linkSlug);
+
+    // Build code variations to handle commonly confused visual characters (0 vs O, 1 vs I)
+    const codeVariants = Array.from(
+      new Set([
+        rawCode,
+        rawCode.replace(/0/g, 'O'),
+        rawCode.replace(/O/g, '0'),
+        rawCode.replace(/1/g, 'I'),
+        rawCode.replace(/I/g, '1'),
+      ])
+    );
 
     let coupon = await (prisma as any).coupon.findFirst({
       where: {
         appId: { in: candidateAppIds },
-        code: { equals: rawCode, mode: 'insensitive' },
+        code: { in: codeVariants, mode: 'insensitive' },
       },
     });
 
@@ -151,7 +164,7 @@ export class CouponService {
       // Fallback: look for active coupon by code matching the app name or global
       coupon = await (prisma as any).coupon.findFirst({
         where: {
-          code: { equals: rawCode, mode: 'insensitive' },
+          code: { in: codeVariants, mode: 'insensitive' },
           isActive: true,
         },
         orderBy: { createdAt: 'desc' },
@@ -209,7 +222,9 @@ export class CouponService {
     if (coupon.allowedOrigins && coupon.allowedOrigins.length > 0) {
       const normOrigin = normalizeOrigin(origin);
       const isGatewayOrigin =
+        !normOrigin ||
         normOrigin.includes('180workspace.com') ||
+        normOrigin.includes('180core.cloud') ||
         normOrigin.includes('localhost') ||
         normOrigin === '127.0.0.1';
       const originValid = isOriginAllowed(origin, coupon.allowedOrigins) || isGatewayOrigin;
@@ -422,7 +437,7 @@ export class CouponService {
    * Resolves all candidate App IDs (primary UUID, client ID, and sibling apps)
    * that belong to the same application / product ecosystem.
    */
-  public static async getCandidateAppIds(appId: string): Promise<string[]> {
+  public static async getCandidateAppIds(appId: string, linkIdOrSlug?: string): Promise<string[]> {
     const candidateSet = new Set<string>();
     if (appId) {
       candidateSet.add(appId);
@@ -473,6 +488,35 @@ export class CouponService {
         for (const sibling of siblingApps) {
           candidateSet.add(sibling.id);
           candidateSet.add(sibling.clientId);
+        }
+      }
+
+      // Check if appId or linkIdOrSlug matches a PaymentLink!
+      if (appId || linkIdOrSlug) {
+        const paymentLink = await (prisma as any).paymentLink.findFirst({
+          where: {
+            OR: [
+              ...(appId ? [{ id: appId }, { slug: appId }] : []),
+              ...(linkIdOrSlug ? [{ id: linkIdOrSlug }, { slug: linkIdOrSlug }] : []),
+            ],
+          },
+          select: { appId: true },
+        });
+
+        if (paymentLink && paymentLink.appId) {
+          candidateSet.add(paymentLink.appId);
+          const linkedApp = await (prisma as any).oAuthApp.findFirst({
+            where: {
+              OR: [
+                { id: paymentLink.appId },
+                { clientId: paymentLink.appId },
+              ],
+            },
+          });
+          if (linkedApp) {
+            candidateSet.add(linkedApp.id);
+            candidateSet.add(linkedApp.clientId);
+          }
         }
       }
     } catch (_) {}

@@ -23,13 +23,14 @@ export class CouponApiController {
    */
   static async validateCoupon(req: Request, res: Response) {
     try {
-      const { appId, customerEmail, planId } = req.body;
+      const { appId, customerEmail, planId, linkId, linkSlug } = req.body;
       const rawCode = req.body.code || req.body.couponCode;
       const code = typeof rawCode === 'string' ? rawCode.trim().toUpperCase() : '';
       const rawAmount = req.body.orderAmount !== undefined ? req.body.orderAmount : req.body.amount;
 
-      if (!appId) {
-        return res.status(400).json({ success: false, error: 'Application ID (appId) is required' });
+      const effectiveAppId = appId || linkId || linkSlug;
+      if (!effectiveAppId) {
+        return res.status(400).json({ success: false, error: 'Application ID (appId) or link identifier is required' });
       }
       if (!code) {
         return res.status(400).json({ success: false, error: 'Coupon code is required' });
@@ -41,12 +42,14 @@ export class CouponApiController {
       const origin = CouponApiController.extractOrigin(req);
 
       const result = await CouponService.validateCoupon({
-        appId: String(appId),
+        appId: String(effectiveAppId),
         code: String(code),
         orderAmount: Number(rawAmount),
         customerEmail: customerEmail ? String(customerEmail) : undefined,
         origin,
         planId: planId ? String(planId) : undefined,
+        linkId: linkId ? String(linkId) : undefined,
+        linkSlug: linkSlug ? String(linkSlug) : undefined,
       });
 
       if (!result.valid) {

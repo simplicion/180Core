@@ -59,6 +59,7 @@ export interface RegionalPricingInfo {
 
 export interface PublicPaymentLinkResult {
   id: string;
+  appId?: string;
   slug: string;
   title: string;
   description: string;
@@ -279,6 +280,7 @@ export class PaymentLinkService {
 
     return {
       id: link.id,
+      appId: link.appId,
       slug: link.slug,
       title: link.title,
       description: link.description || '',
