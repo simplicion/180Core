@@ -8,12 +8,14 @@ import { hashSecret } from './oauth.service';
  * Ensures 100% backwards compatibility for legacy OAuth callbacks and external integrations.
  */
 export const LEGACY_FIRST_PARTY_ALIASES: Record<string, string> = {
-    '180-developer-portal': '180-core-client',
-    '180-developers-portal': '180-core-client',
-    '180_client_70d751541f05347fe803ec8e128f5e83': '180-core-client',
-    '180_client_5cc136397553836e34eb37ce22d13a53': '180-core-client',
-    '180_client_266753c1171df1e2c4a391483fd2e02e': '180-core-client',
-    '180_client_b26aee801c22cb3295f041ff2a3597db': '180-core-client',
+    '180-core': '180_client_2d51a605038c38ffb6fa037688988a83',
+    '180-core-client': '180_client_2d51a605038c38ffb6fa037688988a83',
+    '180-developer-portal': '180_client_2d51a605038c38ffb6fa037688988a83',
+    '180-developers-portal': '180_client_2d51a605038c38ffb6fa037688988a83',
+    '180_client_70d751541f05347fe803ec8e128f5e83': '180_client_2d51a605038c38ffb6fa037688988a83',
+    '180_client_5cc136397553836e34eb37ce22d13a53': '180_client_2d51a605038c38ffb6fa037688988a83',
+    '180_client_266753c1171df1e2c4a391483fd2e02e': '180_client_2d51a605038c38ffb6fa037688988a83',
+    '180_client_b26aee801c22cb3295f041ff2a3597db': '180_client_2d51a605038c38ffb6fa037688988a83',
 };
 
 /**
@@ -31,7 +33,7 @@ export function resolveCanonicalClientId(clientId: string | undefined | null): s
  */
 export const FIRST_PARTY_APPS = [
     {
-        clientId: '180-core-client',
+        clientId: '180_client_2d51a605038c38ffb6fa037688988a83',
         name: '180 Core',
         description: 'Sovereign Core Identity, Auth & 180 Pay Infrastructure',
         redirectUris: [
@@ -126,13 +128,9 @@ export async function seedFirstPartyOAuthApps(): Promise<void> {
             });
 
             const knownSecret =
-                app.clientId === '180-core-client'
-                    ? (process.env.CORE_CLIENT_SECRET || '180_secret_core_prod_key_991823')
-                    : app.clientId === '180-workspace-platform'
-                        ? (process.env.ONE_EIGHTY_CLIENT_SECRET || '180_secret_a58c34e77528dc342871ecc66c41e9f06522223896b851a4338eee40e2bc2276')
-                        : app.clientId === '180-traffic-director'
-                            ? (process.env.TRAFFIC_DIRECTOR_CLIENT_SECRET || '180_secret_traffic_director_prod_key_771829')
-                            : `180_secret_${app.clientId}`;
+                app.clientId === '180_client_2d51a605038c38ffb6fa037688988a83' || app.clientId === '180-core-client'
+                    ? (process.env.CORE_CLIENT_SECRET || '180_secret_4ec57dc29aa77c5e41c870ca3042997793198c6dd75ab47728b10856092ec3ab')
+                    : `180_secret_${app.clientId}`;
 
             if (!existing) {
                 await prisma.oAuthApp.create({
@@ -178,7 +176,7 @@ export async function seedFirstPartyOAuthApps(): Promise<void> {
                     updateData.authMobileDefault = (app as any).authMobileDefault || 'bottom_sheet';
                 }
 
-                if (app.clientId === '180-core-client') {
+                if (app.clientId === '180_client_2d51a605038c38ffb6fa037688988a83' || app.clientId === '180-core-client') {
                     updateData.name = app.name;
                     updateData.description = app.description;
                     updateData.clientSecretHash = hashSecret(knownSecret);
@@ -279,6 +277,8 @@ export function isFirstPartyApp(clientIdOrId: string | undefined | null): boolea
     if (
         clean === '180-core' ||
         clean === '180-core-client' ||
+        clean === '180_client_2d51a605038c38ffb6fa037688988a83' ||
+        canonical === '180_client_2d51a605038c38ffb6fa037688988a83' ||
         canonical === '180-core-client'
     ) {
         return true;

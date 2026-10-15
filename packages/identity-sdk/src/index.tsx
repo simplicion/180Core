@@ -692,7 +692,7 @@ export const OneEightyIdentity = {
       options.clientId ||
       (typeof window !== 'undefined' && (window as any).__180_CLIENT_ID) ||
       (typeof process !== 'undefined' ? (process.env?.NEXT_PUBLIC_180_CLIENT_ID || process.env?.NEXT_PUBLIC_IDENTITY_CLIENT_ID) : undefined) ||
-      '180-developers-portal';
+      '180_client_2d51a605038c38ffb6fa037688988a83';
 
     const env = resolveEnvironmentMode(options.environment);
     const authServer = getAuthServerUrl(options.authServerUrl, env);
@@ -1514,7 +1514,7 @@ export function use180Identity(defaultClientId?: string) {
       defaultClientId ||
       (typeof window !== 'undefined' && (window as any).__180_CLIENT_ID) ||
       (typeof process !== 'undefined' ? (process.env?.NEXT_PUBLIC_180_CLIENT_ID || process.env?.NEXT_PUBLIC_IDENTITY_CLIENT_ID) : undefined) ||
-      '180-developers-portal';
+      '180_client_2d51a605038c38ffb6fa037688988a83';
     if (id) {
       prefetchAppConfig(id).catch(() => {});
     }
@@ -1531,7 +1531,7 @@ export function use180Identity(defaultClientId?: string) {
           defaultClientId ||
           (typeof window !== 'undefined' && (window as any).__180_CLIENT_ID) ||
           (typeof process !== 'undefined' ? (process.env?.NEXT_PUBLIC_180_CLIENT_ID || process.env?.NEXT_PUBLIC_IDENTITY_CLIENT_ID) : undefined) ||
-          '180-developers-portal';
+          '180_client_2d51a605038c38ffb6fa037688988a83';
 
         const res = await OneEightyIdentity.openAuth({
           clientId,
