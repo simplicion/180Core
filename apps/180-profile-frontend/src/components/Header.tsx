@@ -19,6 +19,7 @@ import { HelpIcon } from '@workspace/ui';
 import { OneEightyCoreLogo } from './OneEightyCoreLogo';
 import toast from 'react-hot-toast';
 import { UserProfile } from '../types';
+import { purgeAuthSession } from '@/lib/auth';
 
 interface HeaderProps {
   balance: number | null;
@@ -58,10 +59,7 @@ export function Header({ balance, user }: HeaderProps) {
   }, [userDropdownOpen]);
 
   const handleSignOut = () => {
-    localStorage.removeItem('platform_auth_token');
-    localStorage.removeItem('token');
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('user');
+    purgeAuthSession();
     toast.success('Signed out of 180 Profile');
     window.location.href = '/';
   };

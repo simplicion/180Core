@@ -1,6 +1,7 @@
 'use strict';
 
 import { developersPrisma as prisma } from '@workspace/db-180core';
+import { LEGACY_FIRST_PARTY_ALIASES } from '../oauth/seed-first-party';
 
 export const DEV_TRIAL_DAYS = 30; // 30 days free trial access
 export const DEV_STARTER_PRICE = 2.0; // $2 / month
@@ -13,7 +14,7 @@ export const DEV_PLAN_STARTER = 'DEV_STARTER_PLAN';
 export const DEV_PLAN_PRO = 'DEV_PRO_PLAN';
 export const DEV_PROJECT_PLAN_CODE = 'DEV_PER_PROJECT_PLAN';
 export const RATE_PER_PROJECT = 2.5;
-export const FREE_PROJECTS_LIMIT = 5; // Default trial projects limit
+export const FREE_PROJECTS_LIMIT = 1; // Free tier strictly allows exactly 1 project
 export const GRACE_PERIOD_DAYS = 3; // 3 days extra post-expiry
 export const WARNING_DAYS = 7; // 7 days pre-expiry warning
 
@@ -140,11 +141,13 @@ export class DeveloperBillingService {
       prisma.oAuthApp.findMany({
         where: { userId: { in: userIds } },
         orderBy: { createdAt: 'asc' },
-        select: { id: true, name: true, isActive: true, enableAuth: true, enablePay: true, createdAt: true },
+        select: { id: true, name: true, isActive: true, enableAuth: true, enablePay: true, createdAt: true, clientId: true },
       }),
     ]);
 
-    const totalProjects = apps.length;
+    const legacyAliases = new Set(Object.keys(LEGACY_FIRST_PARTY_ALIASES));
+    const activeApps = apps.filter((app: any) => !legacyAliases.has(app.clientId));
+    const totalProjects = activeApps.length;
     const { starter, pro } = await this.ensurePlans();
 
     // Check for an active paid subscription

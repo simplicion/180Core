@@ -7,6 +7,7 @@ import { Footer } from '@/components/Footer';
 import { BottomNav } from '@/components/BottomNav';
 import { UserProfile } from '@/types';
 import { getCoreApiUrl } from '@/lib/api';
+import { purgeAuthSession, getStoredAuthToken } from '@/lib/auth';
 
 export default function DashboardLayout({
   children,
@@ -19,10 +20,7 @@ export default function DashboardLayout({
 
   useEffect(() => {
     const fetchProfileAndWallet = async () => {
-      const token =
-        localStorage.getItem('platform_auth_token') ||
-        localStorage.getItem('token') ||
-        localStorage.getItem('accessToken');
+      const token = getStoredAuthToken();
 
       if (!token) {
         setUser(null);
@@ -46,10 +44,7 @@ export default function DashboardLayout({
             setUser(null);
           }
         } else {
-          localStorage.removeItem('platform_auth_token');
-          localStorage.removeItem('token');
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('user');
+          purgeAuthSession();
           setUser(null);
         }
       } catch (_) {

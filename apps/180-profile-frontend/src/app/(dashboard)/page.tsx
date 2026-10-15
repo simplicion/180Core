@@ -15,6 +15,8 @@ import {
   AppWindow,
   Receipt,
   ArrowRight,
+  ArrowLeft,
+  Shield,
   Sparkles,
   Calendar,
   CheckCircle2,
@@ -24,6 +26,7 @@ import { Button, UniversalSkeleton } from '@workspace/ui';
 import toast from 'react-hot-toast';
 import { UserProfile, ConnectedApp, LedgerEntry } from '@/types';
 import { getCoreApiUrl } from '@/lib/api';
+import { purgeAuthSession, getStoredAuthToken } from '@/lib/auth';
 import { EditProfileModal } from '@/components/EditProfileModal';
 import { OneEightyPayBottomSheet } from '@/components/OneEightyPayBottomSheet';
 import { InvoiceModal } from '@/components/InvoiceModal';
@@ -44,11 +47,7 @@ export default function HomePage() {
   const [recentLedger, setRecentLedger] = useState<LedgerEntry[]>([]);
 
   const loadData = async () => {
-    const token =
-      localStorage.getItem('platform_auth_token') ||
-      localStorage.getItem('token') ||
-      localStorage.getItem('accessToken') ||
-      '';
+    const token = getStoredAuthToken() || '';
 
     if (!token) {
       setUser(null);
@@ -64,10 +63,7 @@ export default function HomePage() {
 
       if (!userRes.ok) {
         // Token is expired/invalid — clear all stale auth and stop
-        localStorage.removeItem('platform_auth_token');
-        localStorage.removeItem('token');
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('user');
+        purgeAuthSession();
         setUser(null);
         setLoading(false);
         return;
@@ -133,82 +129,63 @@ export default function HomePage() {
     );
   }
 
+  const getMainLandingUrl = () => {
+    if (typeof window === 'undefined') return 'http://localhost:3008';
+    const isLocal =
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1';
+    return isLocal
+      ? 'http://localhost:3008'
+      : (process.env.NEXT_PUBLIC_MAIN_LANDING_URL || 'https://developer.180core.cloud');
+  };
+
   // ─────────────────────────────────────────────────────────────────────────────
-  // 1. UNAUTHENTICATED STATE: SHOWCASE PUBLIC LANDING PAGE
+  // 1. UNAUTHENTICATED STATE: CLEAN SIGN-IN REQUIRED CARD
   // ─────────────────────────────────────────────────────────────────────────────
   if (!user) {
     return (
-      <div className="space-y-16 py-6 max-w-5xl mx-auto">
-        {/* Hero Section */}
-        <section className="text-center space-y-6 pt-4">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-semibold">
-            <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-            <span>Universal 180 Identity &amp; Prepaid Ledger</span>
+      <div className="min-h-[60vh] flex items-center justify-center py-8 px-4">
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="max-w-md w-full p-8 sm:p-10 rounded-3xl bg-white border border-slate-200/90 shadow-xl text-center space-y-6"
+        >
+          <div className="w-16 h-16 rounded-3xl bg-blue-50 border border-blue-200 text-blue-600 mx-auto flex items-center justify-center shadow-xs">
+            <Shield className="w-8 h-8" />
           </div>
 
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-slate-900 tracking-tight leading-[1.15]">
-            One Unified Profile for
-            <br />
-            <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 bg-clip-text text-transparent">
-              Every 180 Experience.
-            </span>
-          </h1>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+              180 Universal Identity
+            </h1>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Sign in with your 180 Identity universal account to access your Universal Profile and Prepaid Wallet.
+            </p>
+          </div>
 
-          <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto leading-relaxed">
-            Access 180 Workspace, Voiceforce AI, Traffic Director, and partner applications with zero passwords, 1-tap WhatsApp verification, and a cryptographic universal wallet.
-          </p>
-
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-            <Link
-              href="/auth/login"
-              className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md shadow-blue-600/25 active:scale-95 transition-all flex items-center justify-center gap-2 min-h-[46px] cursor-pointer"
-            >
-              <span>Get Started with 180 Identity</span>
-              <ArrowRight className="w-4 h-4" />
+          <div className="space-y-3 pt-2">
+            <Link href="/auth/login" className="block">
+              <Button
+                size="lg"
+                className="w-full rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-md shadow-blue-500/25 flex items-center justify-center gap-2 cursor-pointer min-h-[48px]"
+              >
+                <Shield className="w-4 h-4" />
+                <span>Sign In with 180 Identity</span>
+              </Button>
             </Link>
 
-            <Link
-              href="/auth/login"
-              className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 font-semibold text-sm shadow-xs transition-all flex items-center justify-center gap-2 min-h-[46px] cursor-pointer"
-            >
-              <ShieldCheck className="w-4 h-4 text-blue-600" />
-              <span>Sign In to Existing Account</span>
-            </Link>
+            <a href={getMainLandingUrl()} className="block">
+              <Button
+                variant="ghost"
+                size="lg"
+                className="w-full rounded-2xl min-h-[44px] text-slate-600 hover:text-slate-900 font-semibold text-sm cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                <span>Back to Main Landing Page</span>
+              </Button>
+            </a>
           </div>
-        </section>
-
-        {/* Feature Pillar Cards */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
-          <div className="p-6 rounded-3xl bg-white border border-slate-200/90 shadow-sm space-y-4">
-            <div className="w-10 h-10 rounded-2xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center">
-              <Smartphone className="w-5 h-5" />
-            </div>
-            <h3 className="font-bold text-base text-slate-900">1-Tap WhatsApp Login</h3>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Eliminate password fatigue. Instant 6-digit WhatsApp OTP verification ensures friction-free, secure authentication.
-            </p>
-          </div>
-
-          <div className="p-6 rounded-3xl bg-white border border-slate-200/90 shadow-sm space-y-4">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center">
-              <Wallet className="w-5 h-5" />
-            </div>
-            <h3 className="font-bold text-base text-slate-900">Universal Prepaid Wallet</h3>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              One shared balance across every 180 app. 1-click checkouts for AI calls, metered tools, and workspace upgrades.
-            </p>
-          </div>
-
-          <div className="p-6 rounded-3xl bg-white border border-slate-200/90 shadow-sm space-y-4">
-            <div className="w-10 h-10 rounded-2xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center">
-              <Lock className="w-5 h-5" />
-            </div>
-            <h3 className="font-bold text-base text-slate-900">Unified Privacy Controls</h3>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              You own your data. See every authorized application, monitor active sessions, and revoke access instantly.
-            </p>
-          </div>
-        </section>
+        </div>
       </div>
     );
   }
