@@ -240,7 +240,16 @@ export function PayAppDetail({
           }`}
         >
           <Bot className="w-3.5 h-3.5" />
-          AI Agents (AP2)
+          <span>AI Agents (AP2)</span>
+          <span
+            className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
+              activeTab === 'agents'
+                ? 'bg-white/20 text-white border-white/30'
+                : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20'
+            }`}
+          >
+            Soon
+          </span>
         </button>
         <button
           type="button"

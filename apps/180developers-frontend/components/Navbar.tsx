@@ -22,6 +22,7 @@ import { use180Identity } from '@workspace/identity-sdk';
 import toast from 'react-hot-toast';
 import ThemeToggle from './ThemeToggle';
 import { getDocsUrl, DOCS_LINKS } from '@/lib/docs-url';
+import { purgeAuthSession, getStoredAuthToken } from '@/lib/auth';
 
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -45,11 +46,7 @@ export default function Navbar() {
 
   const checkAuth = () => {
     if (typeof window === 'undefined') return;
-    const token =
-      localStorage.getItem('platform_auth_token') ||
-      localStorage.getItem('auth_token') ||
-      localStorage.getItem('token') ||
-      localStorage.getItem('accessToken');
+    const token = getStoredAuthToken();
 
     if (token) {
       setIsAuthenticated(true);
@@ -82,7 +79,24 @@ export default function Navbar() {
     checkAuth();
 
     const handleAuthChange = () => checkAuth();
+    const handleSignout = () => {
+      setIsAuthenticated(false);
+      setUserProfile(null);
+    };
+
     window.addEventListener('storage', handleAuthChange);
+    window.addEventListener('180_SIGNOUT', handleSignout);
+
+    let channel: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      channel = new BroadcastChannel('180_auth_sync');
+      channel.onmessage = (event) => {
+        if (event.data?.type === '180_SIGNOUT') {
+          handleSignout();
+        }
+      };
+    }
+
     const handleMessage = (e: MessageEvent) => {
       if (e.data && (e.data.type === '180_IDENTITY_SUCCESS' || e.data.type === '180_AUTH_SUCCESS')) {
         if (e.data.token) {
@@ -101,6 +115,9 @@ export default function Navbar() {
 
     return () => {
       window.removeEventListener('storage', handleAuthChange);
+      window.removeEventListener('180_SIGNOUT', handleSignout);
+      window.removeEventListener('message', handleMessage);
+      if (channel) channel.close();
     };
   }, [pathname]);
 
@@ -124,16 +141,11 @@ export default function Navbar() {
   }, []);
 
   const handleSignOut = () => {
-    localStorage.removeItem('platform_auth_token');
-    localStorage.removeItem('platform_refresh_token');
-    localStorage.removeItem('user');
-    document.cookie = 'platform_auth_token=; path=/; max-age=0;';
+    purgeAuthSession();
     setIsAuthenticated(false);
     setUserProfile(null);
     setUserDropdownOpen(false);
     toast.success('Signed out successfully');
-    window.dispatchEvent(new Event('180_SIGNOUT'));
-    router.push('/');
   };
 
   const isProductsActive =

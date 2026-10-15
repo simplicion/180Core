@@ -36,6 +36,7 @@ import { use180Identity } from '@workspace/identity-sdk';
 import { AppLogoUploader } from '@/components/apps/AppLogoUploader';
 import DeveloperSidebar from '@/components/layout/DeveloperSidebar';
 import DeveloperHeader from '@/components/layout/DeveloperHeader';
+import { purgeAuthSession, getStoredAuthToken } from '@/lib/auth';
 
 interface DeveloperApp {
   id: string;
@@ -250,17 +251,7 @@ function DeveloperDashboardContent() {
       searchParams?.get('auth_token') ||
       searchParams?.get('accessToken');
 
-    let token =
-      urlToken ||
-      localStorage.getItem('platform_auth_token') ||
-      localStorage.getItem('auth_token') ||
-      localStorage.getItem('token') ||
-      localStorage.getItem('accessToken');
-
-    if (!token && typeof document !== 'undefined') {
-      const match = document.cookie.match(/(?:^|;\s*)platform_auth_token=([^;]+)/);
-      if (match) token = match[1];
-    }
+    let token = urlToken || getStoredAuthToken();
 
     if (!token) {
       setIsAuthenticated(false);
@@ -271,8 +262,9 @@ function DeveloperDashboardContent() {
     localStorage.setItem('platform_auth_token', token);
     if (typeof document !== 'undefined') {
       const isProd = window.location.protocol === 'https:';
+      const isCore = window.location.hostname.endsWith('180core.cloud');
       const is180 = window.location.hostname.endsWith('180workspace.com');
-      const domainAttr = is180 ? '; domain=.180workspace.com' : '';
+      const domainAttr = isCore ? '; domain=.180core.cloud' : (is180 ? '; domain=.180workspace.com' : '');
       const secureAttr = isProd ? '; Secure' : '';
       document.cookie = `platform_auth_token=${token}; path=/; max-age=604800; SameSite=Lax${secureAttr}${domainAttr}`;
     }
@@ -323,12 +315,7 @@ function DeveloperDashboardContent() {
           const meData = await meRes.json();
           user = meData.user || meData;
         } else if (meRes && meRes.status === 401) {
-          localStorage.removeItem('platform_auth_token');
-          localStorage.removeItem('auth_token');
-          localStorage.removeItem('token');
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('user');
-          document.cookie = 'platform_auth_token=; path=/; max-age=0;';
+          purgeAuthSession();
           setIsAuthenticated(false);
           setUserProfile(null);
           setApps([]);
@@ -416,15 +403,19 @@ function DeveloperDashboardContent() {
   };
 
   const handleSignOut = () => {
-    localStorage.removeItem('platform_auth_token');
-    localStorage.removeItem('platform_refresh_token');
-    localStorage.removeItem('user');
-    document.cookie = 'platform_auth_token=; path=/; max-age=0;';
+    purgeAuthSession();
     setIsAuthenticated(false);
     setApps([]);
     setUserProfile(null);
+    setLoading(false);
     toast.success('Signed out of Developer Portal');
-    router.push('/');
+    if (typeof window !== 'undefined') {
+      try {
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.search = '';
+        window.history.replaceState({}, '', cleanUrl.pathname);
+      } catch (_) {}
+    }
   };
 
   const handleCreateApp = async (e: React.FormEvent) => {
@@ -808,10 +799,10 @@ function DeveloperDashboardContent() {
               )}
               <span>Sign In with 180 ID</span>
             </Button>
-            <Link href="/" className="block">
+            <Link href="/products/identity" className="block">
               <Button variant="ghost" size="lg" className="w-full rounded-2xl min-h-[44px]">
                 <ArrowLeft className="w-4 h-4 mr-2" />
-                <span>Return to Home</span>
+                <span>Explore Products & Docs</span>
               </Button>
             </Link>
           </div>

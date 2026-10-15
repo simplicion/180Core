@@ -27,6 +27,7 @@ import {
 } from '@/components/apps';
 import DeveloperSidebar from '@/components/layout/DeveloperSidebar';
 import DeveloperHeader from '@/components/layout/DeveloperHeader';
+import { purgeAuthSession } from '@/lib/auth';
 
 interface AppDetailClientProps {
   initialView?: 'overview' | 'identity' | 'pay';
@@ -879,8 +880,8 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
           onExpandChange={setIsSidebarExpanded}
           userProfile={userProfile}
           onSignOut={() => {
-            localStorage.removeItem('platform_auth_token');
-            router.push('/');
+            purgeAuthSession();
+            router.push('/dashboard');
           }}
         />
         <div
@@ -927,8 +928,8 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
         onExpandChange={setIsSidebarExpanded}
         userProfile={userProfile}
         onSignOut={() => {
-          localStorage.removeItem('platform_auth_token');
-          router.push('/');
+          purgeAuthSession();
+          router.push('/dashboard');
         }}
       />
       <div
@@ -948,8 +949,8 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
             { label: app.name },
           ]}
           onSignOut={() => {
-            localStorage.removeItem('platform_auth_token');
-            router.push('/');
+            purgeAuthSession();
+            router.push('/dashboard');
           }}
         />
         <main className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full space-y-8 flex-1">

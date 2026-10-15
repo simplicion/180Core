@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 import { useProject } from '@/context/ProjectContext';
 import DeveloperHeader from '@/components/layout/DeveloperHeader';
+import { purgeAuthSession } from '@/lib/auth';
 
 export interface AppShellLayoutProps {
   sidebar: React.ReactNode;
@@ -115,8 +116,8 @@ export function AppShellLayout({
           userProfile={userProfile}
           breadcrumbs={breadcrumbs || defaultBreadcrumbs}
           onSignOut={() => {
-            localStorage.removeItem('platform_auth_token');
-            window.location.href = '/';
+            purgeAuthSession();
+            window.location.href = '/dashboard';
           }}
         />
 

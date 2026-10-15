@@ -1105,12 +1105,69 @@ export const OneEightyIdentity = {
   signOut(): void {
     if (typeof window !== 'undefined') {
       try {
-        localStorage.removeItem('platform_auth_token');
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        localStorage.removeItem('180_access_token');
-        localStorage.removeItem('180_user');
-        document.cookie = 'platform_auth_token=; path=/; max-age=0';
+        const keysToRemove = [
+          'platform_auth_token',
+          'platform_refresh_token',
+          'auth_token',
+          'token',
+          'accessToken',
+          'access_token',
+          'id_token',
+          '180_access_token',
+          '180_refresh_token',
+          '180_id_token',
+          'user',
+          '180_user',
+          'platform_user',
+          'user_profile',
+          'developer_profile',
+        ];
+        for (const k of keysToRemove) {
+          try { localStorage.removeItem(k); } catch (_) {}
+          try { sessionStorage.removeItem(k); } catch (_) {}
+        }
+
+        const host = window.location.hostname;
+        const hostParts = host.split('.');
+        const domainsToClear: (string | undefined)[] = [undefined, host, `.${host}`];
+        if (hostParts.length >= 2) {
+          const root2 = hostParts.slice(-2).join('.');
+          domainsToClear.push(root2, `.${root2}`);
+        }
+        domainsToClear.push('180core.cloud', '.180core.cloud', '180workspace.com', '.180workspace.com');
+        const uniqueDomains = Array.from(new Set(domainsToClear));
+
+        const cookieNames = [
+          'platform_auth_token',
+          'platform_refresh_token',
+          'auth_token',
+          'token',
+          'accessToken',
+          'access_token',
+          '180_access_token',
+          'session',
+          '180_session',
+        ];
+
+        for (const name of cookieNames) {
+          for (const dom of uniqueDomains) {
+            const domainAttr = dom ? `; domain=${dom}` : '';
+            document.cookie = `${name}=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax${domainAttr}`;
+            document.cookie = `${name}=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=None; Secure${domainAttr}`;
+          }
+        }
+
+        try {
+          window.dispatchEvent(new Event('180_SIGNOUT'));
+        } catch (_) {}
+
+        try {
+          if (typeof BroadcastChannel !== 'undefined') {
+            const channel = new BroadcastChannel('180_auth_sync');
+            channel.postMessage({ type: '180_SIGNOUT' });
+            channel.close();
+          }
+        } catch (_) {}
       } catch (_) {}
     }
   },

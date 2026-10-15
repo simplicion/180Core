@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { useParams, useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { DeveloperAppDetail, PaymentAnalyticsData, BankDetailsData, PayoutRecord, WebhookTestResult } from '@/components/apps/types';
+import { purgeAuthSession, getStoredAuthToken } from '@/lib/auth';
 
 interface ProjectContextValue {
   project: DeveloperAppDetail | null;
@@ -60,17 +61,7 @@ export function useProject() {
 }
 
 const getAuthToken = () => {
-  if (typeof window === 'undefined') return null;
-  try {
-    return (
-      localStorage.getItem('platform_auth_token') ||
-      localStorage.getItem('180_access_token') ||
-      document.cookie.match(/(?:^|;\s*)platform_auth_token=([^;]+)/)?.[1] ||
-      null
-    );
-  } catch (_) {
-    return null;
-  }
+  return getStoredAuthToken();
 };
 
 export function ProjectProvider({
@@ -217,14 +208,9 @@ export function ProjectProvider({
         lower === '180-developers-portal' ||
         lower === '180_developers_portal'
       ) {
-        localStorage.removeItem('platform_auth_token');
-        localStorage.removeItem('platform_refresh_token');
-        localStorage.removeItem('180_access_token');
-        localStorage.removeItem('user');
-        document.cookie = 'platform_auth_token=; path=/; max-age=0;';
-        window.dispatchEvent(new Event('180_SIGNOUT'));
+        purgeAuthSession();
         toast.error('Access for 180 Developers Console was revoked. Logged out.');
-        router.push('/');
+        router.push('/dashboard');
       }
     };
 
@@ -270,13 +256,8 @@ export function ProjectProvider({
         headers: { Authorization: `Bearer ${token}` },
       });
       if (userRes.status === 401) {
-        localStorage.removeItem('platform_auth_token');
-        localStorage.removeItem('platform_refresh_token');
-        localStorage.removeItem('180_access_token');
-        localStorage.removeItem('user');
-        document.cookie = 'platform_auth_token=; path=/; max-age=0;';
-        window.dispatchEvent(new Event('180_SIGNOUT'));
-        router.push('/');
+        purgeAuthSession();
+        router.push('/dashboard');
         return;
       }
       if (userRes.ok) {

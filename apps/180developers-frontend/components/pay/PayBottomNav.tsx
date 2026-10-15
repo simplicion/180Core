@@ -64,7 +64,7 @@ export function PayBottomNav() {
     { label: 'Coupons & Promos', href: `/apps/${projectId}/pay/coupons`, icon: Tag },
     { label: 'Payment Links', href: `/apps/${projectId}/pay/links`, icon: Link2 },
     { label: 'Pricing Tables', href: `/apps/${projectId}/pay/pricing`, icon: Layers },
-    { label: 'Agent Envelopes', href: `/apps/${projectId}/pay/agents`, icon: Bot },
+    { label: 'Agent Envelopes', href: `/apps/${projectId}/pay/agents`, icon: Bot, badge: 'Soon' },
     { label: 'Gateways & Routing', href: `/apps/${projectId}/pay/gateways`, icon: Sliders },
   ];
 
@@ -102,14 +102,25 @@ export function PayBottomNav() {
                     key={item.href}
                     href={item.href}
                     onClick={() => setShowMoreMenu(false)}
-                    className={`flex items-center gap-2 p-3 rounded-xl border text-xs font-semibold transition-all ${
+                    className={`flex items-center justify-between p-3 rounded-xl border text-xs font-semibold transition-all ${
                       isActive
                         ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 border-transparent shadow-xs'
                         : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-white/10 text-zinc-700 dark:text-zinc-300'
                     }`}
                   >
-                    <Icon className="w-4 h-4 shrink-0" />
-                    <span className="truncate">{item.label}</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Icon className="w-4 h-4 shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </div>
+                    {item.badge && (
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
+                        isActive
+                          ? 'bg-white/20 text-white dark:bg-black/20 dark:text-zinc-950'
+                          : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
+                      }`}>
+                        {item.badge}
+                      </span>
+                    )}
                   </Link>
                 );
               })}

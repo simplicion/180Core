@@ -15,10 +15,10 @@ export default function PayAgentsPage() {
       sidebar={<PaySidebar />}
       bottomNav={<PayBottomNav />}
       title="Autonomous AI Agent Budget Envelopes"
-      badge="Autonomous Agents"
+      badge="Coming Soon"
       badgeColor="purple"
     >
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <AgentEnvelopesTab appId={projectId} />
       </div>
     </AppShellLayout>

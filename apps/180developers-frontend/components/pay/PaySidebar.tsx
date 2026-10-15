@@ -99,6 +99,7 @@ export function PaySidebar({
       label: 'Agent Envelopes',
       href: `/apps/${projectId}/pay/agents`,
       icon: Bot,
+      badge: 'Soon',
     },
     {
       label: 'Gateways & Routing',
@@ -212,6 +213,8 @@ export function PaySidebar({
                   className={`text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 ml-1.5 ${
                     isActive
                       ? 'bg-white/20 text-white dark:bg-black/20 dark:text-zinc-950'
+                      : item.badge === 'Soon'
+                      ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
                       : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700'
                   }`}
                 >

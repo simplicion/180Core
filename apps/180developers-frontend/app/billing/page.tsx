@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import DeveloperSidebar from '@/components/layout/DeveloperSidebar';
 import DeveloperHeader from '@/components/layout/DeveloperHeader';
 import { BillingView } from '@/components/billing/BillingView';
+import { purgeAuthSession, getStoredAuthToken } from '@/lib/auth';
 
 export default function BillingPage() {
   const router = useRouter();
@@ -16,7 +17,7 @@ export default function BillingPage() {
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const token = localStorage.getItem('platform_auth_token');
+        const token = getStoredAuthToken();
         if (!token) return;
 
         const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
@@ -47,8 +48,8 @@ export default function BillingPage() {
   }, []);
 
   const handleSignOut = () => {
-    localStorage.removeItem('platform_auth_token');
-    router.push('/');
+    purgeAuthSession();
+    router.push('/dashboard');
   };
 
   return (
