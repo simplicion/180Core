@@ -51,12 +51,12 @@ jobs:
 
       - name: Generate Database Client (Prisma)
         env:
-          CORE_DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/180core_db?schema=public
+          DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/180core_db?schema=public
         run: pnpm db:generate
 
       - name: Push Database Schema (CI Validation)
         env:
-          CORE_DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/180core_db?schema=public
+          DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/180core_db?schema=public
         run: pnpm db:push
 
       - name: Build Sovereign SDK Distribution
@@ -69,6 +69,6 @@ jobs:
         env:
           BUILD_STANDALONE: true
           NODE_ENV: production
-          CORE_DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/180core_db?schema=public
+          DATABASE_URL: postgresql://postgres:postgrespassword@localhost:5432/180core_db?schema=public
           JWT_SECRET: ci_jwt_secret_token_180_core_test_key_99999
         run: pnpm build
