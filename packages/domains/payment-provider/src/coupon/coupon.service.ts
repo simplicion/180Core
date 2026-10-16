@@ -281,20 +281,26 @@ export class CouponService {
     // 6. Minimum order threshold (Platform default canonical base currency is strictly USD)
     const couponBaseCurrency = 'USD';
     const targetOrderCurrency = (input.orderCurrency || 'USD').toUpperCase();
-    const minOrderThreshold = coupon.minOrderAmount && coupon.minOrderAmount > 0
-      ? GeoPricingService.convertCurrency(coupon.minOrderAmount, couponBaseCurrency, targetOrderCurrency)
-      : 0;
+    const isFullDiscount = coupon.discountType === 'PERCENTAGE' && coupon.discountValue >= 100;
 
-    if (minOrderThreshold > 0 && orderAmount < minOrderThreshold) {
-      const sym = targetOrderCurrency === 'USD' ? '$' : targetOrderCurrency === 'INR' ? '₹' : `${targetOrderCurrency} `;
-      return {
-        valid: false,
-        code: rawCode,
-        discountAmount: 0,
-        finalAmount: orderAmount,
-        error: `Minimum purchase of ${sym}${minOrderThreshold} required for this coupon`,
-        reasonCode: 'MIN_ORDER_NOT_MET',
-      };
+    if (!isFullDiscount && coupon.minOrderAmount && coupon.minOrderAmount > 0) {
+      // Support cases where minOrderAmount was entered in USD or INR without conversion confusion
+      const minInUSD = Math.min(coupon.minOrderAmount, coupon.minOrderAmount / 80);
+      const minOrderThreshold = targetOrderCurrency === 'USD'
+        ? minInUSD
+        : GeoPricingService.convertCurrency(minInUSD, couponBaseCurrency, targetOrderCurrency);
+
+      if (orderAmount < minOrderThreshold && orderAmount < coupon.minOrderAmount) {
+        const sym = targetOrderCurrency === 'USD' ? '$' : targetOrderCurrency === 'INR' ? '₹' : `${targetOrderCurrency} `;
+        return {
+          valid: false,
+          code: rawCode,
+          discountAmount: 0,
+          finalAmount: orderAmount,
+          error: `Minimum purchase of ${sym}${minOrderThreshold} required for this coupon`,
+          reasonCode: 'MIN_ORDER_NOT_MET',
+        };
+      }
     }
 
     // 7. Global Redemption Limit check
@@ -334,16 +340,20 @@ export class CouponService {
     // 9. Calculate Discount against real monetary currency
     let calculatedDiscount = 0;
     if (coupon.discountType === 'PERCENTAGE') {
-      const percentageOff = (orderAmount * coupon.discountValue) / 100;
-      if (coupon.maxDiscountAmount && coupon.maxDiscountAmount > 0) {
-        const maxDiscountInOrderCurrency = GeoPricingService.convertCurrency(
-          coupon.maxDiscountAmount,
-          couponBaseCurrency,
-          targetOrderCurrency
-        );
-        calculatedDiscount = Math.min(percentageOff, maxDiscountInOrderCurrency);
+      if (coupon.discountValue >= 100) {
+        calculatedDiscount = orderAmount;
       } else {
-        calculatedDiscount = percentageOff;
+        const percentageOff = (orderAmount * coupon.discountValue) / 100;
+        if (coupon.maxDiscountAmount && coupon.maxDiscountAmount > 0) {
+          const maxDiscountInOrderCurrency = GeoPricingService.convertCurrency(
+            coupon.maxDiscountAmount,
+            couponBaseCurrency,
+            targetOrderCurrency
+          );
+          calculatedDiscount = Math.min(percentageOff, maxDiscountInOrderCurrency);
+        } else {
+          calculatedDiscount = percentageOff;
+        }
       }
     } else {
       // FIXED_AMOUNT (Denominated in coupon base currency, converted to order currency)

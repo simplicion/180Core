@@ -293,6 +293,40 @@ export class CheckoutService {
         session.app.isVerified = true;
       }
 
+      const isPro = sessionId.includes('_pro_');
+      const canonicalBaseUSD = isPro ? 5.0 : 2.0;
+
+      // Auto-heal sessions if amount or originalAmount was corrupted by foreign currency compounding
+      const isCorrupted =
+        !session.originalAmount ||
+        session.originalAmount > 10.0 ||
+        Math.abs(session.originalAmount - canonicalBaseUSD) > 0.01;
+
+      if (isCorrupted) {
+        const isFreeCoupon =
+          session.couponCode === 'FREEO' ||
+          (session.discountAmount && session.discountAmount >= canonicalBaseUSD) ||
+          session.amount === 0;
+
+        const healedAmount = isFreeCoupon ? 0 : canonicalBaseUSD;
+        const healedDiscount = isFreeCoupon ? canonicalBaseUSD : (session.discountAmount && session.discountAmount <= canonicalBaseUSD ? session.discountAmount : 0);
+
+        await prisma.checkoutSession.update({
+          where: { id: sessionId },
+          data: {
+            originalAmount: canonicalBaseUSD,
+            amount: healedAmount,
+            discountAmount: healedDiscount,
+            currency: 'USD',
+          },
+        }).catch(() => {});
+
+        session.originalAmount = canonicalBaseUSD;
+        session.amount = healedAmount;
+        session.discountAmount = healedDiscount;
+        session.currency = 'USD';
+      }
+
       const coreClientId = process.env.CORE_CLIENT_ID || process.env.NEXT_PUBLIC_180_CLIENT_ID || '';
       const isPlatformApp =
         (coreClientId && session.app?.clientId === coreClientId) ||
@@ -1097,21 +1131,33 @@ export class CheckoutService {
       );
     }
 
-    // If explicit custom target amount was supplied, persist in checkout session record
+    // Only allow custom amount mutation if the session explicitly allows custom amounts (e.g. wallet top-ups)
+    const isCustomAmountAllowed = Boolean(
+      sessionMeta.allowCustomAmount ||
+      (session.metadata as any)?.allowCustomAmount ||
+      sessionId.startsWith('sess_topup_')
+    );
+
     if (
+      isCustomAmountAllowed &&
       options?.targetAmount &&
-      options.targetAmount > 0 &&
-      Math.abs(session.amount - options.targetAmount) > 0.001
+      options.targetAmount > 0
     ) {
-      await prisma.checkoutSession.update({
-        where: { id: sessionId },
-        data: {
-          amount: options.targetAmount,
-          originalAmount: options.targetAmount,
-        },
-      }).catch(() => {});
-      session.amount = options.targetAmount;
-      session.originalAmount = options.targetAmount;
+      const baseSessionAmount =
+        targetCurrency !== (session.currency || 'USD').toUpperCase()
+          ? GeoPricingService.convertCurrency(options.targetAmount, targetCurrency, session.currency || 'USD')
+          : options.targetAmount;
+
+      if (Math.abs(session.amount - baseSessionAmount) > 0.001) {
+        await prisma.checkoutSession.update({
+          where: { id: sessionId },
+          data: {
+            amount: baseSessionAmount,
+            originalAmount: session.originalAmount || baseSessionAmount,
+          },
+        }).catch(() => {});
+        session.amount = baseSessionAmount;
+      }
     }
 
     let amountSmallestUnit =

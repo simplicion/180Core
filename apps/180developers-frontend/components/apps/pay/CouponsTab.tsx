@@ -67,7 +67,7 @@ export function CouponsTab({ appId }: CouponsTabProps) {
   const [discountType, setDiscountType] = useState<'PERCENTAGE' | 'FIXED_AMOUNT'>('PERCENTAGE');
   const [discountValue, setDiscountValue] = useState('20');
   const [maxDiscountAmount, setMaxDiscountAmount] = useState('500');
-  const [minOrderAmount, setMinOrderAmount] = useState('100');
+  const [minOrderAmount, setMinOrderAmount] = useState('0');
   const [maxRedemptions, setMaxRedemptions] = useState('20');
   const [perCustomerLimit, setPerCustomerLimit] = useState('1');
   const [allowedOriginsText, setAllowedOriginsText] = useState('');
@@ -80,7 +80,7 @@ export function CouponsTab({ appId }: CouponsTabProps) {
   const [editDiscountType, setEditDiscountType] = useState<'PERCENTAGE' | 'FIXED_AMOUNT'>('PERCENTAGE');
   const [editDiscountValue, setEditDiscountValue] = useState('20');
   const [editMaxDiscountAmount, setEditMaxDiscountAmount] = useState('500');
-  const [editMinOrderAmount, setEditMinOrderAmount] = useState('100');
+  const [editMinOrderAmount, setEditMinOrderAmount] = useState('0');
   const [editMaxRedemptions, setEditMaxRedemptions] = useState('20');
   const [editPerCustomerLimit, setEditPerCustomerLimit] = useState('1');
   const [editAllowedOriginsText, setEditAllowedOriginsText] = useState('');

@@ -459,7 +459,14 @@ export class CheckoutApiController {
 
       // Platform canonical base currency is ALWAYS strictly USD
       const sessionCurrency = String(session.currency || 'USD').toUpperCase();
-      const sessionBaseAmount = session.originalAmount && session.originalAmount > 0 ? session.originalAmount : session.amount;
+      let sessionBaseAmount = session.originalAmount && session.originalAmount > 0 ? session.originalAmount : session.amount;
+
+      // Auto-heal Developer sessions if corrupted or compounded
+      if (session.id.startsWith('sess_dev_')) {
+        const isPro = session.id.includes('_pro_');
+        sessionBaseAmount = isPro ? 5.0 : 2.0;
+      }
+
       const clientRequestedCurrency = req.body.currency ? String(req.body.currency).toUpperCase() : sessionCurrency;
       const clientOrderAmount = typeof req.body.orderAmount === 'number' && req.body.orderAmount > 0 ? req.body.orderAmount : null;
 
@@ -486,17 +493,24 @@ export class CheckoutApiController {
       }
 
       // 2. Canonical base discount and final amounts strictly in session currency (USD)
-      const baseDiscountAmount = validation.discountAmount;
-      const baseFinalAmount = Math.max(0, Math.round((sessionBaseAmount - baseDiscountAmount) * 100) / 100);
+      const is100PercentOff = validation.discountType === 'PERCENTAGE' && validation.discountValue >= 100;
+      const baseDiscountAmount = is100PercentOff ? sessionBaseAmount : validation.discountAmount;
+      const baseFinalAmount = is100PercentOff ? 0 : Math.max(0, Math.round((sessionBaseAmount - baseDiscountAmount) * 100) / 100);
 
       // 3. Display amounts converted for client active view
       let displayDiscountAmount = baseDiscountAmount;
       let displayFinalAmount = baseFinalAmount;
 
-      if (clientRequestedCurrency !== sessionCurrency) {
+      if (is100PercentOff) {
+        const clientBaseTotal = clientOrderAmount && clientOrderAmount > 0
+          ? clientOrderAmount
+          : GeoPricingService.convertCurrency(sessionBaseAmount, sessionCurrency, clientRequestedCurrency);
+        displayDiscountAmount = clientBaseTotal;
+        displayFinalAmount = 0;
+      } else if (clientRequestedCurrency !== sessionCurrency) {
         if (clientOrderAmount && clientOrderAmount > 0 && sessionBaseAmount > 0) {
-          const discountRatio = baseDiscountAmount / sessionBaseAmount;
-          displayDiscountAmount = Math.round(Math.min(clientOrderAmount, clientOrderAmount * discountRatio) * 100) / 100;
+          const discountRatio = Math.min(1, baseDiscountAmount / sessionBaseAmount);
+          displayDiscountAmount = Math.round(clientOrderAmount * discountRatio * 100) / 100;
           displayFinalAmount = Math.max(0, Math.round((clientOrderAmount - displayDiscountAmount) * 100) / 100);
         } else {
           displayDiscountAmount = GeoPricingService.convertCurrency(baseDiscountAmount, sessionCurrency, clientRequestedCurrency);
@@ -509,6 +523,7 @@ export class CheckoutApiController {
         data: {
           originalAmount: sessionBaseAmount,
           amount: baseFinalAmount,
+          currency: sessionCurrency,
           couponId: validation.couponId || null,
           couponCode: validation.code,
           discountAmount: baseDiscountAmount,
@@ -564,12 +579,20 @@ export class CheckoutApiController {
         return res.status(400).json({ success: false, error: 'Checkout session is not active' });
       }
 
-      const revertedAmount = session.originalAmount && session.originalAmount > 0 ? session.originalAmount : session.amount;
+      let revertedAmount = session.originalAmount && session.originalAmount > 0 ? session.originalAmount : session.amount;
+      const sessionCurrency = String(session.currency || 'USD').toUpperCase();
+
+      if (session.id.startsWith('sess_dev_')) {
+        const isPro = session.id.includes('_pro_');
+        revertedAmount = isPro ? 5.0 : 2.0;
+      }
 
       const updated = await prisma.checkoutSession.update({
         where: { id: session.id },
         data: {
+          originalAmount: revertedAmount,
           amount: revertedAmount,
+          currency: sessionCurrency,
           couponId: null,
           couponCode: null,
           discountAmount: 0,
