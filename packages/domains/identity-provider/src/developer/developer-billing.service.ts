@@ -1,7 +1,9 @@
 'use strict';
 
+import crypto from 'crypto';
 import { developersPrisma as prisma } from '@workspace/db-180core';
 import { LEGACY_FIRST_PARTY_ALIASES } from '../oauth/seed-first-party';
+import { hashSecret } from '../oauth/oauth.service';
 
 export const DEV_TRIAL_DAYS = 30; // 30 days free trial access
 export const DEV_STARTER_PRICE = 2.0; // $2 / month
@@ -47,19 +49,20 @@ export interface DeveloperBillingStatus {
 }
 
 export class DeveloperBillingService {
-  public static readonly PLATFORM_CLIENT_ID = '180_client_2d51a605038c38ffb6fa037688988a83';
+  public static get PLATFORM_CLIENT_ID(): string {
+    return process.env.CORE_CLIENT_ID || process.env.NEXT_PUBLIC_180_CLIENT_ID || '';
+  }
 
   /**
    * Helper to resolve the canonical 180 Core platform app ID for anchoring developer project subscriptions
    */
   public static async getPlatformAppId(): Promise<string> {
+    const platformClientId = this.PLATFORM_CLIENT_ID;
     let platformApp = await prisma.oAuthApp.findFirst({
       where: {
         OR: [
-          { clientId: this.PLATFORM_CLIENT_ID },
+          ...(platformClientId ? [{ clientId: platformClientId }] : []),
           { name: '180 Core' },
-          { clientId: '180-workspace-platform' },
-          { clientId: '180-core' },
         ],
       },
       select: { id: true, name: true },
@@ -75,30 +78,40 @@ export class DeveloperBillingService {
       return platformApp.id;
     }
 
-    // Deterministically ensure the official platform app exists under admin@180core.cloud
-    const adminUser =
-      (await prisma.user.findFirst({ where: { email: 'admin@180core.cloud' } })) ||
-      (await prisma.user.findFirst({ where: { role: 'SUPERADMIN' } })) ||
-      (await prisma.user.findFirst({ where: { role: 'SUPER_ADMIN' } })) ||
-      (await prisma.user.findFirst());
-
-    if (!adminUser) {
-      throw new Error('No root administrative user found in database to anchor platform application');
+    // Ensure the platform app is associated with an existing developer user account
+    let appOwner = await prisma.user.findFirst();
+    if (!appOwner) {
+      appOwner = await prisma.user.create({
+        data: {
+          email: process.env.DEFAULT_DEVELOPER_EMAIL || 'developer@180core.cloud',
+          name: 'Developer',
+          username: `developer_${crypto.randomBytes(4).toString('hex')}`,
+          role: 'USER',
+          isVerified: true,
+          isEmailVerified: true,
+          isOnboarded: true,
+        },
+      });
     }
+
+    const rawSecret = process.env.CORE_CLIENT_SECRET || crypto.randomBytes(32).toString('hex');
+    const redirectUris = (process.env.CORE_REDIRECT_URIS || '').split(',').map((u: string) => u.trim()).filter(Boolean);
+    const allowedOrigins = (process.env.CORE_ALLOWED_ORIGINS || '').split(',').map((o: string) => o.trim()).filter(Boolean);
 
     const createdPlatformApp = await prisma.oAuthApp.create({
       data: {
-        clientId: this.PLATFORM_CLIENT_ID,
+        clientId: platformClientId || `180_core_${crypto.randomBytes(8).toString('hex')}`,
         name: '180 Core',
         description: 'Sovereign Core Identity, Auth & 180 Pay Infrastructure',
-        clientSecretHash: 'system_platform_app_hash',
-        clientSecretHint: 'c3ab',
-        redirectUris: ['http://localhost:3008/oauth/callback', 'http://localhost:3009/oauth/callback'],
-        allowedOrigins: ['http://localhost:3008', 'http://localhost:3009'],
+        logoUrl: process.env.CORE_APP_LOGO_URL || '',
+        clientSecretHash: hashSecret(rawSecret),
+        clientSecretHint: rawSecret.slice(-4),
+        redirectUris,
+        allowedOrigins,
         allowedScopes: ['openid', 'identity:read', 'pay:checkout', 'pay:subscriptions'],
         isVerified: true,
         isActive: true,
-        userId: adminUser.id,
+        userId: appOwner.id,
       },
       select: { id: true },
     });

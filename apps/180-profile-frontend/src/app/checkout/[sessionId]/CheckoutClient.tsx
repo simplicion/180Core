@@ -39,7 +39,19 @@ declare global {
   }
 }
 
-export function CheckoutClient({ initialSessionId }: { initialSessionId?: string } = {}) {
+export interface CheckoutClientProps {
+  initialSessionId?: string;
+  initialAmount?: number;
+  onSuccess?: (newBalance?: number) => void;
+  onClose?: () => void;
+}
+
+export function CheckoutClient({
+  initialSessionId,
+  initialAmount,
+  onSuccess,
+  onClose,
+}: CheckoutClientProps = {}) {
   const params = useParams();
   
   // Resilient sessionId extraction for static SSG exports (Cloudflare Pages rewrites & Payment Link resolution)
@@ -111,6 +123,27 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedDetails, setCopiedDetails] = useState(false);
   const [showDevInspector, setShowDevInspector] = useState(false);
+  const [logoFailed, setLogoFailed] = useState(false);
+
+  useEffect(() => {
+    setLogoFailed(false);
+  }, [session?.app?.logoUrl]);
+
+  // ─── Custom Amount & Wallet Top-Up State ────────────────────────────────────
+  const [customAmountInput, setCustomAmountInput] = useState<string>('');
+  const [selectedPresetAmount, setSelectedPresetAmount] = useState<number | null>(() => {
+    if (initialAmount && initialAmount > 0) return initialAmount;
+    return null;
+  });
+
+  useEffect(() => {
+    if (initialAmount && initialAmount > 0) {
+      setSelectedPresetAmount(initialAmount);
+      setCustomAmountInput('');
+      prewarmedOrderRef.current = null;
+      prewarmingPromiseRef.current = null;
+    }
+  }, [initialAmount]);
 
   // ─── Coupons & Promo Code State ─────────────────────────────────────────────
   const [couponInput, setCouponInput] = useState('');
@@ -325,6 +358,10 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
   };
 
   const handleReturnToApp = () => {
+    if (onClose) {
+      onClose();
+      return;
+    }
     if (typeof window !== 'undefined') {
       const closePayload = {
         type: '180_PAYMENT_CLOSE',
@@ -413,15 +450,51 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
     toast.success(`Switched currency to ${clean} (${meta.symbol})`, { id: 'curr-switch' });
   };
 
+  const isTopUpSession = Boolean(
+    sessionId?.startsWith('sess_topup_') ||
+    session?.metadata?.isTopUp ||
+    session?.metadata?.purpose === 'wallet_topup' ||
+    session?.metadata?.type === 'topup'
+  );
+
+  const isCustomAmountAllowed = Boolean(
+    isTopUpSession ||
+    session?.metadata?.allowCustomAmount ||
+    session?.allowCustomAmount
+  );
+
+  const quickPresets = useMemo(() => {
+    if (activeCurrency === 'INR') {
+      return [500, 1000, 2500, 5000];
+    }
+    if (['USD', 'EUR', 'GBP'].includes(activeCurrency)) {
+      return [10, 25, 50, 100];
+    }
+    return [500, 1000, 2500, 5000].map((inr) => {
+      const converted = currencyService.convert(inr, 'INR', activeCurrency);
+      if (converted > 100) return Math.round(converted / 50) * 50;
+      if (converted > 20) return Math.round(converted / 5) * 5;
+      return Math.max(1, Math.round(converted));
+    });
+  }, [activeCurrency]);
+
   const rawDeveloperOriginal = session?.originalAmount && session.originalAmount > 0
     ? session.originalAmount
-    : session?.amount || 0;
+    : session?.amount || (isTopUpSession ? 1000 : 0);
 
   const activeOriginalAmount = useMemo(() => {
+    if (isCustomAmountAllowed) {
+      if (customAmountInput && !isNaN(parseFloat(customAmountInput)) && parseFloat(customAmountInput) > 0) {
+        return parseFloat(customAmountInput);
+      }
+      if (selectedPresetAmount !== null && selectedPresetAmount > 0) {
+        return selectedPresetAmount;
+      }
+    }
     if (!rawDeveloperOriginal) return 0;
     if (activeCurrency === developerOriginalCurrency) return rawDeveloperOriginal;
     return currencyService.convert(rawDeveloperOriginal, developerOriginalCurrency, activeCurrency);
-  }, [rawDeveloperOriginal, developerOriginalCurrency, activeCurrency]);
+  }, [isCustomAmountAllowed, customAmountInput, selectedPresetAmount, rawDeveloperOriginal, developerOriginalCurrency, activeCurrency]);
 
   const activeDiscountAmount = useMemo(() => {
     if (!session?.discountAmount || session.discountAmount <= 0) return 0;
@@ -481,7 +554,7 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
   const userBalance = useMemo(() => {
     return currencyService.convert(rawUserBalance, walletCurrency, activeCurrency);
   }, [rawUserBalance, walletCurrency, activeCurrency]);
-  const hasEnoughBalance = isAuthenticatedWithWallet && userBalance >= activeFinalAmount;
+  const hasEnoughBalance = !isTopUpSession && isAuthenticatedWithWallet && userBalance >= activeFinalAmount;
 
   const handleApplyCoupon = async () => {
     const trimmedCode = couponInput.trim().toUpperCase();
@@ -641,6 +714,7 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
           sessionId.startsWith('sess_demo_') ||
           sessionId.startsWith('sess_180pay_') ||
           sessionId.startsWith('sess_dev_') ||
+          sessionId.startsWith('sess_topup_') ||
           sessionId.startsWith('cs_') ||
           sessionId === 'default'
         )
@@ -651,26 +725,32 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
         const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
         const queryAmount = urlParams?.get('amount')
           ? parseFloat(urlParams.get('amount')!)
-          : sessionId.includes('_pro_')
-            ? 5.0
-            : sessionId.includes('_starter_')
-              ? 2.0
-              : 499.0;
+          : sessionId.startsWith('sess_topup_')
+            ? 1000.0
+            : sessionId.includes('_pro_')
+              ? 5.0
+              : sessionId.includes('_starter_')
+                ? 2.0
+                : 499.0;
         const queryTitle =
           urlParams?.get('title') ||
-          (sessionId.startsWith('sess_dev_')
-            ? (sessionId.includes('_pro_') ? '180 Developer Portal — Pro Plan' : '180 Developer Portal — Starter Plan')
-            : '180 Workspace Plan');
+          (sessionId.startsWith('sess_topup_')
+            ? 'Top-Up Prepaid Wallet'
+            : sessionId.startsWith('sess_dev_')
+              ? (sessionId.includes('_pro_') ? '180 Core — Pro Plan' : '180 Core — Starter Plan')
+              : '180 Core Plan');
         const queryDesc =
           urlParams?.get('description') ||
-          (sessionId.startsWith('sess_dev_')
-            ? (sessionId.includes('_pro_') ? '10 Projects Access with 180 Identity & 180 Pay' : '5 Projects Access with 180 Identity & 180 Pay')
-            : 'Secure Online Checkout');
-        const queryCurrency = urlParams?.get('currency') || 'USD';
+          (sessionId.startsWith('sess_topup_')
+            ? 'Universal 180 Pay Ledger Top-up'
+            : sessionId.startsWith('sess_dev_')
+              ? (sessionId.includes('_pro_') ? '10 Projects Access with 180 Identity & 180 Pay' : '5 Projects Access with 180 Identity & 180 Pay')
+              : 'Secure Online Checkout');
+        const queryCurrency = urlParams?.get('currency') || (sessionId.startsWith('sess_topup_') ? 'INR' : 'USD');
         const queryApp =
           urlParams?.get('appName') ||
           urlParams?.get('app') ||
-          (sessionId.startsWith('sess_dev_') ? '180 Developer Portal' : '180 Workspace');
+          '180 Core';
 
         sessionInfo = {
           id: sessionId,
@@ -680,10 +760,18 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
           description: queryDesc,
           status: 'PENDING',
           expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+          metadata: {
+            isTopUp: sessionId.startsWith('sess_topup_'),
+            allowCustomAmount: sessionId.startsWith('sess_topup_'),
+            purpose: sessionId.startsWith('sess_topup_') ? 'wallet_topup' : undefined,
+          },
           app: {
-            id: 'app_180workspace',
+            id: 'app_180core',
             name: queryApp,
             isVerified: true,
+            logoUrl:
+              urlParams?.get('logoUrl') ||
+              'https://pub-73622b8ffeaa436d83a676e27d5739a6.r2.dev/brands/avatars/792597b3-23d2-43cb-ab5b-e375cb3ed73c/1792050853514-404966-ZeeResizer.png',
           },
         };
       }
@@ -1083,6 +1171,7 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
         currency: orderCurrency || chargeCurrency,
         name: session.app?.name || '180 Pay Secure Checkout',
         description: session.title || 'Direct Checkout',
+        image: session.app?.logoUrl || undefined,
         order_id: orderId,
         theme: { color: '#2563eb' },
         prefill: {
@@ -1129,12 +1218,26 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
             }
             setCompleted(true);
 
+            const creditedBalance = verifyData.creditedUserBalance;
+            if (typeof creditedBalance === 'number') {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(
+                  new CustomEvent('180_wallet_updated', { detail: { balance: creditedBalance } })
+                );
+              }
+              if (onSuccess) {
+                onSuccess(creditedBalance);
+              }
+            }
+
             const liveSuccessPayload = {
               type: '180_PAYMENT_SUCCESS',
               sessionId,
               transactionId: response.razorpay_payment_id,
-              amount: session?.amount,
-              currency: session?.currency,
+              amount: activeFinalAmount,
+              currency: activeCurrency,
+              creditedUserBalance: verifyData.creditedUserBalance,
+              newBalance: verifyData.creditedUserBalance,
             };
 
             if (typeof window !== 'undefined') {
@@ -1149,6 +1252,8 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
             setTimeout(() => {
               if (verifyData.returnUrl || session?.returnUrl) {
                 window.location.href = verifyData.returnUrl || session.returnUrl;
+              } else if (onClose) {
+                onClose();
               } else if (typeof window !== 'undefined') {
                 if (window.opener) {
                   window.close();
@@ -1525,14 +1630,19 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
   const isDeveloperBilling = Boolean(
     sessionId?.startsWith('sess_dev_') ||
     session?.metadata?.source === 'DEVELOPER_PORTAL_BILLING' ||
+    session?.title?.toLowerCase().includes('180 core') ||
     session?.title?.toLowerCase().includes('developer portal')
   );
 
-  const vendorDisplayName = isDeveloperBilling
-    ? '180 Developer Portal'
+  const vendorDisplayName = isTopUpSession
+    ? '180 Pay'
+    : isDeveloperBilling
+    ? '180 Core'
     : (session.app?.name || 'Merchant');
 
-  const vendorSubtitle = isDeveloperBilling
+  const vendorSubtitle = isTopUpSession
+    ? 'Universal Prepaid Wallet'
+    : isDeveloperBilling
     ? 'Official Platform Subscription'
     : 'Verified Merchant';
 
@@ -1543,19 +1653,21 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-11 h-11 min-w-[44px] min-h-[44px] max-w-[44px] max-h-[44px] rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 p-[1px] shadow-xs shrink-0 overflow-hidden">
             <div className="w-full h-full bg-white dark:bg-zinc-900 rounded-2xl flex items-center justify-center font-bold text-blue-700 dark:text-blue-400 text-xs overflow-hidden">
-              {isDeveloperBilling ? (
-                <div className="w-full h-full bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 rounded-2xl flex items-center justify-center font-black text-white text-xs tracking-tighter">
-                  180
-                </div>
-              ) : session.app?.logoUrl ? (
+              {session.app?.logoUrl && !logoFailed ? (
                 <img
                   src={session.app.logoUrl}
                   alt={vendorDisplayName}
                   className="w-full h-full object-cover"
-                  onError={(e) => {
-                    (e.currentTarget as HTMLElement).style.display = 'none';
-                  }}
+                  onError={() => setLogoFailed(true)}
                 />
+              ) : isTopUpSession ? (
+                <div className="w-full h-full bg-gradient-to-tr from-blue-600 via-indigo-600 to-emerald-500 rounded-2xl flex items-center justify-center text-white">
+                  <Wallet className="w-5 h-5" />
+                </div>
+              ) : isDeveloperBilling ? (
+                <div className="w-full h-full bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 rounded-2xl flex items-center justify-center font-black text-white text-xs tracking-tighter">
+                  180
+                </div>
               ) : (
                 <span>{session.app?.name ? session.app.name.slice(0, 2).toUpperCase() : 'ME'}</span>
               )}
@@ -1850,6 +1962,109 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
         </div>
       )}
 
+      {/* Wallet Balance Status for Top-Up */}
+      {isTopUpSession && (
+        <div className="bg-slate-50 dark:bg-zinc-800/60 rounded-2xl p-4 border border-slate-200/80 dark:border-zinc-700/80 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/50 border border-blue-200/80 dark:border-blue-800/60 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+              <Wallet className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400 block">
+                Current Available Balance:
+              </span>
+              <span className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-zinc-100 font-mono">
+                {currencyService.format(userBalance, activeCurrency)} {activeCurrency}
+              </span>
+            </div>
+          </div>
+          <div className="text-right">
+            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-full">
+              Universal 180 Pay Ledger
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Select Amount & Custom Amount Selector */}
+      {isCustomAmountAllowed && (
+        <div className="bg-white dark:bg-zinc-900/70 rounded-2xl p-4 border border-slate-200/80 dark:border-zinc-800/80 shadow-2xs space-y-3.5">
+          <div>
+            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400 block mb-2">
+              Select Amount ({activeCurrency})
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {quickPresets.map((amt) => {
+                const isSelected =
+                  (!customAmountInput && selectedPresetAmount === amt) ||
+                  (!customAmountInput && selectedPresetAmount === null && activeOriginalAmount === amt);
+                return (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => {
+                      setSelectedPresetAmount(amt);
+                      setCustomAmountInput('');
+                      prewarmedOrderRef.current = null;
+                      prewarmingPromiseRef.current = null;
+                    }}
+                    className={`py-2 px-1 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                      isSelected
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        : 'bg-slate-50 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200 border-slate-200 dark:border-zinc-700 hover:border-blue-400'
+                    }`}
+                  >
+                    +{currencyService.format(amt, activeCurrency)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400 block mb-1.5">
+              Or Enter Custom Amount
+            </label>
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-slate-400 dark:text-zinc-500 text-xs font-mono">
+                {currencyService.getCurrencyMeta(activeCurrency).symbol || '₹'}
+              </span>
+              <input
+                type="number"
+                min="10"
+                step="any"
+                value={customAmountInput}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setCustomAmountInput(val);
+                  setSelectedPresetAmount(null);
+                  prewarmedOrderRef.current = null;
+                  prewarmingPromiseRef.current = null;
+                }}
+                placeholder="e.g. 1500"
+                className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 rounded-xl text-xs font-bold text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 transition-all font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between text-xs">
+            <div>
+              <span className="font-bold text-slate-800 dark:text-zinc-200 block">
+                {isTopUpSession ? 'Total to Recharge' : 'Total to Pay'}
+              </span>
+              <span className="text-[10.5px] text-emerald-600 dark:text-emerald-400 font-medium">
+                Zero platform processing fees
+              </span>
+            </div>
+            <div className="text-right">
+              <span className="text-base sm:text-lg font-extrabold text-blue-600 dark:text-blue-400 font-mono">
+                {currencyService.format(activeFinalAmount, activeCurrency)} {activeCurrency}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Coupon / Promo Code Box */}
       <div className="rounded-2xl border border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900/50 p-3.5 space-y-2 shadow-2xs">
         {session.couponCode ? (
@@ -1929,80 +2144,108 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
       </div>
 
       {/* Payment Options: Wallet (Only if Authenticated) OR Direct Checkout Badges */}
-      {isAuthenticatedWithWallet ? (
-        <div className="rounded-2xl p-4 border border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900/60 shadow-2xs space-y-2.5">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-600 dark:text-zinc-300 flex items-center gap-1.5 font-medium">
-              <Wallet className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-              180 Wallet Balance:
-            </span>
-            <span className="font-bold text-slate-900 dark:text-zinc-100">
-              {currencyService.format(userBalance, activeCurrency)}
-            </span>
-          </div>
-
-          {hasEnoughBalance ? (
-            <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-zinc-800 text-slate-600 dark:text-zinc-400">
-              <span>Balance after payment:</span>
-              <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                {currencyService.format(userBalance - activeFinalAmount, activeCurrency)}
+      {!isTopUpSession && (
+        isAuthenticatedWithWallet ? (
+          <div className="rounded-2xl p-4 border border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900/60 shadow-2xs space-y-2.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-600 dark:text-zinc-300 flex items-center gap-1.5 font-medium">
+                <Wallet className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                180 Wallet Balance:
+              </span>
+              <span className="font-bold text-slate-900 dark:text-zinc-100">
+                {currencyService.format(userBalance, activeCurrency)}
               </span>
             </div>
-          ) : (
-            <div className="text-[11px] text-slate-600 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-800/50 p-2.5 rounded-xl border border-slate-200/70 dark:border-zinc-700/60 flex items-center justify-between">
-              <span>{isIndia ? 'Pay remaining with UPI / Cards:' : 'Pay remaining with Card:'}</span>
-              <span className="font-bold text-slate-900 dark:text-zinc-200">
-                {currencyService.format(Math.max(0, activeFinalAmount - userBalance), activeCurrency)}
-              </span>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="rounded-2xl p-3.5 border border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900/60 shadow-2xs space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-700 dark:text-zinc-300 font-semibold flex items-center gap-1.5">
-              <CreditCard className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-              Accepted Payment Methods
-            </span>
-            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Instant Checkout
-            </span>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-            {isIndia ? (
-              <>
-                <span className="px-2 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-md text-[10.5px] font-medium border border-slate-200/50 dark:border-zinc-700/50">
-                  UPI (GPay / PhonePe / Paytm / QR)
+            {hasEnoughBalance ? (
+              <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-zinc-800 text-slate-600 dark:text-zinc-400">
+                <span>Balance after payment:</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                  {currencyService.format(userBalance - activeFinalAmount, activeCurrency)}
                 </span>
-                <span className="px-2 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-md text-[10.5px] font-medium border border-slate-200/50 dark:border-zinc-700/50">
-                  Credit & Debit Cards (RuPay / Visa / Mastercard)
-                </span>
-                <span className="px-2 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-md text-[10.5px] font-medium border border-slate-200/50 dark:border-zinc-700/50">
-                  Netbanking (All Indian Banks)
-                </span>
-                <span className="px-2 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-md text-[10.5px] font-medium border border-slate-200/50 dark:border-zinc-700/50">
-                  Wallets & EMI
-                </span>
-              </>
+              </div>
             ) : (
-              <>
-                <span className="px-2 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-md text-[10.5px] font-medium border border-slate-200/50 dark:border-zinc-700/50">
-                  Credit & Debit Cards (Visa / Mastercard / 3D Secure)
+              <div className="text-[11px] text-slate-600 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-800/50 p-2.5 rounded-xl border border-slate-200/70 dark:border-zinc-700/60 flex items-center justify-between">
+                <span>{isIndia ? 'Pay remaining with UPI / Cards:' : 'Pay remaining with Card:'}</span>
+                <span className="font-bold text-slate-900 dark:text-zinc-200">
+                  {currencyService.format(Math.max(0, activeFinalAmount - userBalance), activeCurrency)}
                 </span>
-                <span className="px-2 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-md text-[10.5px] font-medium border border-slate-200/50 dark:border-zinc-700/50">
-                  International Online Cards
-                </span>
-              </>
+              </div>
             )}
           </div>
-        </div>
+        ) : (
+          <div className="rounded-2xl p-3.5 border border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900/60 shadow-2xs space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-700 dark:text-zinc-300 font-semibold flex items-center gap-1.5">
+                <CreditCard className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                Accepted Payment Methods
+              </span>
+              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Instant Checkout
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              {isIndia ? (
+                <>
+                  <span className="px-2 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-md text-[10.5px] font-medium border border-slate-200/50 dark:border-zinc-700/50">
+                    UPI (GPay / PhonePe / Paytm / QR)
+                  </span>
+                  <span className="px-2 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-md text-[10.5px] font-medium border border-slate-200/50 dark:border-zinc-700/50">
+                    Credit & Debit Cards (RuPay / Visa / Mastercard)
+                  </span>
+                  <span className="px-2 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-md text-[10.5px] font-medium border border-slate-200/50 dark:border-zinc-700/50">
+                    Netbanking (All Indian Banks)
+                  </span>
+                  <span className="px-2 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-md text-[10.5px] font-medium border border-slate-200/50 dark:border-zinc-700/50">
+                    Wallets & EMI
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="px-2 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-md text-[10.5px] font-medium border border-slate-200/50 dark:border-zinc-700/50">
+                    Credit & Debit Cards (Visa / Mastercard / 3D Secure)
+                  </span>
+                  <span className="px-2 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-md text-[10.5px] font-medium border border-slate-200/50 dark:border-zinc-700/50">
+                    International Online Cards
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+        )
       )}
 
       {/* Actions */}
       <div className="space-y-2.5 pt-1">
-        {hasEnoughBalance ? (
+        {isTopUpSession ? (
+          <>
+            <Button
+              onClick={handleDirectPayment}
+              disabled={topupLoading || paying || activeFinalAmount <= 0}
+              className="w-full min-h-[46px] rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-bold text-sm shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+            >
+              <CreditCard className="w-4 h-4" />
+              <span>
+                {topupLoading
+                  ? 'Opening Payment Gateway...'
+                  : `Pay ${currencyService.format(activeFinalAmount, activeCurrency)}`}
+              </span>
+            </Button>
+            <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] text-slate-500 dark:text-zinc-400 pt-1">
+              <span className="flex items-center gap-1 font-medium">
+                <ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                256-bit Encrypted
+              </span>
+              <span>•</span>
+              <span className="flex items-center gap-1 font-medium">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                Razorpay Verified (UPI / Cards / Netbanking)
+              </span>
+            </div>
+          </>
+        ) : hasEnoughBalance ? (
           <>
             <Button
               onClick={handlePay}

@@ -30,11 +30,10 @@ import { purgeAuthSession, getStoredAuthToken } from '@/lib/auth';
 import { EditProfileModal } from '@/components/EditProfileModal';
 import { OneEightyPayBottomSheet } from '@/components/OneEightyPayBottomSheet';
 import { InvoiceModal } from '@/components/InvoiceModal';
+import { useAuth } from '@/context/AuthContext';
 
 export default function HomePage() {
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [balance, setBalance] = useState<number>(0.0);
-  const [loading, setLoading] = useState(true);
+  const { user, balance, loading, refreshWallet, refreshUser } = useAuth();
 
   // Modals & Bottom Sheets
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -46,50 +45,17 @@ export default function HomePage() {
   const [connectedApps, setConnectedApps] = useState<ConnectedApp[]>([]);
   const [recentLedger, setRecentLedger] = useState<LedgerEntry[]>([]);
 
-  const loadData = async () => {
+  const loadDashboardData = async () => {
     const token = getStoredAuthToken() || '';
-
-    if (!token) {
-      setUser(null);
-      setLoading(false);
-      return;
-    }
+    if (!token) return;
 
     const headers = { Authorization: `Bearer ${token}` };
 
     try {
-      // Step 1: Validate the token with userinfo first
-      const userRes = await fetch(getCoreApiUrl('/api/oauth/userinfo'), { headers, credentials: 'include' });
-
-      if (!userRes.ok) {
-        // Token is expired/invalid — clear all stale auth and stop
-        purgeAuthSession();
-        setUser(null);
-        setLoading(false);
-        return;
-      }
-
-      const userData = await userRes.json().catch(() => null);
-      if (userData && (userData.user || userData.id)) {
-        const u = userData.user || userData;
-        setUser(u);
-        localStorage.setItem('user', JSON.stringify(u));
-      } else {
-        setUser(null);
-        setLoading(false);
-        return;
-      }
-
-      // Step 2: Only fetch wallet, ledger, and apps AFTER auth is confirmed
-      const [walletRes, ledgerRes, appsRes] = await Promise.all([
-        fetch(getCoreApiUrl('/api/oauth/wallet'), { headers, credentials: 'include' }).then((r) => r.json()).catch(() => null),
+      const [ledgerRes, appsRes] = await Promise.all([
         fetch(getCoreApiUrl('/api/oauth/wallet/ledger'), { headers, credentials: 'include' }).then((r) => r.json()).catch(() => null),
         fetch(getCoreApiUrl('/api/oauth/authorized-apps'), { headers, credentials: 'include' }).then((r) => r.json()).catch(() => null),
       ]);
-
-      if (walletRes?.success && walletRes.data) {
-        setBalance(walletRes.data.balance || 0);
-      }
 
       if (ledgerRes?.success && Array.isArray(ledgerRes.data?.entries)) {
         setRecentLedger(ledgerRes.data.entries.slice(0, 5));
@@ -98,27 +64,17 @@ export default function HomePage() {
       if (appsRes?.success && Array.isArray(appsRes.apps)) {
         setConnectedApps(appsRes.apps);
       }
-    } finally {
-      setLoading(false);
-    }
+    } catch (_) {}
   };
 
   useEffect(() => {
-    loadData();
-
-    const handleWalletUpdated = (e: any) => {
-      if (typeof e.detail?.balance === 'number') {
-        setBalance(e.detail.balance);
-      } else {
-        loadData();
-      }
-    };
-
-    window.addEventListener('180_wallet_updated', handleWalletUpdated);
-    return () => {
-      window.removeEventListener('180_wallet_updated', handleWalletUpdated);
-    };
-  }, []);
+    if (user) {
+      loadDashboardData();
+    } else {
+      setRecentLedger([]);
+      setConnectedApps([]);
+    }
+  }, [user]);
 
   if (loading) {
     return <AdaptiveSkeleton screen="profile-overview" />;
@@ -465,14 +421,13 @@ export default function HomePage() {
       </section>
 
       {/* Modals */}
-      {isEditModalOpen && (
+      {isEditModalOpen && user && (
         <EditProfileModal
           user={user}
           isOpen={isEditModalOpen}
           onClose={() => setIsEditModalOpen(false)}
-          onSave={(updated) => {
-            setUser(updated);
-            localStorage.setItem('user', JSON.stringify(updated));
+          onSave={() => {
+            refreshUser();
             setIsEditModalOpen(false);
           }}
         />
@@ -485,11 +440,9 @@ export default function HomePage() {
           currentBalance={balance}
           user={user}
           onClose={() => setIsTopUpSheetOpen(false)}
-          onSuccess={(newBal) => {
-            if (typeof newBal === 'number') {
-              setBalance(newBal);
-            }
-            loadData();
+          onSuccess={() => {
+            refreshWallet();
+            loadDashboardData();
             setIsTopUpSheetOpen(false);
           }}
         />

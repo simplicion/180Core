@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import { Toaster } from 'react-hot-toast';
-import { FloatingSupportWidget } from '@workspace/ui';
+import DeveloperSupportWrapper from '../components/DeveloperSupportWrapper';
 import PortalShell from '../components/layout/PortalShell';
 import './globals.css';
 
@@ -47,8 +47,9 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               try {
+                var userSet = localStorage.getItem('180_theme_user_set');
                 var theme = localStorage.getItem('180_theme');
-                if (!theme) {
+                if (!userSet) {
                   theme = 'light';
                   localStorage.setItem('180_theme', 'light');
                 }
@@ -103,7 +104,7 @@ export default function RootLayout({
           }}
         />
         <PortalShell>{children}</PortalShell>
-        <FloatingSupportWidget backendUrl="http://localhost:4003" />
+        <DeveloperSupportWrapper />
       </body>
     </html>
   );

@@ -8,13 +8,9 @@ function getCoreDatabaseUrl(): string {
   let url = process.env.DATABASE_URL;
 
   if (!url) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error(
-        'CRITICAL: DATABASE_URL environment variable is missing in production. Hardcoded database fallback credentials are strictly prohibited.'
-      );
-    }
-    // Safe local development fallback
-    url = 'postgresql://postgres:postgres@localhost:5432/180core_db?schema=public';
+    throw new Error(
+      'CRITICAL: DATABASE_URL environment variable is missing. Database credentials must be provided via the DATABASE_URL environment variable.'
+    );
   }
 
   // Redirect legacy 180developers_db to isolated 180core_db

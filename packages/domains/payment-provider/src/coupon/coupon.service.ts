@@ -461,26 +461,7 @@ export class CouponService {
           where: {
             OR: [
               { name: { equals: app.name, mode: 'insensitive' } },
-              ...(app.clientId === '180-traffic-director' || app.clientId.includes('180_client_b26aee')
-                ? [
-                    { clientId: '180-traffic-director' },
-                    { clientId: { contains: '180_client_b26aee' } },
-                    { id: '7697a348-7550-4229-9595-08ba67aa9755' },
-                    { id: 'f037c87a-a294-443f-b15e-6e40c0df6391' },
-                  ]
-                : []),
-              ...(app.clientId === '180-social-studio' || app.clientId.includes('180_client_social')
-                ? [
-                    { clientId: '180-social-studio' },
-                    { clientId: { contains: '180_client_social' } },
-                  ]
-                : []),
-              ...(app.clientId === '180-workspace' || app.clientId.includes('180_client_workspace')
-                ? [
-                    { clientId: '180-workspace' },
-                    { clientId: { contains: '180_client_workspace' } },
-                  ]
-                : []),
+              ...(app.userId ? [{ userId: app.userId }] : []),
             ],
           },
         });
@@ -596,12 +577,7 @@ export class CouponService {
             id: { not: targetAppId },
             OR: [
               { name: { equals: currentApp.name, mode: 'insensitive' } },
-              ...(currentApp.clientId === '180-traffic-director' || currentApp.clientId.includes('180_client_b26aee')
-                ? [{ clientId: '180-traffic-director' }, { clientId: { contains: '180_client_b26aee' } }]
-                : []),
-              ...(currentApp.clientId === '180-social-studio' || currentApp.clientId.includes('180_client_social')
-                ? [{ clientId: '180-social-studio' }, { clientId: { contains: '180_client_social' } }]
-                : []),
+              ...(currentApp.userId ? [{ userId: currentApp.userId }] : []),
             ],
           },
         });

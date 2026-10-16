@@ -26,7 +26,7 @@ export function BottomNav({ user }: BottomNavProps) {
       aria-label="Mobile Navigation"
       className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-200/90 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] safe-area-bottom"
     >
-      <div className="grid grid-cols-4 h-15 max-w-md mx-auto px-2">
+      <div className="grid grid-cols-4 h-16 max-w-md mx-auto px-2">
         {items.map((item) => {
           const isActive =
             item.href === '/'

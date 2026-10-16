@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -107,6 +107,7 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
   );
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
+  const wasInSettingsRef = useRef(false);
 
   const navigateView = (view: 'overview' | 'identity' | 'pay') => {
     if (view === 'identity') {
@@ -974,7 +975,13 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
       <AppModals
         app={app}
         showRotateModal={showRotateModal}
-        setShowRotateModal={setShowRotateModal}
+        setShowRotateModal={(val) => {
+          setShowRotateModal(val);
+          if (!val && wasInSettingsRef.current) {
+            wasInSettingsRef.current = false;
+            setIsSettingsDrawerOpen(true);
+          }
+        }}
         isRotating={isRotating}
         handleRotateSecret={handleRotateSecret}
         newSecretRevealed={newSecretRevealed}
@@ -1054,6 +1061,7 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
         copiedKey={copiedKey}
         copyToClipboard={copyToClipboard}
         onRotateSecretClick={() => {
+          wasInSettingsRef.current = true;
           setIsSettingsDrawerOpen(false);
           setShowRotateModal(true);
         }}

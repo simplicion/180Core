@@ -26,7 +26,7 @@ async function runTwoCredentialAndPlatformBillingSuite() {
   }
 
   // ─── Test 1: Platform App Seeding & Isolation (No "Test1" Hijacking) ────────
-  await test('DeveloperBillingService.getPlatformAppId deterministically seeds 180 Developer Portal', async () => {
+  await test('DeveloperBillingService.getPlatformAppId deterministically seeds 180 Core', async () => {
     const platformAppId = await DeveloperBillingService.getPlatformAppId();
     assert(platformAppId, 'Platform App ID must be resolved');
 
@@ -37,8 +37,7 @@ async function runTwoCredentialAndPlatformBillingSuite() {
     assert(app, 'Platform OAuthApp record must exist in database');
     assert(
       app.clientId === DeveloperBillingService.PLATFORM_CLIENT_ID ||
-      app.name.toLowerCase().includes('developer portal') ||
-      app.name.toLowerCase() === '180workspace',
+      app.name.toLowerCase().includes('180 core'),
       `Expected platform app identity, got clientId: ${app.clientId}, name: ${app.name}`
     );
     assert.notStrictEqual(app.name, 'Test1', 'Platform app must NEVER be hijacked by tenant app "Test1"');
@@ -76,7 +75,7 @@ async function runTwoCredentialAndPlatformBillingSuite() {
   });
 
   // ─── Test 3: Checkout Service Vendor Safeguard for Developer Billing ─────────
-  await test('CheckoutService.getSession strictly returns "180 Developer Portal" for sess_dev_ sessions', async () => {
+  await test('CheckoutService.getSession strictly returns "180 Core" for sess_dev_ sessions', async () => {
     const testSessionId = `sess_dev_starter_e2e_${Date.now()}`;
 
     // getSession will auto-heal and create the session using official platform branding
@@ -86,8 +85,8 @@ async function runTwoCredentialAndPlatformBillingSuite() {
     assert(session.app, 'session.app must be populated');
     assert.strictEqual(
       session.app.name,
-      '180 Developer Portal',
-      `Expected merchant name "180 Developer Portal", got "${session.app.name}"`
+      '180 Core',
+      `Expected merchant name "180 Core", got "${session.app.name}"`
     );
     assert.notStrictEqual(session.app.name, 'Test1', 'Merchant must NEVER be "Test1"');
     assert.strictEqual(session.app.isVerified, true, 'Platform app must be marked verified');

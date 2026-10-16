@@ -36,6 +36,7 @@ export interface FloatingSupportWidgetProps {
   backendUrl?: string;
   defaultPosition?: 'bottom-right' | 'bottom-left';
   hidden?: boolean;
+  className?: string;
 }
 
 export const CATEGORIES = [
@@ -63,6 +64,7 @@ export function FloatingSupportWidget({
   backendUrl,
   defaultPosition = 'bottom-right',
   hidden = false,
+  className,
 }: FloatingSupportWidgetProps) {
   const [shouldHide, setShouldHide] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -346,7 +348,7 @@ export function FloatingSupportWidget({
           onClick={() => setIsOpen(true)}
           className={clsx(
             'group fixed z-40 inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all text-xs font-semibold cursor-pointer select-none',
-            defaultPosition === 'bottom-right' ? 'bottom-5 right-5' : 'bottom-5 left-5'
+            className || (defaultPosition === 'bottom-right' ? 'bottom-5 right-5' : 'bottom-5 left-5')
           )}
           title="Open Quick Support"
         >

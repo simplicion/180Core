@@ -19,6 +19,19 @@ function timingSafeCompare(a: string, b: string): boolean {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
+function getPlatformCredentials() {
+  const clientId =
+    process.env.CORE_CLIENT_ID ||
+    process.env.NEXT_PUBLIC_180_CLIENT_ID ||
+    '';
+  const rawSecret = process.env.CORE_CLIENT_SECRET || '';
+  return {
+    clientId,
+    clientSecretHash: rawSecret ? hashSecret(rawSecret) : '',
+    clientSecretHint: rawSecret ? rawSecret.slice(-4) : '',
+  };
+}
+
 export interface CreateCheckoutSessionInput {
   clientId: string;
   clientSecret: string;
@@ -37,6 +50,48 @@ export interface CreateCheckoutSessionInput {
 }
 
 export class CheckoutService {
+  /**
+   * Resolves the official 180 Core platform OAuth application from environment variables.
+   * Completely env-driven with zero hardcoded credentials or mock URIs.
+   */
+  private static async resolvePlatformOAuthApp() {
+    const coreClientId = process.env.CORE_CLIENT_ID || process.env.NEXT_PUBLIC_180_CLIENT_ID || '';
+    let platformApp = await prisma.oAuthApp.findFirst({
+      where: {
+        OR: [
+          ...(coreClientId ? [{ clientId: coreClientId }] : []),
+          { name: '180 Core' },
+        ],
+      },
+    });
+
+    if (!platformApp) {
+      const anyUser = await prisma.user.findFirst();
+      if (anyUser) {
+        const creds = getPlatformCredentials();
+        const redirectUris = (process.env.CORE_REDIRECT_URIS || '').split(',').map((u: string) => u.trim()).filter(Boolean);
+        const allowedOrigins = (process.env.CORE_ALLOWED_ORIGINS || '').split(',').map((o: string) => o.trim()).filter(Boolean);
+        platformApp = await prisma.oAuthApp.create({
+          data: {
+            clientId: creds.clientId || `180_core_${crypto.randomBytes(8).toString('hex')}`,
+            name: '180 Core',
+            description: 'Sovereign Core Identity, Auth & 180 Pay Infrastructure',
+            logoUrl: process.env.CORE_APP_LOGO_URL || '',
+            clientSecretHash: creds.clientSecretHash,
+            clientSecretHint: creds.clientSecretHint,
+            redirectUris,
+            allowedOrigins,
+            allowedScopes: ['openid', 'identity:read', 'pay:checkout', 'pay:subscriptions'],
+            isVerified: true,
+            isActive: true,
+            userId: anyUser.id,
+          },
+        });
+      }
+    }
+    return platformApp;
+  }
+
   /**
    * Creates a new Checkout Session (Initiated by 3rd-party developer server)
    */
@@ -231,52 +286,20 @@ export class CheckoutService {
       },
     });
 
-    // Self-heal and safeguard Developer Portal billing sessions to strictly bind to official platform identity
+    // Self-heal and safeguard Developer Portal billing sessions to strictly bind to official 180 Core platform identity
     if (session && sessionId.startsWith('sess_dev_')) {
       if (session.app) {
-        session.app.name = '180 Developer Portal';
+        session.app.name = '180 Core';
         session.app.isVerified = true;
       }
 
+      const coreClientId = process.env.CORE_CLIENT_ID || process.env.NEXT_PUBLIC_180_CLIENT_ID || '';
       const isPlatformApp =
-        session.app?.clientId === '180-workspace-platform' ||
-        session.app?.name?.toLowerCase().includes('developer portal') ||
-        session.app?.name?.toLowerCase() === '180workspace';
+        (coreClientId && session.app?.clientId === coreClientId) ||
+        session.app?.name?.toLowerCase() === '180 core';
 
       if (!isPlatformApp) {
-        let platformApp = await prisma.oAuthApp.findFirst({
-          where: {
-            OR: [
-              { clientId: '180-workspace-platform' },
-              { clientId: '180_client_70d751541f05347fe803ec8e128f5e83' },
-              { name: '180 Developer Portal' },
-              { name: '180workspace' },
-            ],
-          },
-        });
-
-        if (!platformApp) {
-          const sysUser =
-            (await prisma.user.findFirst({ where: { role: 'SUPER_ADMIN' } })) ||
-            (await prisma.user.findFirst());
-          if (sysUser) {
-            platformApp = await prisma.oAuthApp.create({
-              data: {
-                clientId: '180-workspace-platform',
-                name: '180 Developer Portal',
-                description: '180 Sovereign Developer Platform & Billing',
-                clientSecretHash: 'system_platform_app_hash',
-                clientSecretHint: 'plat',
-                redirectUris: ['http://localhost:3008/oauth/callback', 'http://localhost:3009/oauth/callback'],
-                allowedOrigins: ['http://localhost:3008', 'http://localhost:3009'],
-                allowedScopes: ['openid', 'identity:read', 'pay:checkout'],
-                isVerified: true,
-                isActive: true,
-                userId: sysUser.id,
-              },
-            });
-          }
-        }
+        const platformApp = await CheckoutService.resolvePlatformOAuthApp();
 
         if (platformApp) {
           await prisma.checkoutSession.update({
@@ -287,8 +310,8 @@ export class CheckoutService {
           session.appId = platformApp.id;
           session.app = {
             id: platformApp.id,
-            name: '180 Developer Portal',
-            description: platformApp.description || '180 Sovereign Developer Platform & Billing',
+            name: platformApp.name,
+            description: platformApp.description || 'Sovereign Core Identity, Auth & 180 Pay Infrastructure',
             logoUrl: platformApp.logoUrl || '',
             isVerified: true,
           } as any;
@@ -302,43 +325,10 @@ export class CheckoutService {
         const isPro = sessionId.includes('_pro_');
         const planTier = isPro ? 'PRO' : 'STARTER';
         const amount = isPro ? 5.0 : 2.0;
-        const title = isPro ? '180 Developer Portal — Pro Plan' : '180 Developer Portal — Starter Plan';
+        const title = isPro ? '180 Core — Pro Plan' : '180 Core — Starter Plan';
         const description = isPro ? '10 Projects Access with 180 Identity & 180 Pay' : '5 Projects Access with 180 Identity & 180 Pay';
 
-        let platformApp = await prisma.oAuthApp.findFirst({
-          where: {
-            OR: [
-              { clientId: '180-workspace-platform' },
-              { clientId: '180_client_70d751541f05347fe803ec8e128f5e83' },
-              { name: '180 Developer Portal' },
-              { name: '180workspace' },
-              { name: { contains: 'Developer Portal', mode: 'insensitive' } },
-            ],
-          },
-        });
-
-        if (!platformApp) {
-          const sysUser =
-            (await prisma.user.findFirst({ where: { role: 'SUPER_ADMIN' } })) ||
-            (await prisma.user.findFirst());
-          if (sysUser) {
-            platformApp = await prisma.oAuthApp.create({
-              data: {
-                clientId: '180-workspace-platform',
-                name: '180 Developer Portal',
-                description: '180 Sovereign Developer Platform & Billing',
-                clientSecretHash: 'system_platform_app_hash',
-                clientSecretHint: 'plat',
-                redirectUris: ['http://localhost:3008/oauth/callback', 'http://localhost:3009/oauth/callback'],
-                allowedOrigins: ['http://localhost:3008', 'http://localhost:3009'],
-                allowedScopes: ['openid', 'identity:read', 'pay:checkout'],
-                isVerified: true,
-                isActive: true,
-                userId: sysUser.id,
-              },
-            });
-          }
-        }
+        const platformApp = await CheckoutService.resolvePlatformOAuthApp();
 
         if (platformApp) {
           session = await prisma.checkoutSession.create({
@@ -373,12 +363,60 @@ export class CheckoutService {
           });
 
           if (session && (session as any).app) {
-            (session as any).app.name = '180 Developer Portal';
+            (session as any).app.name = platformApp.name;
             (session as any).app.isVerified = true;
           }
         }
       } catch (autoHealErr) {
         console.warn('[CheckoutService:getSession] Could not auto-heal sess_dev_ session:', autoHealErr);
+      }
+    }
+
+    // Auto-heal Wallet Top-up checkout sessions if not already in DB
+    if (!session && sessionId.startsWith('sess_topup_')) {
+      try {
+        const platformApp = await CheckoutService.resolvePlatformOAuthApp();
+
+        if (platformApp) {
+          session = await prisma.checkoutSession.create({
+            data: {
+              id: sessionId,
+              appId: platformApp.id,
+              amount: 1000,
+              originalAmount: 1000,
+              currency: 'INR',
+              status: 'PENDING',
+              mode: 'payment',
+              title: 'Top-Up Prepaid Wallet',
+              description: 'Universal 180 Pay Ledger Top-up',
+              metadata: {
+                isTopUp: true,
+                allowCustomAmount: true,
+                purpose: 'wallet_topup',
+              },
+              expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+            },
+            include: {
+              app: {
+                select: {
+                  id: true,
+                  clientId: true,
+                  name: true,
+                  description: true,
+                  logoUrl: true,
+                  isVerified: true,
+                },
+              },
+            },
+          });
+
+          if (session && (session as any).app) {
+            (session as any).app.name = platformApp.name;
+            (session as any).app.isVerified = true;
+          }
+        }
+      } catch (autoHealErr) {
+        console.warn('[CheckoutService:getSession] Could not auto-heal sess_topup_ session:', autoHealErr);
       }
     }
 
@@ -1009,7 +1047,7 @@ export class CheckoutService {
       },
     });
 
-    if (!session && sessionId.startsWith('sess_dev_')) {
+    if (!session && (sessionId.startsWith('sess_dev_') || sessionId.startsWith('sess_topup_'))) {
       try {
         await this.getSession(sessionId);
         session = await prisma.checkoutSession.findUnique({
@@ -1057,6 +1095,23 @@ export class CheckoutService {
         session.currency || 'USD',
         targetCurrency
       );
+    }
+
+    // If explicit custom target amount was supplied, persist in checkout session record
+    if (
+      options?.targetAmount &&
+      options.targetAmount > 0 &&
+      Math.abs(session.amount - options.targetAmount) > 0.001
+    ) {
+      await prisma.checkoutSession.update({
+        where: { id: sessionId },
+        data: {
+          amount: options.targetAmount,
+          originalAmount: options.targetAmount,
+        },
+      }).catch(() => {});
+      session.amount = options.targetAmount;
+      session.originalAmount = options.targetAmount;
     }
 
     let amountSmallestUnit =
@@ -1301,7 +1356,7 @@ export class CheckoutService {
       include: { app: true },
     });
 
-    if (!session && sessionId.startsWith('sess_dev_')) {
+    if (!session && (sessionId.startsWith('sess_dev_') || sessionId.startsWith('sess_topup_'))) {
       try {
         await this.getSession(sessionId);
         session = await prisma.checkoutSession.findUnique({
@@ -1417,6 +1472,62 @@ export class CheckoutService {
         },
       });
 
+      // If this session is a user wallet top-up, credit the user's personal wallet!
+      const isTopUp = Boolean(
+        (session.metadata as any)?.isTopUp ||
+        (session.metadata as any)?.purpose === 'wallet_topup' ||
+        session.title?.toLowerCase().includes('top-up') ||
+        session.title?.toLowerCase().includes('wallet recharge') ||
+        session.id.startsWith('sess_topup_')
+      );
+
+      let creditedUserBalance: number | null = null;
+      if (isTopUp) {
+        let topupUserId = (session.metadata as any)?.userId || (session as any).userId;
+        if (!topupUserId) {
+          const fallbackUser = await tx.user.findFirst();
+          if (fallbackUser) topupUserId = fallbackUser.id;
+        }
+
+        if (topupUserId) {
+          let userWallet = await tx.wallet.findUnique({
+            where: { userId: topupUserId },
+          });
+          if (!userWallet) {
+            userWallet = await tx.wallet.create({
+              data: {
+                userId: topupUserId,
+                balance: 0,
+                currency: session.currency || 'INR',
+              },
+            });
+          }
+          const newUserBalance = Math.round((userWallet.balance + session.amount) * 100) / 100;
+          await tx.wallet.update({
+            where: { id: userWallet.id },
+            data: { balance: newUserBalance },
+          });
+
+          await tx.ledgerEntry.create({
+            data: {
+              walletId: userWallet.id,
+              amount: session.amount,
+              balanceAfter: newUserBalance,
+              type: 'TOPUP',
+              referenceId: paymentId,
+              description: `Prepaid Wallet Top-up (${activeGatewayName})`,
+              metadata: {
+                sessionId: session.id,
+                gateway: activeGatewayName,
+                orderId,
+                paymentId,
+              },
+            },
+          });
+          creditedUserBalance = newUserBalance;
+        }
+      }
+
       const updatedSession = await tx.checkoutSession.update({
         where: { id: session.id },
         data: {
@@ -1427,11 +1538,12 @@ export class CheckoutService {
             gateway: activeGatewayName,
             paymentId,
             orderId,
+            creditedUserBalance,
           },
         },
       });
 
-      return { session: updatedSession, transactionId: paymentId, alreadyCaptured: false };
+      return { session: updatedSession, transactionId: paymentId, alreadyCaptured: false, creditedUserBalance };
     });
 
     // Dispatch webhook to merchant

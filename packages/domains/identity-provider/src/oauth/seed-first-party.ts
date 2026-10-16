@@ -4,176 +4,162 @@ import { developersPrisma as prisma } from '@workspace/db-180core';
 import { hashSecret } from './oauth.service';
 
 /**
- * Mapping of legacy first-party app client IDs to their canonical IDs.
- * Ensures 100% backwards compatibility for legacy OAuth callbacks and external integrations.
+ * Returns the official platform client ID strictly from environment variables.
+ * Zero hardcoded fallback credentials.
  */
-export const LEGACY_FIRST_PARTY_ALIASES: Record<string, string> = {
-    '180-core': '180_client_2d51a605038c38ffb6fa037688988a83',
-    '180-core-client': '180_client_2d51a605038c38ffb6fa037688988a83',
-    '180_core_client': '180_client_2d51a605038c38ffb6fa037688988a83',
-    '180-workspace-platform': '180_client_2d51a605038c38ffb6fa037688988a83',
-    '180-workspace': '180_client_2d51a605038c38ffb6fa037688988a83',
-    '180_workspace': '180_client_2d51a605038c38ffb6fa037688988a83',
-    '180-identity': '180_client_2d51a605038c38ffb6fa037688988a83',
-    '180-identity-client': '180_client_2d51a605038c38ffb6fa037688988a83',
-    '180_identity_client': '180_client_2d51a605038c38ffb6fa037688988a83',
-    '180-profile': '180_client_2d51a605038c38ffb6fa037688988a83',
-    '180_profile': '180_client_2d51a605038c38ffb6fa037688988a83',
-    '180-developer-portal': '180_client_2d51a605038c38ffb6fa037688988a83',
-    '180-developers-portal': '180_client_2d51a605038c38ffb6fa037688988a83',
-    'default': '180_client_2d51a605038c38ffb6fa037688988a83',
-    '180_client_70d751541f05347fe803ec8e128f5e83': '180_client_2d51a605038c38ffb6fa037688988a83',
-    '180_client_5cc136397553836e34eb37ce22d13a53': '180_client_2d51a605038c38ffb6fa037688988a83',
-    '180_client_266753c1171df1e2c4a391483fd2e02e': '180_client_2d51a605038c38ffb6fa037688988a83',
-    '180_client_b26aee801c22cb3295f041ff2a3597db': '180_client_2d51a605038c38ffb6fa037688988a83',
-};
+export function getPlatformClientId(): string {
+    return process.env.CORE_CLIENT_ID || process.env.NEXT_PUBLIC_180_CLIENT_ID || '';
+}
 
 /**
- * Resolves a client ID (which may be a legacy alias) to its canonical primary client ID.
+ * Known legacy alias names used in early monorepo iterations.
+ */
+export const KNOWN_LEGACY_ALIASES = [
+    '180-core',
+    '180-core-client',
+    '180_core_client',
+    '180-workspace-platform',
+    '180-workspace',
+    '180_workspace',
+    '180-identity',
+    '180-identity-client',
+    '180_identity_client',
+    '180-profile',
+    '180_profile',
+    '180-developer-portal',
+    '180-developers-portal',
+    'default',
+];
+
+/**
+ * Legacy alias map provided for backwards compatibility.
+ * Dynamically resolves aliases to the environment-configured platform client ID.
+ */
+export const LEGACY_FIRST_PARTY_ALIASES: Record<string, string> = new Proxy({}, {
+    get(_, prop: string) {
+        const canonical = getPlatformClientId();
+        if (canonical && KNOWN_LEGACY_ALIASES.includes(prop.toLowerCase())) {
+            return canonical;
+        }
+        return canonical;
+    }
+});
+
+/**
+ * Resolves a client ID (which may be a legacy alias) to the environment's canonical client ID.
  */
 export function resolveCanonicalClientId(clientId: string | undefined | null): string {
     if (!clientId) return '';
     const clean = String(clientId).trim();
-    return LEGACY_FIRST_PARTY_ALIASES[clean] || LEGACY_FIRST_PARTY_ALIASES[clean.toLowerCase()] || clean;
+    const platformId = getPlatformClientId();
+    if (platformId && KNOWN_LEGACY_ALIASES.includes(clean.toLowerCase())) {
+        return platformId;
+    }
+    return clean;
 }
 
 /**
- * Canonical First-Party Applications for 180 Core Ecosystem.
- * Sovereign Core Identity, Auth & 180 Pay Infrastructure.
+ * Returns the environment-configured redirect URIs.
+ * If not set in .env, returns an empty array (no hardcoded ports or URLs).
  */
-export const FIRST_PARTY_APPS = [
-    {
-        clientId: '180_client_2d51a605038c38ffb6fa037688988a83',
-        name: '180 Core',
-        description: 'Sovereign Core Identity, Auth & 180 Pay Infrastructure',
-        redirectUris: [
-            'http://localhost:3000/callback',
-            'http://localhost:3000/oauth/callback',
-            'http://localhost:3001/callback',
-            'http://localhost:3001/oauth/callback',
-            'http://localhost:3004/callback',
-            'http://localhost:3004/oauth/callback',
-            'http://localhost:3008/callback',
-            'http://localhost:3008/oauth/callback',
-            'http://localhost:3008/dashboard',
-            'http://localhost:3009/callback',
-            'http://localhost:3009/oauth/callback',
-            'http://localhost:3009/auth/callback',
-            'http://localhost:3009/auth/login',
-            'http://localhost:3010/callback',
-            'http://localhost:3010/oauth/callback',
-            'http://localhost:5173/callback',
-            'http://localhost:5173/oauth/callback',
-            'http://localhost:8080/callback',
-            'http://localhost:8080/oauth/callback',
-            'http://127.0.0.1:3000/callback',
-            'http://127.0.0.1:3000/oauth/callback',
-            'http://127.0.0.1:3001/callback',
-            'http://127.0.0.1:3001/oauth/callback',
-            'http://127.0.0.1:3004/callback',
-            'http://127.0.0.1:3004/oauth/callback',
-            'http://127.0.0.1:3008/callback',
-            'http://127.0.0.1:3008/oauth/callback',
-            'http://127.0.0.1:3008/dashboard',
-            'http://127.0.0.1:3009/callback',
-            'http://127.0.0.1:3009/oauth/callback',
-            'http://127.0.0.1:3009/auth/callback',
-            'http://127.0.0.1:3009/auth/login',
-            'http://127.0.0.1:3010/callback',
-            'http://127.0.0.1:3010/oauth/callback',
-            'http://127.0.0.1:5173/callback',
-            'http://127.0.0.1:5173/oauth/callback',
-            'https://180core.cloud/callback',
-            'https://180core.cloud/oauth/callback',
-            'https://*.180core.cloud/callback',
-            'https://*.180core.cloud/oauth/callback',
-            'https://developer.180core.cloud/callback',
-            'https://developer.180core.cloud/oauth/callback',
-            'https://developer.180core.cloud/dashboard',
-            'https://profile.180core.cloud/callback',
-            'https://profile.180core.cloud/oauth/callback',
-            'https://profile.180core.cloud/auth/login',
-            'https://profile.180core.cloud/auth/callback',
-            'https://admin.180core.cloud/callback',
-            'https://admin.180core.cloud/oauth/callback'
-        ],
-        allowedOrigins: [
-            'http://localhost:3000',
-            'http://127.0.0.1:3000',
-            'http://localhost:3001',
-            'http://127.0.0.1:3001',
-            'http://localhost:3002',
-            'http://127.0.0.1:3002',
-            'http://localhost:3004',
-            'http://127.0.0.1:3004',
-            'http://localhost:3008',
-            'http://127.0.0.1:3008',
-            'http://localhost:3009',
-            'http://127.0.0.1:3009',
-            'http://localhost:3010',
-            'http://127.0.0.1:3010',
-            'http://localhost:5173',
-            'http://127.0.0.1:5173',
-            'http://localhost:8080',
-            'http://127.0.0.1:8080',
-            'http://localhost:8081',
-            'http://127.0.0.1:8081',
-            'https://180core.cloud',
-            'https://*.180core.cloud',
-            'https://developer.180core.cloud',
-            'https://profile.180core.cloud',
-            'https://admin.180core.cloud',
-            'https://api.180core.cloud'
-        ],
-        allowedScopes: [
-            'openid',
-            'identity:read',
-            'identity:email',
-            'identity:phone',
-            'developer:read',
-            'developer:write',
-            'pay:checkout',
-            'pay:subscriptions'
-        ],
-        isVerified: true,
-        isActive: true,
-        enableAuth: true,
-        enablePay: true,
-        authDesktopDefault: 'popup',
-        authMobileDefault: 'bottom_sheet',
-        payDesktopDefault: 'bottom_sheet',
-        payMobileDefault: 'bottom_sheet',
-        logoUrl: '/icon.svg'
+export function getPlatformRedirectUris(): string[] {
+    return (process.env.CORE_REDIRECT_URIS || '')
+        .split(',')
+        .map(u => u.trim())
+        .filter(Boolean);
+}
+
+/**
+ * Returns the environment-configured allowed origins.
+ * If not set in .env, returns an empty array (no hardcoded origins).
+ */
+export function getPlatformAllowedOrigins(): string[] {
+    return (process.env.CORE_ALLOWED_ORIGINS || '')
+        .split(',')
+        .map(o => o.trim())
+        .filter(Boolean);
+}
+
+/**
+ * First-Party Applications configuration for 180 Core Ecosystem.
+ * Driven strictly by environment variables.
+ */
+export function getFirstPartyAppsConfig() {
+    const canonicalClientId = getPlatformClientId();
+    if (!canonicalClientId) return [];
+
+    return [
+        {
+            clientId: canonicalClientId,
+            name: '180 Core',
+            description: 'Sovereign Core Identity, Auth & 180 Pay Infrastructure',
+            redirectUris: getPlatformRedirectUris(),
+            allowedOrigins: getPlatformAllowedOrigins(),
+            allowedScopes: [
+                'openid',
+                'identity:read',
+                'identity:email',
+                'identity:phone',
+                'developer:read',
+                'developer:write',
+                'pay:checkout',
+                'pay:subscriptions'
+            ],
+            isVerified: true,
+            isActive: true,
+            enableAuth: true,
+            enablePay: true,
+            authDesktopDefault: 'popup',
+            authMobileDefault: 'bottom_sheet',
+            payDesktopDefault: 'bottom_sheet',
+            payMobileDefault: 'bottom_sheet',
+            logoUrl: process.env.CORE_APP_LOGO_URL || '/icon.svg'
+        }
+    ];
+}
+
+/**
+ * Canonical First-Party Applications array proxy for backward compatibility.
+ */
+export const FIRST_PARTY_APPS: any[] = new Proxy([], {
+    get(target, prop, receiver) {
+        const list = getFirstPartyAppsConfig();
+        return Reflect.get(list, prop, receiver);
     }
-];
+});
 
 /**
  * Ensures first-party applications are present in the database,
  * consolidates legacy duplicates, and guarantees configuration integrity.
+ * Treated as a normal developer app owned by a standard user account.
  */
 export async function seedFirstPartyOAuthApps(): Promise<void> {
     try {
-        // Find a system user or admin to associate first-party apps (prioritizing admin@180core.cloud)
-        const systemUser = await prisma.user.findFirst({
-            where: { email: 'admin@180core.cloud' }
-        }) || await prisma.user.findFirst({
-            where: { role: 'SUPERADMIN' }
-        }) || await prisma.user.findFirst();
+        const canonicalClientId = getPlatformClientId();
+        if (!canonicalClientId) {
+            console.log('[SeedFirstParty] CORE_CLIENT_ID not configured in environment, skipping auto-seed.');
+            return;
+        }
 
+        // Find a developer user to associate first-party apps (normal developer account)
+        const systemUser = await prisma.user.findFirst();
         if (!systemUser) {
             console.log('[SeedFirstParty] No user record available yet for app seeding, will seed on first boot.');
             return;
         }
 
-        for (const app of FIRST_PARTY_APPS) {
-            const existing = await prisma.oAuthApp.findUnique({
-                where: { clientId: app.clientId }
+        const envApps = getFirstPartyAppsConfig();
+        for (const app of envApps) {
+            const existing = await prisma.oAuthApp.findFirst({
+                where: {
+                    OR: [
+                        { clientId: app.clientId },
+                        { name: app.name }
+                    ]
+                }
             });
 
-            const knownSecret =
-                app.clientId === '180_client_2d51a605038c38ffb6fa037688988a83' || app.clientId === '180-core-client'
-                    ? (process.env.CORE_CLIENT_SECRET || '')
-                    : (process.env.CORE_CLIENT_SECRET || '');
+            const knownSecret = process.env.CORE_CLIENT_SECRET || '';
 
             if (!existing) {
                 await prisma.oAuthApp.create({
@@ -181,8 +167,8 @@ export async function seedFirstPartyOAuthApps(): Promise<void> {
                         name: app.name,
                         description: app.description,
                         clientId: app.clientId,
-                        clientSecretHash: hashSecret(knownSecret),
-                        clientSecretHint: knownSecret.slice(-4),
+                        clientSecretHash: knownSecret ? hashSecret(knownSecret) : '',
+                        clientSecretHint: knownSecret ? knownSecret.slice(-4) : '',
                         redirectUris: app.redirectUris,
                         allowedOrigins: app.allowedOrigins,
                         allowedScopes: app.allowedScopes,
@@ -201,32 +187,26 @@ export async function seedFirstPartyOAuthApps(): Promise<void> {
                 });
                 console.log(`[SeedFirstParty] Created first-party OAuth app: ${app.name} (${app.clientId})`);
             } else {
-                // Ensure redirect URIs, allowed origins, and UX default modes stay up-to-date
-                const mergedUris = Array.from(new Set([...(existing.redirectUris || []), ...app.redirectUris]));
-                const mergedOrigins = Array.from(new Set([...(existing.allowedOrigins || []), ...app.allowedOrigins]));
                 const updateData: any = {};
 
-                if (mergedUris.length !== (existing.redirectUris || []).length || mergedOrigins.length !== (existing.allowedOrigins || []).length) {
-                    updateData.redirectUris = mergedUris;
-                    updateData.allowedOrigins = mergedOrigins;
-                    updateData.isActive = true;
+                // Only merge redirectUris and allowedOrigins if explicitly defined in environment
+                if (app.redirectUris.length > 0) {
+                    const mergedUris = Array.from(new Set([...(existing.redirectUris || []), ...app.redirectUris]));
+                    if (mergedUris.length !== (existing.redirectUris || []).length) {
+                        updateData.redirectUris = mergedUris;
+                    }
                 }
 
-                if (!existing.authDesktopDefault) {
-                    updateData.authDesktopDefault = (app as any).authDesktopDefault || 'popup';
-                }
-                if (!existing.authMobileDefault) {
-                    updateData.authMobileDefault = (app as any).authMobileDefault || 'bottom_sheet';
+                if (app.allowedOrigins.length > 0) {
+                    const mergedOrigins = Array.from(new Set([...(existing.allowedOrigins || []), ...app.allowedOrigins]));
+                    if (mergedOrigins.length !== (existing.allowedOrigins || []).length) {
+                        updateData.allowedOrigins = mergedOrigins;
+                    }
                 }
 
-                if (app.clientId === '180_client_2d51a605038c38ffb6fa037688988a83' || app.clientId === '180-core-client') {
-                    updateData.name = app.name;
-                    updateData.description = app.description;
+                if (knownSecret) {
                     updateData.clientSecretHash = hashSecret(knownSecret);
                     updateData.clientSecretHint = knownSecret.slice(-4);
-                    updateData.allowedScopes = app.allowedScopes;
-                    updateData.isActive = true;
-                    updateData.enablePay = true;
                 }
 
                 if (Object.keys(updateData).length > 0) {
@@ -234,25 +214,25 @@ export async function seedFirstPartyOAuthApps(): Promise<void> {
                         where: { id: existing.id },
                         data: updateData
                     });
-                    console.log(`[SeedFirstParty] Updated configurations for: ${app.name} (${app.clientId})`);
+                    console.log(`[SeedFirstParty] Updated configurations for: ${existing.name} (${existing.clientId})`);
                 }
             }
         }
 
-        // Consolidate and clean up legacy first-party duplicate app rows
-        for (const [legacyClientId, canonicalClientId] of Object.entries(LEGACY_FIRST_PARTY_ALIASES)) {
+        // Consolidate legacy alias duplicate app rows if any exist in DB
+        for (const legacyAlias of KNOWN_LEGACY_ALIASES) {
+            if (legacyAlias.toLowerCase() === canonicalClientId.toLowerCase()) continue;
             try {
                 const legacyApp = await prisma.oAuthApp.findUnique({
-                    where: { clientId: legacyClientId }
+                    where: { clientId: legacyAlias }
                 });
                 const canonicalApp = await prisma.oAuthApp.findUnique({
                     where: { clientId: canonicalClientId }
                 });
 
                 if (legacyApp && canonicalApp && legacyApp.id !== canonicalApp.id) {
-                    console.log(`[SeedFirstParty] Consolidating legacy app '${legacyClientId}' into '${canonicalClientId}'...`);
+                    console.log(`[SeedFirstParty] Consolidating legacy app '${legacyAlias}' into '${canonicalClientId}'...`);
 
-                    // Safely repoint any active tokens, codes, and subscriptions to canonical app
                     await prisma.oAuthToken.updateMany({
                         where: { appId: legacyApp.id },
                         data: { appId: canonicalApp.id }
@@ -283,25 +263,13 @@ export async function seedFirstPartyOAuthApps(): Promise<void> {
                         data: { appId: canonicalApp.id }
                     }).catch(() => {});
 
-                    // Merge redirect URIs and allowed origins
-                    const mergedUris = Array.from(new Set([...(canonicalApp.redirectUris || []), ...(legacyApp.redirectUris || [])]));
-                    const mergedOrigins = Array.from(new Set([...(canonicalApp.allowedOrigins || []), ...(legacyApp.allowedOrigins || [])]));
-                    await prisma.oAuthApp.update({
-                        where: { id: canonicalApp.id },
-                        data: {
-                            redirectUris: mergedUris,
-                            allowedOrigins: mergedOrigins
-                        }
-                    }).catch(() => {});
-
-                    // Delete redundant legacy row
                     await prisma.oAuthApp.delete({
                         where: { id: legacyApp.id }
                     });
-                    console.log(`[SeedFirstParty] Successfully removed redundant legacy app '${legacyClientId}'`);
+                    console.log(`[SeedFirstParty] Successfully removed redundant legacy app '${legacyAlias}'`);
                 }
             } catch (err: any) {
-                console.warn(`[SeedFirstParty] Non-blocking consolidation note for '${legacyClientId}':`, err.message);
+                console.warn(`[SeedFirstParty] Non-blocking consolidation note for '${legacyAlias}':`, err.message);
             }
         }
     } catch (e: any) {
@@ -311,22 +279,13 @@ export async function seedFirstPartyOAuthApps(): Promise<void> {
 
 /**
  * Checks if a given client ID or application identifier belongs to the official 180 Workspace first-party ecosystem.
- * First-party applications are trusted by default and do not require user-granted OAuth consent screens.
+ * Dynamically resolves against environment configuration.
  */
 export function isFirstPartyApp(clientIdOrId: string | undefined | null): boolean {
     if (!clientIdOrId) return false;
     const clean = String(clientIdOrId).trim().toLowerCase();
+    const platformId = getPlatformClientId().toLowerCase();
+    if (!platformId) return false;
     const canonical = resolveCanonicalClientId(clean).toLowerCase();
-    if (
-        clean === '180-core' ||
-        clean === '180-core-client' ||
-        clean === '180_client_2d51a605038c38ffb6fa037688988a83' ||
-        canonical === '180_client_2d51a605038c38ffb6fa037688988a83' ||
-        canonical === '180-core-client'
-    ) {
-        return true;
-    }
-    return FIRST_PARTY_APPS.some(
-        a => a.clientId.toLowerCase() === clean || a.clientId.toLowerCase() === canonical || (a as any).id?.toLowerCase() === clean || a.name.toLowerCase() === clean
-    );
+    return clean === platformId || canonical === platformId;
 }

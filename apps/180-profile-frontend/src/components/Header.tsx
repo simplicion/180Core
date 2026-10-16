@@ -14,6 +14,7 @@ import {
   ChevronDown,
   LogOut,
   Sparkles,
+  LifeBuoy,
 } from 'lucide-react';
 import { HelpIcon } from '@workspace/ui';
 import { OneEightyCoreLogo } from './OneEightyCoreLogo';
@@ -111,7 +112,21 @@ export function Header({ balance, user }: HeaderProps) {
         </div>
 
         {/* Right Actions */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-2.5">
+          {/* Quick Support Trigger Button: Placed in Top Header so it never hides the navigation UI */}
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event('180_OPEN_SUPPORT'))}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-slate-50 hover:bg-slate-100 border border-slate-200/90 text-slate-700 hover:text-slate-900 text-xs font-semibold shadow-2xs active:scale-95 transition-all cursor-pointer select-none"
+            title="Quick Support"
+            aria-label="Open Quick Support"
+          >
+            <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-purple-600 via-fuchsia-600 to-indigo-500 flex items-center justify-center text-white shrink-0 shadow-2xs">
+              <LifeBuoy className="w-3 h-3 text-white" />
+            </div>
+            <span className="hidden sm:inline text-xs font-medium">Support</span>
+          </button>
+
           {user ? (
             <>
               {/* Centralized Help Icon */}
@@ -193,6 +208,18 @@ export function Header({ balance, user }: HeaderProps) {
                         <AppWindow className="w-4 h-4 text-slate-400" />
                         <span>Connected Apps</span>
                       </Link>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserDropdownOpen(false);
+                          window.dispatchEvent(new Event('180_OPEN_SUPPORT'));
+                        }}
+                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:text-purple-600 hover:bg-purple-50/70 transition-colors cursor-pointer text-left"
+                      >
+                        <LifeBuoy className="w-4 h-4 text-purple-500" />
+                        <span>Quick Support</span>
+                      </button>
                     </div>
 
                     {/* Sign Out Button in Dropdown */}

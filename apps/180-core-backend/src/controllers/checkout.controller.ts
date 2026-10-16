@@ -119,34 +119,41 @@ export class CheckoutApiController {
       }
 
       if (!app) {
-        const targetClientId = clientId || '180-workspace-platform';
-        app = await prisma.oAuthApp.findFirst({
-          where: {
-            OR: [
-              { clientId: targetClientId },
-              { id: targetClientId },
-            ],
-            isActive: true,
-          },
-        });
+        const targetClientId = clientId || process.env.CORE_CLIENT_ID || process.env.NEXT_PUBLIC_180_CLIENT_ID || '';
+        if (targetClientId) {
+          app = await prisma.oAuthApp.findFirst({
+            where: {
+              OR: [
+                { clientId: targetClientId },
+                { id: targetClientId },
+              ],
+              isActive: true,
+            },
+          });
+        }
       }
 
       if (!app) {
-        const sysUser = (await prisma.user.findFirst({ where: { role: 'SUPER_ADMIN' } })) || (await prisma.user.findFirst());
-        if (sysUser) {
+        const anyUser = await prisma.user.findFirst();
+        if (anyUser) {
+          const rawSecret = process.env.CORE_CLIENT_SECRET || require('crypto').randomBytes(32).toString('hex');
+          const secretHash = require('crypto').createHash('sha256').update(rawSecret).digest('hex');
+          const redirectUris = (process.env.CORE_REDIRECT_URIS || '').split(',').map((u: string) => u.trim()).filter(Boolean);
+          const allowedOrigins = (process.env.CORE_ALLOWED_ORIGINS || '').split(',').map((o: string) => o.trim()).filter(Boolean);
           app = await prisma.oAuthApp.create({
             data: {
-              clientId: '180-workspace-platform',
-              clientSecretHash: 'system_platform_app_hash',
-              clientSecretHint: 'plat',
-              name: '180 Developer Portal',
-              description: '180 Sovereign Developer Platform & Billing',
-              redirectUris: ['http://localhost:3008/oauth/callback', 'http://localhost:3009/oauth/callback'],
-              allowedOrigins: ['http://localhost:3008', 'http://localhost:3009'],
-              allowedScopes: ['openid', 'identity:read', 'pay:checkout'],
+              clientId: process.env.CORE_CLIENT_ID || `180_core_${require('crypto').randomBytes(8).toString('hex')}`,
+              clientSecretHash: secretHash,
+              clientSecretHint: rawSecret.slice(-4),
+              name: '180 Core',
+              description: 'Sovereign Core Identity, Auth & 180 Pay Infrastructure',
+              logoUrl: process.env.CORE_APP_LOGO_URL || '',
+              redirectUris,
+              allowedOrigins,
+              allowedScopes: ['openid', 'identity:read', 'pay:checkout', 'pay:subscriptions'],
               isVerified: true,
               isActive: true,
-              userId: sysUser.id,
+              userId: anyUser.id,
             },
           });
         }

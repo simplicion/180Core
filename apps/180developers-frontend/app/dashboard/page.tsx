@@ -41,6 +41,8 @@ import { use180Identity, use180Pay } from '@workspace/identity-sdk';
 import { AppLogoUploader } from '@/components/apps/AppLogoUploader';
 import DeveloperSidebar from '@/components/layout/DeveloperSidebar';
 import DeveloperHeader from '@/components/layout/DeveloperHeader';
+import { OneEightyCoreLogo } from '@/components/OneEightyCoreLogo';
+import ThemeToggle from '@/components/ThemeToggle';
 import { purgeAuthSession, getStoredAuthToken } from '@/lib/auth';
 
 export interface DeveloperBillingStatus {
@@ -932,26 +934,94 @@ function DeveloperDashboardContent() {
   // UNAUTHENTICATED STATE
   // ─────────────────────────────────────────────────────────────────────────────
   if (!isAuthenticated) {
+    const handleBack = () => {
+      if (typeof window !== 'undefined') {
+        if (window.history.length > 1) {
+          router.back();
+        } else {
+          router.push('/');
+        }
+      }
+    };
+
     return (
-      <div className="min-h-screen bg-white dark:bg-black flex flex-col items-center justify-center p-4 relative overflow-hidden">
+      <div className="min-h-screen bg-white dark:bg-black text-zinc-900 dark:text-zinc-100 flex flex-col justify-between relative overflow-hidden transition-colors duration-200">
         {/* Full Page Minimal Grid Background */}
-        <div className="fixed inset-0 marketing-grid-bg pointer-events-none z-0 opacity-70" />
+        <div className="fixed inset-0 marketing-grid-bg pointer-events-none z-0 opacity-80" />
 
         {/* Subtle Ambient Gradient Orbs */}
         <div className="fixed top-0 right-0 w-[450px] h-[450px] bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
         <div className="fixed bottom-0 left-0 w-[450px] h-[450px] bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col items-center justify-center">
-          <OneEightyIdentityButton
-            onClick={() => launch180Identity(() => checkAuthAndFetchApps())}
-            disabled={isOpeningIdentity}
-            isProcessing={isOpeningIdentity}
-            text="Sign In with 180 Identity"
-            subtitle="Universal Sovereign Account & OAuth 2.0"
-            theme="auto"
-            className="shadow-xl hover:shadow-2xl hover:scale-105 transition-all text-sm px-6 py-3 cursor-pointer"
-          />
-        </div>
+        {/* Top Header Bar */}
+        <header className="relative z-20 w-full px-4 sm:px-8 py-3.5 flex items-center justify-between border-b border-zinc-200/70 dark:border-white/5 bg-white/70 dark:bg-black/40 backdrop-blur-md">
+          {/* Left: Back button + Divider + 180Core Logo & Brand */}
+          <div className="flex items-center gap-3 sm:gap-4">
+            <button
+              type="button"
+              onClick={handleBack}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-zinc-200 dark:border-white/10 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-md text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:text-zinc-950 dark:hover:text-white hover:border-zinc-300 dark:hover:border-white/20 transition-all shadow-xs cursor-pointer group select-none"
+              title="Go back to previous page"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400 group-hover:-translate-x-0.5 transition-transform" />
+              <span>Back</span>
+            </button>
+
+            <div className="h-4 w-px bg-zinc-200 dark:bg-white/10 hidden sm:block" />
+
+            <Link href="/" className="inline-flex items-center gap-2.5 group select-none">
+              <OneEightyCoreLogo variant="icon" height={26} width={26} />
+              <span className="font-bold tracking-tight text-sm text-zinc-900 dark:text-white">
+                180Core
+              </span>
+            </Link>
+          </div>
+
+          {/* Right: Theme Toggle Button */}
+          <div className="flex items-center gap-2">
+            <ThemeToggle showLabel={true} />
+          </div>
+        </header>
+
+        {/* Center Auth Hero */}
+        <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-12">
+          <div className="flex flex-col items-center text-center max-w-md w-full">
+            {/* 180Core Icon Badge */}
+            <div className="w-16 h-16 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/80 dark:border-white/10 flex items-center justify-center p-3 shadow-sm mb-4">
+              <OneEightyCoreLogo variant="icon" height={38} width={38} />
+            </div>
+
+            {/* Heading & Subtitle */}
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-zinc-900 dark:text-white mb-2">
+              180Core
+            </h1>
+            <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 mb-8 max-w-sm leading-relaxed">
+              Universal Sovereign Identity, OAuth 2.0 & Developer Infrastructure. Sign in with your 180 Account to continue.
+            </p>
+
+            {/* Single 180 Identity Button */}
+            <OneEightyIdentityButton
+              onClick={() => launch180Identity(() => checkAuthAndFetchApps())}
+              disabled={isOpeningIdentity}
+              isProcessing={isOpeningIdentity}
+              text="Sign In with 180 Identity"
+              subtitle="Universal Sovereign Account & OAuth 2.0"
+              theme="auto"
+              className="shadow-xl hover:shadow-2xl hover:scale-105 transition-all text-sm px-6 py-3 cursor-pointer"
+            />
+
+            {/* Trust badge */}
+            <div className="mt-8 flex items-center gap-1.5 text-xs text-zinc-400 dark:text-zinc-500">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Secured by 180 Sovereign Identity Protocol</span>
+            </div>
+          </div>
+        </main>
+
+        {/* Bottom Footer */}
+        <footer className="relative z-10 py-4 text-center text-xs text-zinc-400 dark:text-zinc-600 border-t border-zinc-200/40 dark:border-white/5">
+          © {new Date().getFullYear()} 180Core. All rights reserved.
+        </footer>
       </div>
     );
   }

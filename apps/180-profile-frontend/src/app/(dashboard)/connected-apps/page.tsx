@@ -4,19 +4,16 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   AppWindow,
-  ShieldCheck,
-  ExternalLink,
   Trash2,
-  CheckCircle2,
-  Shield,
-  LogOut,
   Calendar,
 } from 'lucide-react';
-import { Button, UniversalSkeleton, AdaptiveSkeleton } from '@workspace/ui';
+import { Button, AdaptiveSkeleton, OneEightyIdentityButton } from '@workspace/ui';
 import { getCoreApiUrl } from '@/lib/api';
+import { getStoredAuthToken } from '@/lib/auth';
 import toast from 'react-hot-toast';
 import { ConnectedApp } from '@/types';
 import { RevokeAppModal } from '@/components/RevokeAppModal';
+import { useAuth } from '@/context/AuthContext';
 
 const SCOPE_LABELS: Record<string, string> = {
   openid: 'Single Sign-On',
@@ -77,22 +74,22 @@ function formatAuthorizedDate(isoString?: string): string {
 }
 
 export default function ConnectedAppsPage() {
-  const [loading, setLoading] = useState(true);
+  const { user, loading: authLoading } = useAuth();
+  const [appsLoading, setAppsLoading] = useState(true);
   const [apps, setApps] = useState<ConnectedApp[]>([]);
   const [revokingApp, setRevokingApp] = useState<ConnectedApp | null>(null);
   const [revoking, setRevoking] = useState(false);
 
   const fetchApps = async () => {
-    setLoading(true);
+    const token = getStoredAuthToken();
+    if (!token) {
+      setApps([]);
+      setAppsLoading(false);
+      return;
+    }
+
+    setAppsLoading(true);
     try {
-      const token =
-        localStorage.getItem('platform_auth_token') ||
-        localStorage.getItem('token') ||
-        localStorage.getItem('accessToken');
-      if (!token) {
-        setApps([]);
-        return;
-      }
       const res = await fetch(getCoreApiUrl('/api/oauth/authorized-apps'), {
         headers: { Authorization: `Bearer ${token}` },
         credentials: 'include',
@@ -110,23 +107,24 @@ export default function ConnectedAppsPage() {
     } catch (_) {
       setApps([]);
     } finally {
-      setLoading(false);
+      setAppsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchApps();
-  }, []);
+    if (user) {
+      fetchApps();
+    } else {
+      setAppsLoading(false);
+    }
+  }, [user]);
 
   const confirmRevoke = async () => {
     if (!revokingApp) return;
     setRevoking(true);
     const targetAppName = getFormattedAppName(revokingApp.name);
     try {
-      const token =
-        localStorage.getItem('platform_auth_token') ||
-        localStorage.getItem('token') ||
-        localStorage.getItem('accessToken');
+      const token = getStoredAuthToken();
 
       const res = await fetch(getCoreApiUrl(`/api/oauth/authorized-apps/${revokingApp.clientId}`), {
         method: 'DELETE',
@@ -173,48 +171,51 @@ export default function ConnectedAppsPage() {
     }
   };
 
-  return (
-    <div className="space-y-4 sm:space-y-8 max-w-7xl mx-auto pb-10">
-      {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pb-4 sm:pb-6 border-b border-slate-200">
-        <div>
-          <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
-            <Link href="/" className="text-[11px] sm:text-xs text-blue-600 hover:text-blue-700 font-medium">
-              ← Overview
-            </Link>
-            <span className="text-slate-300">•</span>
-            <span className="text-[11px] sm:text-xs text-slate-500">Security &amp; Authorizations</span>
-          </div>
-          <h1 className="text-xl sm:text-4xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2 sm:gap-3">
-            <span>Connected Applications</span>
-            <span className="px-2 sm:px-2.5 py-0.5 text-[10px] sm:text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded-full">
-              {apps.length} Active
-            </span>
-          </h1>
-          <p className="text-[11px] sm:text-sm text-slate-500 mt-0.5 sm:mt-1 max-w-2xl">
-            Applications authorized to authenticate your 180 Profile and interact with 180 Pay under your consent. Revoking access logs you out instantly across all devices.
-          </p>
-        </div>
+  if (authLoading) {
+    return <AdaptiveSkeleton screen="connected-apps" />;
+  }
 
-        <a
-          href="https://developers.180workspace.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 min-h-[36px] sm:min-h-[40px] rounded-xl bg-white border border-slate-200 text-slate-700 hover:text-blue-700 hover:border-blue-200 hover:bg-blue-50 text-[11px] sm:text-xs font-semibold shadow-xs transition-all cursor-pointer shrink-0"
-        >
-          <span>Developer Portal</span>
-          <ExternalLink className="w-3.5 h-3.5 opacity-60" />
-        </a>
+  // 1. Unauthenticated state: Center Single Sign-In CTA with zero navigation
+  if (!user) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center py-12 px-4">
+        <OneEightyIdentityButton
+          href="/auth/login"
+          clientId="180-profile"
+          text="Sign In with 180 Identity"
+          subtitle="Universal Sovereign Identity & Prepaid Wallet"
+          theme="light"
+          className="shadow-xl hover:shadow-2xl hover:scale-105 transition-all text-sm px-6 py-3 cursor-pointer"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 sm:space-y-8 max-w-5xl mx-auto pb-10">
+      {/* Header Banner */}
+      <div className="pb-4 sm:pb-6 border-b border-slate-200">
+        <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
+          <Link href="/" className="text-[11px] sm:text-xs text-blue-600 hover:text-blue-700 font-medium">
+            ← Overview
+          </Link>
+          <span className="text-slate-300">•</span>
+          <span className="text-[11px] sm:text-xs text-slate-500">Security &amp; Authorizations</span>
+        </div>
+        <h1 className="text-xl sm:text-4xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2 sm:gap-3">
+          <span>Connected Applications</span>
+          <span className="px-2 sm:px-2.5 py-0.5 text-[10px] sm:text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded-full">
+            {apps.length} Active
+          </span>
+        </h1>
       </div>
 
-      {/* Main Content Grid */}
-      {loading ? (
+      {/* Main Content List - Full-width clean and responsive */}
+      {appsLoading ? (
         <AdaptiveSkeleton screen="connected-apps" />
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-8">
-          {/* Apps List (2 Column Span) */}
-          <div className="lg:col-span-2 space-y-3 sm:space-y-4">
-            {apps.length > 0 ? (
+        <div className="space-y-3 sm:space-y-4">
+          {apps.length > 0 ? (
             apps.map((app) => {
               const displayName = getFormattedAppName(app.name);
               const appLogo = getAppLogo(app);
@@ -225,7 +226,7 @@ export default function ConnectedAppsPage() {
                   className="p-3.5 sm:p-6 rounded-2xl sm:rounded-3xl bg-white border border-slate-200 shadow-xs hover:border-slate-300 hover:shadow-sm transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-5"
                 >
                   <div className="flex items-start gap-3 sm:gap-4 min-w-0">
-                    {/* Actual App Logo */}
+                    {/* App Logo */}
                     <div className="w-10 h-10 sm:w-13 sm:h-13 rounded-xl sm:rounded-2xl bg-slate-50 border border-slate-200/80 p-1.5 sm:p-2.5 flex items-center justify-center shrink-0 shadow-2xs group">
                       <img
                         src={appLogo}
@@ -246,7 +247,7 @@ export default function ConnectedAppsPage() {
                         </span>
                       </div>
 
-                      <p className="text-[11px] sm:text-xs text-slate-500 leading-relaxed max-w-lg">
+                      <p className="text-[11px] sm:text-xs text-slate-500 leading-relaxed max-w-xl">
                         {app.description || 'Authorized application with active identity session'}
                       </p>
 
@@ -269,11 +270,11 @@ export default function ConnectedAppsPage() {
                     </div>
                   </div>
 
-                  {/* Revoke & Log Out Action Button */}
+                  {/* Revoke Action Button */}
                   <Button
                     variant="outline"
                     onClick={() => setRevokingApp(app)}
-                    className="w-full sm:w-auto min-h-[34px] sm:min-h-[40px] px-3 sm:px-3.5 rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300 flex items-center justify-center gap-1.5 sm:gap-2 text-xs font-semibold transition-colors cursor-pointer shrink-0"
+                    className="w-full sm:w-auto min-h-[34px] sm:min-h-[40px] px-3.5 sm:px-4 rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300 flex items-center justify-center gap-1.5 sm:gap-2 text-xs font-semibold transition-colors cursor-pointer shrink-0"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Revoke Access</span>
@@ -282,40 +283,14 @@ export default function ConnectedAppsPage() {
               );
             })
           ) : (
-            <div className="p-8 sm:p-12 rounded-2xl sm:rounded-3xl bg-white border border-slate-200 text-center space-y-3">
+            <div className="p-8 sm:p-14 rounded-2xl sm:rounded-3xl bg-white border border-slate-200 text-center space-y-3">
               <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
                 <AppWindow className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
               <h3 className="font-bold text-sm sm:text-base text-slate-900">No Connected Applications Yet</h3>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                You have not authorized any external applications yet. When you sign in to 180 Workspace, 180 Social Studio, or third-party client apps using your 180 Profile, they will appear here.
-              </p>
             </div>
           )}
         </div>
-
-        {/* Security & Access Sidebar */}
-        <div className="space-y-4 sm:space-y-6">
-          <div className="p-4 sm:p-6 rounded-2xl sm:rounded-3xl bg-white border border-slate-200 shadow-xs space-y-3 sm:space-y-4">
-            <div className="flex items-center gap-2 sm:gap-2.5">
-              <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600" />
-              <h3 className="text-xs sm:text-sm font-bold text-slate-900">Unified Privacy Model</h3>
-            </div>
-            <p className="text-[11px] sm:text-xs text-slate-500 leading-relaxed">
-              Every token issued to third-party applications is cryptographically signed using RS256 JWKS. Applications can only read the specific attributes you grant consent to.
-            </p>
-            <div className="p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-slate-50 border border-slate-200 text-[10px] sm:text-[11px] text-slate-600 space-y-1 sm:space-y-1.5">
-              <div className="flex items-center gap-1.5 font-bold text-slate-900">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Instant Revocation &amp; Logout</span>
-              </div>
-              <p className="text-[10px] sm:text-[11px] text-slate-500">
-                Revoking an application immediately invalidates all active access tokens and automatically logs you out of that specific app across all devices.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
       )}
 
       {/* Revoke Confirmation Modal */}

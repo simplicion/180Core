@@ -14,51 +14,15 @@ import { Button, UniversalSkeleton, AdaptiveSkeleton, OneEightyIdentityButton } 
 import toast from 'react-hot-toast';
 import { getCoreApiUrl } from '@/lib/api';
 import { UserProfile } from '@/types';
+import { useAuth } from '@/context/AuthContext';
 import { EditProfileModal } from '@/components/EditProfileModal';
 
 export default function ProfilePage() {
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { user, loading, refreshUser } = useAuth();
   const [copiedId, setCopiedId] = useState(false);
 
   // Modals
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-
-  useEffect(() => {
-    const token =
-      localStorage.getItem('platform_auth_token') ||
-      localStorage.getItem('token') ||
-      localStorage.getItem('accessToken') ||
-      '';
-
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-
-    fetch(getCoreApiUrl('/api/oauth/userinfo'), { headers, credentials: 'include' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data && (data.user || data.id)) {
-          const u = data.user || data;
-          setUser(u);
-          localStorage.setItem('user', JSON.stringify(u));
-        } else {
-          const stored = localStorage.getItem('user');
-          if (stored) {
-            try {
-              setUser(JSON.parse(stored));
-            } catch (_) {}
-          }
-        }
-      })
-      .catch(() => {
-        const stored = localStorage.getItem('user');
-        if (stored) {
-          try {
-            setUser(JSON.parse(stored));
-          } catch (_) {}
-        }
-      })
-      .finally(() => setLoading(false));
-  }, []);
 
   const handleCopyId = () => {
     if (!user?.id) return;
@@ -223,7 +187,7 @@ export default function ProfilePage() {
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
         user={currentUser}
-        onSave={(updated) => setUser(updated)}
+        onSave={() => refreshUser()}
       />
     </div>
   );
