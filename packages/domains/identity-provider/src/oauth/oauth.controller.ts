@@ -690,6 +690,22 @@ export class OAuthController {
                     }
                 }
 
+                // Verify user is not suspended by this application
+                try {
+                    const appUser = await prisma.appUserIdentity.findFirst({
+                        where: {
+                            appId: { in: [authCode.app.id, authCode.app.clientId] },
+                            userId: authCode.user.id
+                        }
+                    });
+                    if (appUser && (appUser.metadata as any)?.isSuspended) {
+                        return res.status(403).json({
+                            error: 'access_denied',
+                            error_description: (appUser.metadata as any)?.reason || 'Your access to this application has been suspended by the application administrator.',
+                        });
+                    }
+                } catch (_) {}
+
                 // Mark code as used immediately (single-use defense)
                 await prisma.oAuthAuthorizationCode.update({
                     where: { id: authCode.id },
@@ -779,6 +795,22 @@ export class OAuthController {
                 if (!existingToken || existingToken.revokedAt) {
                     return res.status(400).json({ error: 'invalid_grant', error_description: 'Refresh token is invalid or revoked' });
                 }
+
+                // Verify user is not suspended by this application
+                try {
+                    const appUser = await prisma.appUserIdentity.findFirst({
+                        where: {
+                            appId: { in: [existingToken.app.id, existingToken.app.clientId] },
+                            userId: existingToken.user.id
+                        }
+                    });
+                    if (appUser && (appUser.metadata as any)?.isSuspended) {
+                        return res.status(403).json({
+                            error: 'access_denied',
+                            error_description: (appUser.metadata as any)?.reason || 'Your access to this application has been suspended by the application administrator.',
+                        });
+                    }
+                } catch (_) {}
 
                 // Enforce 7-Day (or configured) Refresh Token Lifecycle
                 const appSettings = (existingToken.app as any)?.bankDetails as any;

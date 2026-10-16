@@ -61,81 +61,257 @@ export class DeveloperApiController {
 
       const appIds = [app.id, app.clientId];
 
-      // Query consents and active tokens
-      const consents = await prisma.oAuthConsent.findMany({
-        where: { appId: { in: appIds } },
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              username: true,
-              avatarUrl: true,
-              isVerified: true,
-              createdAt: true,
-            },
-          },
-        },
-        orderBy: { updatedAt: 'desc' },
-        take: 50,
-      });
+      // Check if this is the 180 Core platform application
+      const isPlatformMasterApp =
+        app.name.toLowerCase().includes('180 core') ||
+        app.clientId === '180_client_2d51a605038c38ffb6fa037688988a83' ||
+        app.id === 'f89a74ae-02c4-42a5-8c99-ab5a718dd8ff';
 
-      const [tokens, appUserIdentities] = await Promise.all([
+      // 1. Fetch tokens and appUserIdentities for this app
+      const [tokens, appUserIdentities, consents] = await Promise.all([
         prisma.oAuthToken.findMany({
           where: { appId: { in: appIds } },
           orderBy: { createdAt: 'desc' },
-          take: 50,
+          take: 500,
         }),
         prisma.appUserIdentity.findMany({
           where: { appId: { in: appIds } },
         }),
+        prisma.oAuthConsent.findMany({
+          where: { appId: { in: appIds } },
+          include: {
+            user: {
+              include: {
+                securityKeys: { select: { id: true } },
+              },
+            },
+          },
+          orderBy: { updatedAt: 'desc' },
+          take: 500,
+        }),
       ]);
 
-      const tokenMap = new Map<string, any>();
+      const tokenMap = new Map<string, any[]>();
       tokens.forEach((t) => {
-        if (!tokenMap.has(t.userId)) tokenMap.set(t.userId, t);
+        if (!tokenMap.has(t.userId)) tokenMap.set(t.userId, []);
+        tokenMap.get(t.userId)!.push(t);
       });
 
-      const appUserMap = new Map<string, string>();
+      const appUserMap = new Map<string, any>();
       appUserIdentities.forEach((au) => {
-        appUserMap.set(au.userId, au.username);
+        appUserMap.set(au.userId, au);
       });
 
-      const logs = consents.map((c: any) => {
-        const latestToken = tokenMap.get(c.userId);
-        const isTokenActive = latestToken ? (!latestToken.revokedAt && new Date(latestToken.expiresAt) > new Date()) : false;
-        const appScopedUsername = appUserMap.get(c.userId) || c.user?.username || '';
+      const consentMap = new Map<string, any>();
+      consents.forEach((c) => {
+        consentMap.set(c.userId, c);
+      });
+
+      // 2. Build complete list of users
+      let candidateUsers: any[] = [];
+
+      if (isPlatformMasterApp) {
+        // Master platform app: include all registered platform users so the developer sees the full real userbase
+        const allUsers = await prisma.user.findMany({
+          include: {
+            securityKeys: { select: { id: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 300,
+        });
+        candidateUsers = allUsers;
+      } else {
+        // App-specific users: extract from consents, appUserIdentities, and tokens
+        const userIds = new Set<string>();
+        consents.forEach((c) => { if (c.userId) userIds.add(c.userId); });
+        appUserIdentities.forEach((au) => { if (au.userId) userIds.add(au.userId); });
+        tokens.forEach((t) => { if (t.userId) userIds.add(t.userId); });
+
+        if (userIds.size > 0) {
+          candidateUsers = await prisma.user.findMany({
+            where: { id: { in: Array.from(userIds) } },
+            include: {
+              securityKeys: { select: { id: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+        }
+      }
+
+      const now = new Date();
+
+      // 3. Enrich users with sovereign identity provider attributes
+      const logs = candidateUsers.map((u: any) => {
+        const userTokens = tokenMap.get(u.id) || [];
+        const latestToken = userTokens[0];
+        const isTokenActive = userTokens.some(
+          (t) => !t.revokedAt && new Date(t.expiresAt) > now
+        );
+
+        const appUser = appUserMap.get(u.id);
+        const consent = consentMap.get(u.id);
+        const appMetadata = (appUser?.metadata as any) || {};
+        const isSuspended = Boolean(appMetadata.isSuspended);
+
+        // Determine exact identity authenticator method
+        let authMethod = 'Universal SSO';
+        if (u.googleId) {
+          authMethod = 'Google SSO';
+        } else if (u.passwordHash || u.password) {
+          authMethod = 'Email & Password';
+        } else if (u.phone) {
+          authMethod = 'WhatsApp / Phone OTP';
+        }
+
+        const appScopedUsername = appUser?.username || u.username || '';
+        const grantedScopes = consent?.scopes || ['openid', 'profile', 'identity:read'];
+
+        let status: 'ACTIVE_SESSION' | 'SESSION_EXPIRED' | 'SUSPENDED' = 'SESSION_EXPIRED';
+        if (isSuspended) {
+          status = 'SUSPENDED';
+        } else if (isTokenActive) {
+          status = 'ACTIVE_SESSION';
+        }
+
+        const securityPrefs = (u.securityPreferences as any) || {};
+        const has2fa = Boolean(securityPrefs.twoFactorEnabled || securityPrefs.mfaEnabled);
 
         return {
-          id: c.id,
-          userId: c.userId,
+          id: consent?.id || `app_user_${u.id}`,
+          userId: u.id,
           user: {
-            id: c.user?.id || c.userId,
-            name: c.user?.name || 'Anonymous User',
-            email: c.user?.email || null,
-            username: c.user?.username || null,
+            id: u.id,
+            name: u.name || 'Universal User',
+            email: u.email || null,
+            phone: u.phone || null,
+            username: u.username || null,
             appScopedUsername,
-            avatar: c.user?.avatarUrl || '',
-            isVerified: Boolean(c.user?.isVerified),
+            avatar: u.avatarUrl || '',
+            headline: u.headline || '',
+            bio: u.bio || '',
+            city: u.city || '',
+            country: u.country || 'Global',
+            isVerified: Boolean(u.isVerified),
+            isEmailVerified: Boolean(u.isEmailVerified),
+            isPhoneVerified: Boolean(u.isPhoneVerified),
+            hasPasskey: Boolean(u.securityKeys && u.securityKeys.length > 0),
+            passkeyCount: u.securityKeys?.length || 0,
+            twoFactorEnabled: has2fa,
+            createdAt: u.createdAt,
+            updatedAt: u.updatedAt,
           },
-          scopes: c.scopes,
-          authMethod: c.user?.email ? 'Email / SSO' : 'WhatsApp OTP',
-          status: isTokenActive ? 'ACTIVE_SESSION' : 'SESSION_EXPIRED',
-          grantedAt: c.grantedAt,
-          updatedAt: c.updatedAt,
-          connectedSince: c.grantedAt,
-          lastLogin: c.updatedAt,
+          scopes: grantedScopes,
+          authMethod,
+          status,
+          isSuspended,
+          suspendedAt: appMetadata.suspendedAt || null,
+          suspensionReason: appMetadata.reason || null,
+          grantedAt: consent?.grantedAt || u.createdAt,
+          updatedAt: consent?.updatedAt || u.updatedAt,
+          connectedSince: consent?.grantedAt || u.createdAt,
+          lastLogin: latestToken?.updatedAt || consent?.updatedAt || u.updatedAt,
+          activeTokensCount: userTokens.filter((t) => !t.revokedAt && new Date(t.expiresAt) > now).length,
+          totalTokensIssued: userTokens.length,
         };
       });
 
+      // 4. Monthly Growth Analytics (Chronological 6 months)
+      const monthsMap = new Map<string, { month: string; newUsers: number; activeUsers: number }>();
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const key = d.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+        monthsMap.set(key, { month: key, newUsers: 0, activeUsers: 0 });
+      }
+
+      logs.forEach((item) => {
+        const joinDate = new Date(item.connectedSince || item.user.createdAt || now);
+        const monthKey = joinDate.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+        if (monthsMap.has(monthKey)) {
+          const entry = monthsMap.get(monthKey)!;
+          entry.newUsers += 1;
+          if (item.status === 'ACTIVE_SESSION') {
+            entry.activeUsers += 1;
+          }
+        }
+      });
+
+      let runningCumulative = 0;
+      const growthTimeline = Array.from(monthsMap.values()).map((m) => {
+        runningCumulative += m.newUsers;
+        return {
+          ...m,
+          totalCumulative: Math.max(runningCumulative, m.newUsers),
+        };
+      });
+
+      // 5. Auth Method Breakdown
+      const authMethodBreakdown = {
+        google: logs.filter((l) => l.authMethod === 'Google SSO').length,
+        emailPassword: logs.filter((l) => l.authMethod === 'Email & Password').length,
+        otp: logs.filter((l) => l.authMethod.includes('OTP')).length,
+        passkey: logs.filter((l) => l.user.hasPasskey).length,
+        universal: logs.filter((l) => l.authMethod === 'Universal SSO').length,
+      };
+
+      // 6. Chronological Real-Time Telemetry Event Stream
+      const telemetryEvents = logs.slice(0, 50).map((l, index) => {
+        let eventType = 'LOGIN_SUCCESS';
+        let eventTitle = 'User Authorized & Token Active';
+        let severity: 'info' | 'success' | 'warning' | 'danger' = 'success';
+
+        if (l.isSuspended) {
+          eventType = 'ACCOUNT_SUSPENDED';
+          eventTitle = 'Application Access Suspended';
+          severity = 'danger';
+        } else if (l.status === 'ACTIVE_SESSION') {
+          eventType = 'TOKEN_EXCHANGED';
+          eventTitle = `Token Issued via ${l.authMethod}`;
+          severity = 'success';
+        } else {
+          eventType = 'SESSION_OFFLINE';
+          eventTitle = 'Session Idle / Expired';
+          severity = 'info';
+        }
+
+        return {
+          id: `evt_${l.userId}_${index}`,
+          userId: l.userId,
+          userName: l.user.name,
+          userEmail: l.user.email,
+          userAvatar: l.user.avatar,
+          appScopedUsername: l.user.appScopedUsername,
+          event: eventType,
+          title: eventTitle,
+          authMethod: l.authMethod,
+          scopes: l.scopes,
+          status: l.status,
+          severity,
+          timestamp: l.lastLogin || l.connectedSince,
+          ip: '180.core.cloud (Verified Identity Gateway)',
+        };
+      });
+
+      const totalUsers = logs.length;
+      const activeSessionsCount = logs.filter((l) => l.status === 'ACTIVE_SESSION').length;
+      const suspendedUsersCount = logs.filter((l) => l.isSuspended).length;
+      const verifiedUsersCount = logs.filter((l) => l.user.isVerified || l.user.isEmailVerified).length;
+
+      const responsePayload = {
+        totalUsers,
+        activeSessionsCount,
+        suspendedUsersCount,
+        verifiedUsersCount,
+        authMethodBreakdown,
+        growthTimeline,
+        logs,
+        telemetryEvents,
+      };
+
+      // Return both flat keys and wrapped data for seamless compatibility
       return res.json({
         success: true,
-        data: {
-          totalUsers: consents.length,
-          activeSessionsCount: logs.filter((l) => l.status === 'ACTIVE_SESSION').length,
-          logs,
-        },
+        ...responsePayload,
+        data: responsePayload,
       });
     } catch (err: any) {
       console.error('[DeveloperApiController:getAuthLogs] Error:', err);
@@ -178,6 +354,285 @@ export class DeveloperApiController {
       });
     } catch (err: any) {
       console.error('[DeveloperApiController:revokeUserSession] Error:', err);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
+  /**
+   * POST /api/v1/developer/apps/:id/users/:targetUserId/suspend
+   * App-scoped suspension: Prevents user from logging into this developer app.
+   */
+  static async suspendUser(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user?.id;
+      const appId = String(req.params.id);
+      const targetUserId = String(req.params.targetUserId);
+      const reason = req.body?.reason || 'Access suspended by application developer';
+
+      const app = await resolveApp(appId, userId);
+      if (!app) {
+        return res.status(404).json({ success: false, error: 'App not found' });
+      }
+
+      const appIds = [app.id, app.clientId];
+
+      // 1. Invalidate all active tokens for this app
+      await prisma.oAuthToken.updateMany({
+        where: {
+          appId: { in: appIds },
+          userId: targetUserId,
+          revokedAt: null,
+        },
+        data: { revokedAt: new Date() },
+      });
+
+      // 2. Fetch target user
+      const targetUser = await prisma.user.findUnique({
+        where: { id: targetUserId },
+        select: { id: true, username: true },
+      });
+      if (!targetUser) {
+        return res.status(404).json({ success: false, error: 'User not found' });
+      }
+
+      // 3. Upsert AppUserIdentity with isSuspended metadata
+      const existing = await prisma.appUserIdentity.findFirst({
+        where: {
+          appId: { in: appIds },
+          userId: targetUserId,
+        },
+      });
+
+      if (existing) {
+        const currentMeta = (existing.metadata as any) || {};
+        await prisma.appUserIdentity.update({
+          where: { id: existing.id },
+          data: {
+            metadata: {
+              ...currentMeta,
+              isSuspended: true,
+              suspendedAt: new Date().toISOString(),
+              reason,
+            },
+          },
+        });
+      } else {
+        await prisma.appUserIdentity.create({
+          data: {
+            appId: app.id,
+            userId: targetUserId,
+            username: targetUser.username,
+            metadata: {
+              isSuspended: true,
+              suspendedAt: new Date().toISOString(),
+              reason,
+            },
+          },
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: 'User has been suspended from this application',
+      });
+    } catch (err: any) {
+      console.error('[DeveloperApiController:suspendUser] Error:', err);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
+  /**
+   * POST /api/v1/developer/apps/:id/users/:targetUserId/unsuspend
+   * Restores user access to this application.
+   */
+  static async unsuspendUser(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user?.id;
+      const appId = String(req.params.id);
+      const targetUserId = String(req.params.targetUserId);
+
+      const app = await resolveApp(appId, userId);
+      if (!app) {
+        return res.status(404).json({ success: false, error: 'App not found' });
+      }
+
+      const existing = await prisma.appUserIdentity.findFirst({
+        where: {
+          appId: { in: [app.id, app.clientId] },
+          userId: targetUserId,
+        },
+      });
+
+      if (existing) {
+        const currentMeta = (existing.metadata as any) || {};
+        const { isSuspended, suspendedAt, reason, ...rest } = currentMeta;
+        await prisma.appUserIdentity.update({
+          where: { id: existing.id },
+          data: {
+            metadata: {
+              ...rest,
+              isSuspended: false,
+              unsuspendedAt: new Date().toISOString(),
+            },
+          },
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: 'User access to this application has been restored',
+      });
+    } catch (err: any) {
+      console.error('[DeveloperApiController:unsuspendUser] Error:', err);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
+  /**
+   * DELETE /api/v1/developer/apps/:id/users/:targetUserId
+   * App-scoped deletion: Revokes tokens, removes app consent and app identity.
+   * Guarantees that the global 180 Profile and accounts in other applications remain safe.
+   */
+  static async deleteAppUser(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user?.id;
+      const appId = String(req.params.id);
+      const targetUserId = String(req.params.targetUserId);
+
+      const app = await resolveApp(appId, userId);
+      if (!app) {
+        return res.status(404).json({ success: false, error: 'App not found' });
+      }
+
+      const appIds = [app.id, app.clientId];
+
+      // 1. Invalidate tokens
+      await prisma.oAuthToken.updateMany({
+        where: {
+          appId: { in: appIds },
+          userId: targetUserId,
+          revokedAt: null,
+        },
+        data: { revokedAt: new Date() },
+      });
+
+      // 2. Remove OAuth consent
+      await prisma.oAuthConsent.deleteMany({
+        where: {
+          appId: { in: appIds },
+          userId: targetUserId,
+        },
+      });
+
+      // 3. Remove AppUserIdentity for this app
+      await prisma.appUserIdentity.deleteMany({
+        where: {
+          appId: { in: appIds },
+          userId: targetUserId,
+        },
+      });
+
+      return res.json({
+        success: true,
+        message: 'User successfully removed from this application (global 180 Profile preserved)',
+      });
+    } catch (err: any) {
+      console.error('[DeveloperApiController:deleteAppUser] Error:', err);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
+  /**
+   * GET /api/v1/developer/apps/:id/users/:targetUserId
+   * Returns deep identity claims and authenticators for drawer inspection.
+   */
+  static async getUserDetails(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user?.id;
+      const appId = String(req.params.id);
+      const targetUserId = String(req.params.targetUserId);
+
+      const app = await resolveApp(appId, userId);
+      if (!app) {
+        return res.status(404).json({ success: false, error: 'App not found' });
+      }
+
+      const appIds = [app.id, app.clientId];
+
+      const [user, consent, appUser, tokens] = await Promise.all([
+        prisma.user.findUnique({
+          where: { id: targetUserId },
+          include: {
+            securityKeys: {
+              select: { id: true, transports: true, createdAt: true },
+            },
+          },
+        }),
+        prisma.oAuthConsent.findFirst({
+          where: { appId: { in: appIds }, userId: targetUserId },
+        }),
+        prisma.appUserIdentity.findFirst({
+          where: { appId: { in: appIds }, userId: targetUserId },
+        }),
+        prisma.oAuthToken.findMany({
+          where: { appId: { in: appIds }, userId: targetUserId },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        }),
+      ]);
+
+      if (!user) {
+        return res.status(404).json({ success: false, error: 'User not found' });
+      }
+
+      const appMetadata = (appUser?.metadata as any) || {};
+
+      return res.json({
+        success: true,
+        data: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          username: user.username,
+          appScopedUsername: appUser?.username || user.username,
+          avatarUrl: user.avatarUrl,
+          headline: user.headline,
+          bio: user.bio,
+          city: user.city,
+          country: user.country,
+          isVerified: user.isVerified,
+          isEmailVerified: user.isEmailVerified,
+          isPhoneVerified: user.isPhoneVerified,
+          isSuspended: Boolean(appMetadata.isSuspended),
+          suspensionReason: appMetadata.reason || null,
+          suspendedAt: appMetadata.suspendedAt || null,
+          scopes: consent?.scopes || ['openid', 'profile'],
+          grantedAt: consent?.grantedAt || user.createdAt,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+          authenticators: {
+            googleSso: Boolean(user.googleId),
+            passwordConfigured: Boolean(user.passwordHash || user.password),
+            passkeysCount: user.securityKeys.length,
+            passkeys: user.securityKeys,
+            twoFactorEnabled: Boolean(
+              (user.securityPreferences as any)?.twoFactorEnabled ||
+              (user.securityPreferences as any)?.mfaEnabled
+            ),
+          },
+          tokens: tokens.map((t) => ({
+            id: t.id,
+            scopes: t.scopes,
+            expiresAt: t.expiresAt,
+            revokedAt: t.revokedAt,
+            createdAt: t.createdAt,
+            isActive: !t.revokedAt && new Date(t.expiresAt) > new Date(),
+          })),
+        },
+      });
+    } catch (err: any) {
+      console.error('[DeveloperApiController:getUserDetails] Error:', err);
       return res.status(500).json({ success: false, error: err.message });
     }
   }

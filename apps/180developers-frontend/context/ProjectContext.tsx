@@ -26,11 +26,36 @@ interface ProjectContextValue {
   copiedKey: string | null;
   copyToClipboard: (text: string, key: string) => void;
   // Telemetry for Identity
-  authLogs: { logs: any[]; totalUsers: number; activeSessionsCount: number } | null;
+  authLogs: {
+    logs: any[];
+    totalUsers: number;
+    activeSessionsCount: number;
+    suspendedUsersCount?: number;
+    verifiedUsersCount?: number;
+    authMethodBreakdown?: {
+      google: number;
+      emailPassword: number;
+      otp: number;
+      passkey: number;
+      universal: number;
+    };
+    growthTimeline?: Array<{
+      month: string;
+      newUsers: number;
+      activeUsers: number;
+      totalCumulative: number;
+    }>;
+    telemetryEvents?: any[];
+  } | null;
   loadingAuthLogs: boolean;
   fetchAuthLogs: (forceBypass?: any) => Promise<void>;
   handleRevokeUserSession: (targetUserId: string, userName: string) => Promise<void>;
+  handleSuspendUser: (targetUserId: string, reason?: string) => Promise<boolean>;
+  handleUnsuspendUser: (targetUserId: string) => Promise<boolean>;
+  handleDeleteAppUser: (targetUserId: string, userName?: string) => Promise<boolean>;
   revokingUserId: string | null;
+  suspendingUserId: string | null;
+  deletingUserId: string | null;
   // Telemetry for Pay
   paymentAnalytics: PaymentAnalyticsData | null;
   loadingAnalytics: boolean;
@@ -114,9 +139,31 @@ export function ProjectProvider({
 
   // Identity states
   const [enableAuth, setEnableAuth] = useState(true);
-  const [authLogs, setAuthLogs] = useState<{ logs: any[]; totalUsers: number; activeSessionsCount: number } | null>(null);
+  const [authLogs, setAuthLogs] = useState<{
+    logs: any[];
+    totalUsers: number;
+    activeSessionsCount: number;
+    suspendedUsersCount?: number;
+    verifiedUsersCount?: number;
+    authMethodBreakdown?: {
+      google: number;
+      emailPassword: number;
+      otp: number;
+      passkey: number;
+      universal: number;
+    };
+    growthTimeline?: Array<{
+      month: string;
+      newUsers: number;
+      activeUsers: number;
+      totalCumulative: number;
+    }>;
+    telemetryEvents?: any[];
+  } | null>(null);
   const [loadingAuthLogs, setLoadingAuthLogs] = useState(false);
   const [revokingUserId, setRevokingUserId] = useState<string | null>(null);
+  const [suspendingUserId, setSuspendingUserId] = useState<string | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
   // Pay states
   const [enablePay, setEnablePay] = useState(true);
@@ -321,15 +368,28 @@ export function ProjectProvider({
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
-          const data = await res.json();
+          const raw = await res.json();
+          const d = raw.data || raw;
+          const logs = d.logs || raw.logs || [];
           return {
-            logs: data.logs || [],
-            totalUsers: data.totalUsers || 0,
-            activeSessionsCount: data.activeSessionsCount || 0,
+            logs,
+            totalUsers: d.totalUsers ?? raw.totalUsers ?? logs.length,
+            activeSessionsCount: d.activeSessionsCount ?? raw.activeSessionsCount ?? 0,
+            suspendedUsersCount: d.suspendedUsersCount ?? raw.suspendedUsersCount ?? 0,
+            verifiedUsersCount: d.verifiedUsersCount ?? raw.verifiedUsersCount ?? 0,
+            authMethodBreakdown: d.authMethodBreakdown || raw.authMethodBreakdown || {
+              google: 0,
+              emailPassword: 0,
+              otp: 0,
+              passkey: 0,
+              universal: 0,
+            },
+            growthTimeline: d.growthTimeline || raw.growthTimeline || [],
+            telemetryEvents: d.telemetryEvents || raw.telemetryEvents || [],
           };
         }
         return null;
-      }, 30000);
+      }, 15000);
 
       if (authData) {
         setAuthLogs(authData);
@@ -362,6 +422,84 @@ export function ProjectProvider({
       toast.error(err.message || 'Revocation failed');
     } finally {
       setRevokingUserId(null);
+    }
+  };
+
+  // Suspend User Access to App
+  const handleSuspendUser = async (targetUserId: string, reason?: string) => {
+    setSuspendingUserId(targetUserId);
+    try {
+      const token = getAuthToken();
+      const apiBase = getApiBase();
+      const res = await fetch(`${apiBase}/api/v1/identity/developer/apps/${projectId}/users/${targetUserId}/suspend`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reason }),
+      });
+      if (!res.ok) throw new Error('Failed to suspend user');
+      toast.success('User access to this application has been suspended');
+      invalidateCache(`auth_logs_${projectId}`);
+      await fetchAuthLogs(true);
+      return true;
+    } catch (err: any) {
+      toast.error(err.message || 'Suspension failed');
+      return false;
+    } finally {
+      setSuspendingUserId(null);
+    }
+  };
+
+  // Unsuspend User Access to App
+  const handleUnsuspendUser = async (targetUserId: string) => {
+    setSuspendingUserId(targetUserId);
+    try {
+      const token = getAuthToken();
+      const apiBase = getApiBase();
+      const res = await fetch(`${apiBase}/api/v1/identity/developer/apps/${projectId}/users/${targetUserId}/unsuspend`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) throw new Error('Failed to restore user access');
+      toast.success('User access restored to this application');
+      invalidateCache(`auth_logs_${projectId}`);
+      await fetchAuthLogs(true);
+      return true;
+    } catch (err: any) {
+      toast.error(err.message || 'Restoration failed');
+      return false;
+    } finally {
+      setSuspendingUserId(null);
+    }
+  };
+
+  // Delete User from App (App-scoped removal, preserves global 180 Profile)
+  const handleDeleteAppUser = async (targetUserId: string, userName?: string) => {
+    setDeletingUserId(targetUserId);
+    try {
+      const token = getAuthToken();
+      const apiBase = getApiBase();
+      const res = await fetch(`${apiBase}/api/v1/identity/developer/apps/${projectId}/users/${targetUserId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) throw new Error('Failed to remove user from application');
+      toast.success(`User ${userName || ''} removed from this application`);
+      invalidateCache(`auth_logs_${projectId}`);
+      await fetchAuthLogs(true);
+      return true;
+    } catch (err: any) {
+      toast.error(err.message || 'Removal failed');
+      return false;
+    } finally {
+      setDeletingUserId(null);
     }
   };
 
@@ -592,7 +730,12 @@ export function ProjectProvider({
         loadingAuthLogs,
         fetchAuthLogs,
         handleRevokeUserSession,
+        handleSuspendUser,
+        handleUnsuspendUser,
+        handleDeleteAppUser,
         revokingUserId,
+        suspendingUserId,
+        deletingUserId,
         paymentAnalytics,
         loadingAnalytics,
         fetchPaymentAnalytics,

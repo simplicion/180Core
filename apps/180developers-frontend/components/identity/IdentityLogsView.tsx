@@ -29,12 +29,14 @@ export function IdentityLogsView() {
     return () => clearInterval(interval);
   }, [fetchAuthLogs]);
 
-  const rawLogs = authLogs?.logs || [];
+  const rawLogs = authLogs?.telemetryEvents && authLogs.telemetryEvents.length > 0
+    ? authLogs.telemetryEvents
+    : (authLogs?.logs || []);
 
   const filteredLogs = useMemo(() => {
     return rawLogs.filter((log: any) => {
-      if (logFilter === 'SUCCESS') return log.status === 'ACTIVE_SESSION';
-      if (logFilter === 'REVOKED') return log.status !== 'ACTIVE_SESSION';
+      if (logFilter === 'SUCCESS') return log.status === 'ACTIVE_SESSION' || log.severity === 'success';
+      if (logFilter === 'REVOKED') return log.status !== 'ACTIVE_SESSION' || log.severity === 'danger';
       return true;
     });
   }, [rawLogs, logFilter]);
@@ -65,7 +67,7 @@ export function IdentityLogsView() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950 p-6 sm:p-8 space-y-5 shadow-sm dark:shadow-2xl">
+      <div className="rounded-3xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950 p-6 sm:p-8 space-y-5 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-zinc-200 dark:border-white/10">
           <div>
             <div className="flex items-center gap-2">
@@ -127,55 +129,69 @@ export function IdentityLogsView() {
           ) : visibleLogs.length > 0 ? (
             <div className="divide-y divide-zinc-200 dark:divide-white/5 rounded-2xl border border-zinc-200 dark:border-white/5 bg-zinc-50/50 dark:bg-zinc-900/30 overflow-hidden font-mono text-xs">
               {visibleLogs.map((log: any) => {
-                const isSuccess = log.status === 'ACTIVE_SESSION';
-                const dateStr = new Date(log.grantedAt || log.connectedSince || Date.now()).toLocaleTimeString([], {
+                const isSuspended = log.isSuspended || log.severity === 'danger';
+                const isSuccess = log.status === 'ACTIVE_SESSION' || log.severity === 'success';
+                const dateStr = new Date(log.timestamp || log.grantedAt || log.connectedSince || Date.now()).toLocaleTimeString([], {
                   hour: '2-digit',
                   minute: '2-digit',
                   second: '2-digit',
+                });
+                const dateDay = new Date(log.timestamp || log.grantedAt || log.connectedSince || Date.now()).toLocaleDateString([], {
+                  month: 'short',
+                  day: 'numeric',
                 });
 
                 return (
                   <div key={log.id} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-zinc-100/60 dark:hover:bg-zinc-800/40 transition-colors">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="shrink-0">
-                        {isSuccess ? (
+                        {isSuspended ? (
+                          <XCircle className="w-4 h-4 text-rose-500" />
+                        ) : isSuccess ? (
                           <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                         ) : (
-                          <XCircle className="w-4 h-4 text-zinc-400" />
+                          <Clock className="w-4 h-4 text-zinc-400" />
                         )}
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 truncate">
                           <span className="font-bold text-zinc-950 dark:text-white font-sans text-xs">
-                            {log.user?.name || '180 User'}
+                            {log.userName || log.user?.name || '180 User'}
                           </span>
                           <span className="text-zinc-400 text-[11px]">
-                            {log.user?.email || log.userId}
+                            {log.userEmail || log.user?.email || log.userId}
                           </span>
+                          {(log.appScopedUsername || log.user?.appScopedUsername) && (
+                            <span className="text-indigo-500 text-[10px] font-semibold">
+                              @{log.appScopedUsername || log.user?.appScopedUsername}
+                            </span>
+                          )}
                         </div>
                         <div className="text-[10px] text-zinc-500 dark:text-zinc-400 flex items-center gap-2 pt-0.5">
-                          <span>Method: {log.authMethod || 'OAuth 2.0 PKCE'}</span>
+                          <span>Event: {log.title || (isSuccess ? 'Token Issued' : 'Session Expired')}</span>
                           <span>•</span>
-                          <span>IP: {log.ipAddress || '127.0.0.1'}</span>
+                          <span>Method: {log.authMethod || 'Universal SSO'}</span>
                           <span>•</span>
-                          <span>Device: {log.userAgent?.slice(0, 24) || 'Web Browser'}</span>
+                          <span>Gateway: {log.ip || '180.core.cloud'}</span>
                         </div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-                      <span className="text-[11px] text-zinc-400 flex items-center gap-1">
+                      <span className="text-[11px] text-zinc-400 flex items-center gap-1 font-mono">
                         <Clock className="w-3 h-3" />
-                        <span>{dateStr}</span>
+                        <span>{dateDay} {dateStr}</span>
                       </span>
                       <span
                         className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase ${
-                          isSuccess
+                          isSuspended
+                            ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                            : isSuccess
                             ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
                             : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-500'
                         }`}
                       >
-                        {isSuccess ? 'Authorized' : 'Expired'}
+                        {isSuspended ? 'Suspended' : isSuccess ? 'Authorized' : 'Expired'}
                       </span>
                     </div>
                   </div>

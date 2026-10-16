@@ -32,8 +32,12 @@ router.post('/billing/dunning-cycle', protect, DeveloperApiController.runDunning
 
 // ─── App Real-Time Telemetry & Financial Analytics ───────────────────────────
 router.get('/apps/:id/auth-logs', protect, DeveloperApiController.getAuthLogs);
+router.get('/apps/:id/users/:targetUserId', protect, DeveloperApiController.getUserDetails);
 router.post('/apps/:id/users/:targetUserId/revoke', protect, DeveloperApiController.revokeUserSession);
 router.post('/apps/:id/revoke-user', protect, DeveloperApiController.revokeUserSession);
+router.post('/apps/:id/users/:targetUserId/suspend', protect, DeveloperApiController.suspendUser);
+router.post('/apps/:id/users/:targetUserId/unsuspend', protect, DeveloperApiController.unsuspendUser);
+router.delete('/apps/:id/users/:targetUserId', protect, DeveloperApiController.deleteAppUser);
 router.get('/apps/:id/payment-analytics', protect, DeveloperApiController.getPaymentAnalytics);
 router.get('/apps/:id/analytics', protect, DeveloperApiController.getPaymentAnalytics);
 router.get('/apps/:id/bank-details', protect, DeveloperApiController.getBankDetails);
