@@ -22,7 +22,7 @@ import {
   CheckCircle2,
   Lock,
 } from 'lucide-react';
-import { Button, UniversalSkeleton } from '@workspace/ui';
+import { Button, UniversalSkeleton, AdaptiveSkeleton, OneEightyIdentityButton } from '@workspace/ui';
 import toast from 'react-hot-toast';
 import { UserProfile, ConnectedApp, LedgerEntry } from '@/types';
 import { getCoreApiUrl } from '@/lib/api';
@@ -121,71 +121,23 @@ export default function HomePage() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="space-y-6">
-        <UniversalSkeleton type="metrics" count={3} columns={3} />
-        <UniversalSkeleton type="form" count={4} />
-      </div>
-    );
+    return <AdaptiveSkeleton screen="profile-overview" />;
   }
 
-  const getMainLandingUrl = () => {
-    if (typeof window === 'undefined') return 'http://localhost:3008';
-    const isLocal =
-      window.location.hostname === 'localhost' ||
-      window.location.hostname === '127.0.0.1';
-    return isLocal
-      ? 'http://localhost:3008'
-      : (process.env.NEXT_PUBLIC_MAIN_LANDING_URL || 'https://developer.180core.cloud');
-  };
-
   // ─────────────────────────────────────────────────────────────────────────────
-  // 1. UNAUTHENTICATED STATE: CLEAN SIGN-IN REQUIRED CARD
+  // 1. UNAUTHENTICATED STATE: JUST OUR SINGLE AUTH BUTTON
   // ─────────────────────────────────────────────────────────────────────────────
   if (!user) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center py-8 px-4">
-        <div
-          role="alert"
-          aria-live="assertive"
-          className="max-w-md w-full p-8 sm:p-10 rounded-3xl bg-white border border-slate-200/90 shadow-xl text-center space-y-6"
-        >
-          <div className="w-16 h-16 rounded-3xl bg-blue-50 border border-blue-200 text-blue-600 mx-auto flex items-center justify-center shadow-xs">
-            <Shield className="w-8 h-8" />
-          </div>
-
-          <div className="space-y-2">
-            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-              180 Universal Identity
-            </h1>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Sign in with your 180 Identity universal account to access your Universal Profile and Prepaid Wallet.
-            </p>
-          </div>
-
-          <div className="space-y-3 pt-2">
-            <Link href="/auth/login" className="block">
-              <Button
-                size="lg"
-                className="w-full rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-md shadow-blue-500/25 flex items-center justify-center gap-2 cursor-pointer min-h-[48px]"
-              >
-                <Shield className="w-4 h-4" />
-                <span>Sign In with 180 Identity</span>
-              </Button>
-            </Link>
-
-            <a href={getMainLandingUrl()} className="block">
-              <Button
-                variant="ghost"
-                size="lg"
-                className="w-full rounded-2xl min-h-[44px] text-slate-600 hover:text-slate-900 font-semibold text-sm cursor-pointer"
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                <span>Back to Main Landing Page</span>
-              </Button>
-            </a>
-          </div>
-        </div>
+      <div className="min-h-[60vh] flex flex-col items-center justify-center py-12 px-4">
+        <OneEightyIdentityButton
+          href="/auth/login"
+          clientId="180-profile"
+          text="Sign In with 180 Identity"
+          subtitle="Universal Sovereign Identity & Prepaid Wallet"
+          theme="light"
+          className="shadow-xl hover:shadow-2xl hover:scale-105 transition-all text-sm px-6 py-3 cursor-pointer"
+        />
       </div>
     );
   }

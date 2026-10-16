@@ -61,8 +61,7 @@ export class CustomerPortalService {
    * Helper to resolve base profile URL.
    */
   static getBaseProfileUrl(): string {
-    const isProd = process.env.NODE_ENV === 'production';
-    return isProd ? 'https://profile.180workspace.com' : (process.env.PROFILE_SERVER_URL || 'http://localhost:3009');
+    return process.env.PROFILE_FRONTEND_URL || process.env.PROFILE_SERVER_URL || process.env.NEXT_PUBLIC_PROFILE_URL || '';
   }
 
   /**

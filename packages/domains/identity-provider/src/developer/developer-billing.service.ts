@@ -47,27 +47,63 @@ export interface DeveloperBillingStatus {
 }
 
 export class DeveloperBillingService {
+  public static readonly PLATFORM_CLIENT_ID = '180_client_2d51a605038c38ffb6fa037688988a83';
+
   /**
-   * Helper to resolve the 180workspace platform app ID for anchoring developer project subscriptions
+   * Helper to resolve the canonical 180 Core platform app ID for anchoring developer project subscriptions
    */
-  private static async getPlatformAppId(): Promise<string> {
-    const platformApp = await prisma.oAuthApp.findFirst({
+  public static async getPlatformAppId(): Promise<string> {
+    let platformApp = await prisma.oAuthApp.findFirst({
       where: {
         OR: [
+          { clientId: this.PLATFORM_CLIENT_ID },
+          { name: '180 Core' },
           { clientId: '180-workspace-platform' },
-          { clientId: '180_client_70d751541f05347fe803ec8e128f5e83' },
-          { name: '180workspace' },
-          { name: { contains: 'Workspace', mode: 'insensitive' } },
+          { clientId: '180-core' },
         ],
+      },
+      select: { id: true, name: true },
+    });
+
+    if (platformApp) {
+      if (platformApp.name !== '180 Core') {
+        await prisma.oAuthApp.update({
+          where: { id: platformApp.id },
+          data: { name: '180 Core', isVerified: true },
+        }).catch(() => {});
+      }
+      return platformApp.id;
+    }
+
+    // Deterministically ensure the official platform app exists under admin@180core.cloud
+    const adminUser =
+      (await prisma.user.findFirst({ where: { email: 'admin@180core.cloud' } })) ||
+      (await prisma.user.findFirst({ where: { role: 'SUPERADMIN' } })) ||
+      (await prisma.user.findFirst({ where: { role: 'SUPER_ADMIN' } })) ||
+      (await prisma.user.findFirst());
+
+    if (!adminUser) {
+      throw new Error('No root administrative user found in database to anchor platform application');
+    }
+
+    const createdPlatformApp = await prisma.oAuthApp.create({
+      data: {
+        clientId: this.PLATFORM_CLIENT_ID,
+        name: '180 Core',
+        description: 'Sovereign Core Identity, Auth & 180 Pay Infrastructure',
+        clientSecretHash: 'system_platform_app_hash',
+        clientSecretHint: 'c3ab',
+        redirectUris: ['http://localhost:3008/oauth/callback', 'http://localhost:3009/oauth/callback'],
+        allowedOrigins: ['http://localhost:3008', 'http://localhost:3009'],
+        allowedScopes: ['openid', 'identity:read', 'pay:checkout', 'pay:subscriptions'],
+        isVerified: true,
+        isActive: true,
+        userId: adminUser.id,
       },
       select: { id: true },
     });
 
-    if (platformApp) return platformApp.id;
-
-    const anyApp = await prisma.oAuthApp.findFirst({ select: { id: true } });
-    if (!anyApp) throw new Error('No root platform OAuthApp found in database');
-    return anyApp.id;
+    return createdPlatformApp.id;
   }
 
   /**
@@ -84,8 +120,8 @@ export class DeveloperBillingService {
         data: {
           appId,
           planCode: DEV_PLAN_STARTER,
-          name: 'Developer Starter Plan',
-          description: 'Developer portal access with up to 5 projects ($2/mo)',
+          name: '180 Core — Starter Plan',
+          description: '180 Core project access with up to 5 projects ($2/mo)',
           amount: DEV_STARTER_PRICE,
           currency: 'USD',
           interval: 'MONTHLY',
@@ -94,6 +130,12 @@ export class DeveloperBillingService {
           isActive: true,
           metadata: { planTier: 'STARTER', maxProjects: DEV_STARTER_MAX_PROJECTS, rate: DEV_STARTER_PRICE },
         },
+      });
+    } else if (starter.appId !== appId || starter.name !== '180 Core — Starter Plan') {
+      // Self-healing: Re-bind legacy plan from tenant app to official platform app
+      starter = await (prisma as any).subscriptionPlan.update({
+        where: { id: starter.id },
+        data: { appId, name: '180 Core — Starter Plan' },
       });
     }
 
@@ -105,8 +147,8 @@ export class DeveloperBillingService {
         data: {
           appId,
           planCode: DEV_PLAN_PRO,
-          name: 'Developer Pro Plan',
-          description: 'Developer portal access with up to 10 projects ($5/mo)',
+          name: '180 Core — Pro Plan',
+          description: '180 Core project access with up to 10 projects ($5/mo)',
           amount: DEV_PRO_PRICE,
           currency: 'USD',
           interval: 'MONTHLY',
@@ -115,6 +157,12 @@ export class DeveloperBillingService {
           isActive: true,
           metadata: { planTier: 'PRO', maxProjects: DEV_PRO_MAX_PROJECTS, rate: DEV_PRO_PRICE },
         },
+      });
+    } else if (pro.appId !== appId || pro.name !== '180 Core — Pro Plan') {
+      // Self-healing: Re-bind legacy plan from tenant app to official platform app
+      pro = await (prisma as any).subscriptionPlan.update({
+        where: { id: pro.id },
+        data: { appId, name: '180 Core — Pro Plan' },
       });
     }
 
@@ -366,7 +414,7 @@ export class DeveloperBillingService {
     const isPro = planTier === 'PRO';
     const amount = isPro ? DEV_PRO_PRICE : DEV_STARTER_PRICE;
     const maxProjects = isPro ? DEV_PRO_MAX_PROJECTS : DEV_STARTER_MAX_PROJECTS;
-    const title = isPro ? '180 Developer Portal — Pro Plan' : '180 Developer Portal — Starter Plan';
+    const title = isPro ? '180 Core — Pro Plan' : '180 Core — Starter Plan';
     const description = isPro ? '10 Projects Access with 180 Identity & 180 Pay' : '5 Projects Access with 180 Identity & 180 Pay';
     const sessionId = `sess_dev_${planTier.toLowerCase()}_${userId.slice(0, 8)}_${Date.now()}`;
 

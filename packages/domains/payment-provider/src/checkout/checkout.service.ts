@@ -197,7 +197,7 @@ export class CheckoutService {
       });
     }
 
-    const checkoutBase = process.env.PROFILE_FRONTEND_URL || 'https://pay.180workspace.com';
+    const checkoutBase = process.env.PROFILE_FRONTEND_URL || process.env.NEXT_PUBLIC_PROFILE_URL || '';
 
     return {
       success: true,
@@ -221,6 +221,7 @@ export class CheckoutService {
         app: {
           select: {
             id: true,
+            clientId: true,
             name: true,
             description: true,
             logoUrl: true,
@@ -229,6 +230,71 @@ export class CheckoutService {
         },
       },
     });
+
+    // Self-heal and safeguard Developer Portal billing sessions to strictly bind to official platform identity
+    if (session && sessionId.startsWith('sess_dev_')) {
+      if (session.app) {
+        session.app.name = '180 Developer Portal';
+        session.app.isVerified = true;
+      }
+
+      const isPlatformApp =
+        session.app?.clientId === '180-workspace-platform' ||
+        session.app?.name?.toLowerCase().includes('developer portal') ||
+        session.app?.name?.toLowerCase() === '180workspace';
+
+      if (!isPlatformApp) {
+        let platformApp = await prisma.oAuthApp.findFirst({
+          where: {
+            OR: [
+              { clientId: '180-workspace-platform' },
+              { clientId: '180_client_70d751541f05347fe803ec8e128f5e83' },
+              { name: '180 Developer Portal' },
+              { name: '180workspace' },
+            ],
+          },
+        });
+
+        if (!platformApp) {
+          const sysUser =
+            (await prisma.user.findFirst({ where: { role: 'SUPER_ADMIN' } })) ||
+            (await prisma.user.findFirst());
+          if (sysUser) {
+            platformApp = await prisma.oAuthApp.create({
+              data: {
+                clientId: '180-workspace-platform',
+                name: '180 Developer Portal',
+                description: '180 Sovereign Developer Platform & Billing',
+                clientSecretHash: 'system_platform_app_hash',
+                clientSecretHint: 'plat',
+                redirectUris: ['http://localhost:3008/oauth/callback', 'http://localhost:3009/oauth/callback'],
+                allowedOrigins: ['http://localhost:3008', 'http://localhost:3009'],
+                allowedScopes: ['openid', 'identity:read', 'pay:checkout'],
+                isVerified: true,
+                isActive: true,
+                userId: sysUser.id,
+              },
+            });
+          }
+        }
+
+        if (platformApp) {
+          await prisma.checkoutSession.update({
+            where: { id: sessionId },
+            data: { appId: platformApp.id },
+          }).catch(() => {});
+
+          session.appId = platformApp.id;
+          session.app = {
+            id: platformApp.id,
+            name: '180 Developer Portal',
+            description: platformApp.description || '180 Sovereign Developer Platform & Billing',
+            logoUrl: platformApp.logoUrl || '',
+            isVerified: true,
+          } as any;
+        }
+      }
+    }
 
     // Auto-heal Developer Portal billing checkout sessions if not already in DB
     if (!session && sessionId.startsWith('sess_dev_')) {
@@ -239,18 +305,40 @@ export class CheckoutService {
         const title = isPro ? '180 Developer Portal — Pro Plan' : '180 Developer Portal — Starter Plan';
         const description = isPro ? '10 Projects Access with 180 Identity & 180 Pay' : '5 Projects Access with 180 Identity & 180 Pay';
 
-        const platformApp = await prisma.oAuthApp.findFirst({
+        let platformApp = await prisma.oAuthApp.findFirst({
           where: {
             OR: [
               { clientId: '180-workspace-platform' },
               { clientId: '180_client_70d751541f05347fe803ec8e128f5e83' },
               { name: '180 Developer Portal' },
               { name: '180workspace' },
-              { name: { contains: 'Workspace', mode: 'insensitive' } },
-              { name: { contains: 'Developer', mode: 'insensitive' } },
+              { name: { contains: 'Developer Portal', mode: 'insensitive' } },
             ],
           },
-        }) || await prisma.oAuthApp.findFirst();
+        });
+
+        if (!platformApp) {
+          const sysUser =
+            (await prisma.user.findFirst({ where: { role: 'SUPER_ADMIN' } })) ||
+            (await prisma.user.findFirst());
+          if (sysUser) {
+            platformApp = await prisma.oAuthApp.create({
+              data: {
+                clientId: '180-workspace-platform',
+                name: '180 Developer Portal',
+                description: '180 Sovereign Developer Platform & Billing',
+                clientSecretHash: 'system_platform_app_hash',
+                clientSecretHint: 'plat',
+                redirectUris: ['http://localhost:3008/oauth/callback', 'http://localhost:3009/oauth/callback'],
+                allowedOrigins: ['http://localhost:3008', 'http://localhost:3009'],
+                allowedScopes: ['openid', 'identity:read', 'pay:checkout'],
+                isVerified: true,
+                isActive: true,
+                userId: sysUser.id,
+              },
+            });
+          }
+        }
 
         if (platformApp) {
           session = await prisma.checkoutSession.create({
@@ -274,6 +362,7 @@ export class CheckoutService {
               app: {
                 select: {
                   id: true,
+                  clientId: true,
                   name: true,
                   description: true,
                   logoUrl: true,
@@ -282,6 +371,11 @@ export class CheckoutService {
               },
             },
           });
+
+          if (session && (session as any).app) {
+            (session as any).app.name = '180 Developer Portal';
+            (session as any).app.isVerified = true;
+          }
         }
       } catch (autoHealErr) {
         console.warn('[CheckoutService:getSession] Could not auto-heal sess_dev_ session:', autoHealErr);
@@ -332,6 +426,7 @@ export class CheckoutService {
               app: {
                 select: {
                   id: true,
+                  clientId: true,
                   name: true,
                   description: true,
                   logoUrl: true,
@@ -375,6 +470,7 @@ export class CheckoutService {
                 app: {
                   select: {
                     id: true,
+                    clientId: true,
                     name: true,
                     description: true,
                     logoUrl: true,
@@ -747,8 +843,8 @@ export class CheckoutService {
     if (appAny.customGatewayType === 'STRIPE' && (appAny.customGatewayKeyId || appAny.customGatewaySecret)) {
       return {
         gatewayType: 'STRIPE',
-        keyId: appAny.customGatewayKeyId || process.env.STRIPE_PUBLISHABLE_KEY || process.env.STRIPE_KEY_ID || 'pk_live_simulated',
-        keySecret: appAny.customGatewaySecret || process.env.STRIPE_SECRET_KEY || 'sk_live_simulated',
+        keyId: appAny.customGatewayKeyId || process.env.STRIPE_PUBLISHABLE_KEY || process.env.STRIPE_KEY_ID || '',
+        keySecret: appAny.customGatewaySecret || process.env.STRIPE_SECRET_KEY || '',
         webhookSecret: appAny.customGatewayWebhookSecret || process.env.STRIPE_WEBHOOK_SECRET,
         isCustomBYOG: true,
       };
@@ -774,11 +870,11 @@ export class CheckoutService {
         process.env.STRIPE_PUBLISHABLE_KEY ||
         process.env.STRIPE_KEY_ID ||
         process.env.NEXT_PUBLIC_STRIPE_KEY ||
-        'pk_test_simulated_key';
+        '';
       const keySecret =
         process.env.STRIPE_SECRET_KEY ||
         process.env.STRIPE_KEY_SECRET ||
-        'sk_test_simulated_secret';
+        '';
       return {
         gatewayType: 'STRIPE',
         keyId,
@@ -793,12 +889,8 @@ export class CheckoutService {
     let keySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim().replace(/^['"]|['"]$/g, '');
 
     if (!keyId || !keySecret) {
-      if (process.env.NODE_ENV !== 'production' && !keyId) {
-        keyId = 'rzp_test_simulated_platform_key';
-        keySecret = 'simulated_platform_secret';
-      } else {
-        keyId = keyId || 'rzp_test_simulated_platform_key';
-        keySecret = keySecret || 'simulated_platform_secret';
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('Razorpay platform credentials (RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET) are missing from environment variables.');
       }
     }
 

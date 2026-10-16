@@ -119,26 +119,31 @@ export class CheckoutApiController {
       }
 
       if (!app) {
+        const targetClientId = clientId || '180-workspace-platform';
         app = await prisma.oAuthApp.findFirst({
-          where: { clientId: clientId || '180-workspace-platform' },
-        }) || await prisma.oAuthApp.findFirst({
-          where: { isActive: true },
+          where: {
+            OR: [
+              { clientId: targetClientId },
+              { id: targetClientId },
+            ],
+            isActive: true,
+          },
         });
       }
 
       if (!app) {
-        const sysUser = await prisma.user.findFirst();
+        const sysUser = (await prisma.user.findFirst({ where: { role: 'SUPER_ADMIN' } })) || (await prisma.user.findFirst());
         if (sysUser) {
           app = await prisma.oAuthApp.create({
             data: {
               clientId: '180-workspace-platform',
-              clientSecretHash: 'first_party_app_hash',
-              clientSecretHint: 'hash',
-              name: '180 Workspace',
-              description: '180 Workspace Platform App',
+              clientSecretHash: 'system_platform_app_hash',
+              clientSecretHint: 'plat',
+              name: '180 Developer Portal',
+              description: '180 Sovereign Developer Platform & Billing',
               redirectUris: ['http://localhost:3008/oauth/callback', 'http://localhost:3009/oauth/callback'],
               allowedOrigins: ['http://localhost:3008', 'http://localhost:3009'],
-              allowedScopes: ['openid', 'identity:read'],
+              allowedScopes: ['openid', 'identity:read', 'pay:checkout'],
               isVerified: true,
               isActive: true,
               userId: sysUser.id,

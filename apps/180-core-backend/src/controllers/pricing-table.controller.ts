@@ -455,7 +455,7 @@ export class PricingTableApiController {
       const profileBase =
         process.env.PROFILE_FRONTEND_URL ||
         process.env.NEXT_PUBLIC_PROFILE_URL ||
-        'https://profile.180workspace.com';
+        '';
 
       // Assemble mapped tiers
       let rawCards: any[] = [];

@@ -57,3 +57,27 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 export default corePrisma;
+
+/**
+ * Universal Two-Credential Model Helper:
+ * Resolves an OAuthApp record by either its public clientId or internal UUID id.
+ */
+export async function resolveOAuthApp(identifier: string) {
+  if (!identifier) return null;
+  return (corePrisma as any).oAuthApp.findFirst({
+    where: {
+      OR: [
+        { clientId: identifier },
+        { id: identifier },
+      ],
+    },
+  });
+}
+
+/**
+ * Resolves the internal database primary key UUID from either a clientId or UUID.
+ */
+export async function resolveAppId(identifier: string): Promise<string> {
+  const app = await resolveOAuthApp(identifier);
+  return app ? app.id : identifier;
+}

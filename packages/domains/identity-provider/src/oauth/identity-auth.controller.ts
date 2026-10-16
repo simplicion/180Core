@@ -9,7 +9,7 @@ import { UsernameService } from '../user/username.service';
 import { LocationService } from '../user/location.service';
 
 function getJwtSecret(): string {
-    return process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET || '180-identity-jwt-secret-key-prod-super-secure';
+    return process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET || '';
 }
 
 const JWT_SECRET = getJwtSecret();
@@ -196,12 +196,20 @@ export class IdentityAuthController {
             const cleanName = String(rawName).trim();
             const cleanInput = String(rawContact).trim();
             const isEmail = cleanInput.includes('@');
+
+            if (!isEmail) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'phone_verification_unavailable',
+                    message: 'Mobile number verification is currently unavailable. Please sign up using your email address or Google.'
+                });
+            }
+
             const digits = cleanInput.replace(/[^\d]/g, '');
 
             // Check if credential was terminated due to suspicious activity
             try {
                 const cleanLower = cleanInput.toLowerCase();
-                const lastDigits = digits.length >= 10 ? digits.slice(-10) : '';
 
                 const terminationLogs = await prisma.adminAuditLog.findMany({
                     where: { action: 'DELETE_USER_SUSPICIOUS' },
@@ -212,11 +220,7 @@ export class IdentityAuthController {
                 const matchedLog = terminationLogs.find((log: any) => {
                     const d = (log.details as any) || {};
                     const email = String(d.email || '').toLowerCase();
-                    const phone = String(d.phone || '').replace(/[^\d]/g, '');
-
-                    if (isEmail && email && email === cleanLower) return true;
-                    if (!isEmail && lastDigits && phone && phone.endsWith(lastDigits)) return true;
-                    return false;
+                    return email && email === cleanLower;
                 });
 
                 if (matchedLog) {
@@ -229,37 +233,16 @@ export class IdentityAuthController {
                 }
             } catch (_) {}
 
-            // Verify contact not already registered
-            if (isEmail) {
-                const existing = await prisma.user.findFirst({
-                    where: { email: { equals: cleanInput, mode: 'insensitive' } }
+            // Verify email not already registered
+            const existing = await prisma.user.findFirst({
+                where: { email: { equals: cleanInput, mode: 'insensitive' } }
+            });
+            if (existing && existing.passwordHash) {
+                return res.status(409).json({
+                    success: false,
+                    error: 'email_taken',
+                    message: 'An account with this email already exists. Please sign in.'
                 });
-                if (existing && existing.passwordHash) {
-                    return res.status(409).json({
-                        success: false,
-                        error: 'email_taken',
-                        message: 'An account with this email already exists. Please sign in.'
-                    });
-                }
-            } else {
-                if (digits.length < 10) {
-                    return res.status(400).json({
-                        success: false,
-                        error: 'invalid_phone',
-                        message: 'Please provide a valid 10-digit mobile number'
-                    });
-                }
-                const { e164 } = Msg91OtpService.normalizePhone(digits);
-                const existing = await prisma.user.findFirst({
-                    where: { phone: e164 }
-                });
-                if (existing && existing.passwordHash) {
-                    return res.status(409).json({
-                        success: false,
-                        error: 'phone_taken',
-                        message: 'An account with this phone number already exists. Please sign in.'
-                    });
-                }
             }
 
             // Generate 6-digit OTP
@@ -858,7 +841,7 @@ export class IdentityAuthController {
         const clientId =
             process.env.GOOGLE_CLIENT_ID ||
             process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
-            '188560578303-tqob33d58ednaer1ab0r2u64ouqb55mk.apps.googleusercontent.com';
+            '';
         return res.json({
             success: true,
             clientId
@@ -949,35 +932,29 @@ export class IdentityAuthController {
         try {
             const rawInput = req.body.emailOrPhone || req.body.credential || req.body.email || req.body.phone;
             if (!rawInput) {
-                return res.status(400).json({ success: false, error: 'missing_field', message: 'Email or phone number is required' });
+                return res.status(400).json({ success: false, error: 'missing_field', message: 'Email address is required' });
             }
 
             const cleanInput = String(rawInput).trim();
             const isEmail = cleanInput.includes('@');
-            const digits = cleanInput.replace(/[^\d]/g, '');
 
-            const phoneConditions: any[] = [{ phone: cleanInput }];
-            if (digits.length >= 10) {
-                const { e164, national, msg91Mobile } = Msg91OtpService.normalizePhone(cleanInput);
-                phoneConditions.push(
-                    { phone: e164 },
-                    { phone: national },
-                    { phone: msg91Mobile },
-                    { phone: `+${national}` }
-                );
+            if (!isEmail) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'phone_verification_unavailable',
+                    message: 'Mobile verification is currently unavailable. Please enter your registered email address to receive a reset code.'
+                });
             }
 
             const user = await prisma.user.findFirst({
-                where: isEmail
-                    ? { email: { equals: cleanInput, mode: 'insensitive' } }
-                    : { OR: phoneConditions }
+                where: { email: { equals: cleanInput, mode: 'insensitive' } }
             });
 
             if (!user) {
                 return res.status(404).json({
                     success: false,
                     error: 'user_not_found',
-                    message: 'No account found with this email or phone number.'
+                    message: 'No account found with this email address.'
                 });
             }
 

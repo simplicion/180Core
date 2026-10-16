@@ -12,7 +12,7 @@ import {
   LogOut,
   Calendar,
 } from 'lucide-react';
-import { Button, UniversalSkeleton } from '@workspace/ui';
+import { Button, UniversalSkeleton, AdaptiveSkeleton } from '@workspace/ui';
 import { getCoreApiUrl } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { ConnectedApp } from '@/types';
@@ -208,14 +208,13 @@ export default function ConnectedAppsPage() {
       </div>
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-8">
-        {/* Apps List (2 Column Span) */}
-        <div className="lg:col-span-2 space-y-3 sm:space-y-4">
-          {loading ? (
-            <div className="space-y-3 sm:space-y-4">
-              <UniversalSkeleton type="form" count={2} />
-            </div>
-          ) : apps.length > 0 ? (
+      {loading ? (
+        <AdaptiveSkeleton screen="connected-apps" />
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-8">
+          {/* Apps List (2 Column Span) */}
+          <div className="lg:col-span-2 space-y-3 sm:space-y-4">
+            {apps.length > 0 ? (
             apps.map((app) => {
               const displayName = getFormattedAppName(app.name);
               const appLogo = getAppLogo(app);
@@ -317,6 +316,7 @@ export default function ConnectedAppsPage() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Revoke Confirmation Modal */}
       {revokingApp && (

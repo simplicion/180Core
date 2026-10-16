@@ -344,7 +344,7 @@ export class SubscriptionService {
       },
     });
 
-    const checkoutBase = process.env.PROFILE_FRONTEND_URL || 'https://pay.180workspace.com';
+    const checkoutBase = process.env.PROFILE_FRONTEND_URL || process.env.NEXT_PUBLIC_PROFILE_URL || '';
 
     return {
       success: true,

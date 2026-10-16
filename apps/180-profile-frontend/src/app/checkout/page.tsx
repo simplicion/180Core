@@ -150,7 +150,7 @@ function CheckoutEntryPoint() {
           <span>Quick SDK Integration:</span>
         </div>
         <pre className="text-[11px] font-mono text-slate-600 bg-white p-2.5 rounded-xl border border-slate-200 overflow-x-auto">
-          OneEighty.pay.checkout(&#123;{'\n'}  appId: 'your_app_id',{'\n'}  amount: 499,{'\n'}  planCode: 'pro_monthly'{'\n'}&#125;);
+          OneEighty.pay.checkout(&#123;{'\n'}  clientId: '180_client_your_id',{'\n'}  amount: 499,{'\n'}  planCode: 'pro_monthly'{'\n'}&#125;);
         </pre>
       </div>
 

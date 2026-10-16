@@ -48,10 +48,32 @@ export function AppShellLayout({
 
   if (loading && !project) {
     return (
-      <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-zinc-900 dark:text-white" />
-          <p className="text-xs text-zinc-500 font-medium">Loading console...</p>
+      <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 flex transition-colors duration-200">
+        {sidebar}
+        <div
+          className={`flex-1 ${
+            isSidebarExpanded
+              ? 'lg:ml-[280px] lg:w-[calc(100%-280px)]'
+              : 'lg:ml-[80px] lg:w-[calc(100%-80px)]'
+          } flex flex-col min-h-screen transition-all duration-300 ease-in-out`}
+        >
+          <DeveloperHeader
+            onMobileToggle={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            activeTabTitle={title}
+            userProfile={userProfile}
+            breadcrumbs={breadcrumbs || [{ label: 'Projects', href: '/dashboard' }, { label: title }]}
+          />
+          <main className="w-full flex-1 p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6">
+            <div className="animate-pulse space-y-6">
+              <div className="h-8 bg-zinc-200 dark:bg-zinc-800 rounded-xl w-48" />
+              <div className="h-4 bg-zinc-200 dark:bg-zinc-800 rounded-lg w-72" />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
+                <div className="h-32 bg-zinc-200 dark:bg-zinc-800 rounded-2xl" />
+                <div className="h-32 bg-zinc-200 dark:bg-zinc-800 rounded-2xl" />
+                <div className="h-32 bg-zinc-200 dark:bg-zinc-800 rounded-2xl" />
+              </div>
+            </div>
+          </main>
         </div>
       </div>
     );

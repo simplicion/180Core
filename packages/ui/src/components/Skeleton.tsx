@@ -263,13 +263,17 @@ export function SkeletonStatsCard() {
 }
 
 export function SkeletonMetricGrid({ count = 4, columns = 4 }: { count?: number; columns?: 1 | 2 | 3 | 4 | 6 }) {
+    if (count === 1 || columns === 1) {
+        return <SkeletonStatsCard />;
+    }
+
     const gridCols = {
         1: 'grid-cols-1',
         2: 'grid-cols-1 sm:grid-cols-2',
         3: 'grid-cols-1 sm:grid-cols-3',
-        4: 'grid-cols-2 sm:grid-cols-4',
+        4: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4',
         6: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6',
-    }[columns];
+    }[columns] || 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4';
 
     return (
         <div className={clsx('grid gap-3 sm:gap-4', gridCols)}>
@@ -780,12 +784,709 @@ export function SkeletonChart() {
 }
 
 /* ─────────────────────────────────────────────────────────────
- * 17. Universal & Adaptive Compound Dispatcher
+ * 17. Universal Platform Screen Skeletons (Adaptive UI)
  * ───────────────────────────────────────────────────────────── */
+
+/**
+ * 1. Developer Console Sidebar Skeleton
+ */
+export function SkeletonDeveloperSidebar({ className }: { className?: string }) {
+    return (
+        <aside
+            className={clsx(
+                "hidden lg:flex w-64 lg:w-72 flex-col fixed inset-y-0 left-0 border-r border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#101012] p-4 justify-between select-none z-40 animate-pulse",
+                className
+            )}
+        >
+            <div className="space-y-6">
+                {/* Logo & Brand Header */}
+                <div className="flex items-center gap-3 px-2 py-1">
+                    <div className="w-9 h-9 rounded-2xl bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center shrink-0" />
+                    <div className="space-y-1">
+                        <div className="h-4 w-24 bg-zinc-200 dark:bg-zinc-800 rounded-md" />
+                        <div className="h-2.5 w-16 bg-zinc-100 dark:bg-zinc-800/60 rounded" />
+                    </div>
+                </div>
+
+                {/* Primary Navigation Pills */}
+                <div className="space-y-1.5 pt-2">
+                    {[
+                        { width: 'w-28', active: true },
+                        { width: 'w-32', active: false },
+                        { width: 'w-36', active: false },
+                        { width: 'w-24', active: false },
+                        { width: 'w-28', active: false },
+                    ].map((item, idx) => (
+                        <div
+                            key={idx}
+                            className={clsx(
+                                "flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-all",
+                                item.active
+                                    ? "bg-zinc-100 dark:bg-white/10"
+                                    : "hover:bg-zinc-50 dark:hover:bg-white/5"
+                            )}
+                        >
+                            <div className="w-5 h-5 rounded-lg bg-zinc-200 dark:bg-zinc-800 shrink-0" />
+                            <div className={clsx("h-3.5 bg-zinc-200 dark:bg-zinc-800 rounded", item.width)} />
+                        </div>
+                    ))}
+                </div>
+
+                <div className="border-t border-zinc-100 dark:border-white/5 pt-4">
+                    <div className="h-2.5 w-20 bg-zinc-200 dark:bg-zinc-800 rounded mb-3 px-2" />
+                    <div className="space-y-2">
+                        {[1, 2, 3].map((i) => (
+                            <div key={i} className="flex items-center gap-2.5 px-3 py-1.5">
+                                <div className="w-3.5 h-3.5 rounded-md bg-zinc-200 dark:bg-zinc-800 shrink-0" />
+                                <div className="h-3 w-28 bg-zinc-100 dark:bg-zinc-800/80 rounded" />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* User Profile Pill at Bottom */}
+            <div className="p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200/60 dark:border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-800 shrink-0" />
+                    <div className="space-y-1">
+                        <div className="h-3 w-20 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                        <div className="h-2 w-28 bg-zinc-100 dark:bg-zinc-800/60 rounded" />
+                    </div>
+                </div>
+                <div className="w-4 h-4 rounded bg-zinc-200 dark:bg-zinc-800" />
+            </div>
+        </aside>
+    );
+}
+
+/**
+ * 2. Developer Console Top Command Header Skeleton
+ */
+export function SkeletonDeveloperHeader({ className }: { className?: string }) {
+    return (
+        <header
+            className={clsx(
+                "sticky top-0 z-30 h-16 bg-white/80 dark:bg-black/80 backdrop-blur-xl border-b border-zinc-200/80 dark:border-white/10 flex items-center justify-between px-4 sm:px-6 lg:px-8 animate-pulse",
+                className
+            )}
+        >
+            <div className="flex items-center gap-3">
+                <div className="lg:hidden w-8 h-8 rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+                <div className="h-5 w-36 bg-zinc-200 dark:bg-zinc-800 rounded-lg" />
+            </div>
+            <div className="flex items-center gap-3">
+                <div className="hidden sm:block h-9 w-60 rounded-2xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-white/5" />
+                <div className="h-9 w-28 rounded-2xl bg-zinc-900/10 dark:bg-white/10" />
+                <div className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-900" />
+                <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-800" />
+            </div>
+        </header>
+    );
+}
+
+/**
+ * 3. Developer Console App Card Skeleton
+ */
+export function SkeletonDeveloperAppCard({ className }: { className?: string }) {
+    return (
+        <div
+            className={clsx(
+                "rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#101012] p-5 shadow-xs flex flex-col justify-between space-y-4 animate-pulse",
+                className
+            )}
+        >
+            <div className="space-y-3.5">
+                <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                        <div className="w-10 h-10 rounded-2xl bg-zinc-200 dark:bg-zinc-800 shrink-0" />
+                        <div className="space-y-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                                <div className="h-4 w-24 bg-zinc-200 dark:bg-zinc-800 rounded-md" />
+                                <div className="h-3.5 w-12 rounded-full bg-emerald-100/60 dark:bg-emerald-950/40" />
+                            </div>
+                            <div className="h-3 w-32 bg-zinc-100 dark:bg-zinc-800/80 rounded font-mono" />
+                        </div>
+                    </div>
+                    <div className="w-6 h-6 rounded-full bg-zinc-100 dark:bg-zinc-800 shrink-0" />
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                    <div className="h-4 w-14 rounded-full bg-zinc-100 dark:bg-zinc-800" />
+                    <div className="h-4 w-16 rounded-full bg-zinc-100 dark:bg-zinc-800" />
+                </div>
+            </div>
+
+            <div className="pt-3 border-t border-zinc-100 dark:border-white/5 flex items-center justify-between text-xs">
+                <div className="h-2.5 w-20 bg-zinc-100 dark:bg-zinc-800 rounded" />
+                <div className="h-3.5 w-14 rounded-md bg-zinc-100 dark:bg-zinc-800" />
+            </div>
+        </div>
+    );
+}
+
+/**
+ * 4. Developer Console Applications Grid Skeleton
+ */
+export function SkeletonDeveloperAppsGrid({ count = 8, className }: { count?: number; className?: string }) {
+    return (
+        <div className={clsx("grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 xl:gap-5", className)}>
+            {Array.from({ length: count }).map((_, i) => (
+                <SkeletonDeveloperAppCard key={i} />
+            ))}
+        </div>
+    );
+}
+
+/**
+ * 5. Complete Developer Dashboard Skeleton (Full Screen)
+ */
+export function SkeletonDeveloperDashboard() {
+    return (
+        <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 flex transition-colors duration-200">
+            <SkeletonDeveloperSidebar />
+            <div className="flex-1 lg:ml-72 flex flex-col min-h-screen">
+                <SkeletonDeveloperHeader />
+                <main className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto w-full space-y-6 flex-1">
+                    {/* Search & Filter Controls Bar */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 animate-pulse">
+                        <div className="flex-1 h-11 rounded-2xl bg-white dark:bg-[#101012] border border-zinc-200/80 dark:border-white/10 px-4 flex items-center gap-3">
+                            <div className="w-4 h-4 rounded bg-zinc-200 dark:bg-zinc-800" />
+                            <div className="h-3 w-48 bg-zinc-100 dark:bg-zinc-800/60 rounded" />
+                        </div>
+                        <div className="flex items-center gap-1.5 p-1 bg-white dark:bg-[#101012] border border-zinc-200/80 dark:border-white/10 rounded-2xl h-11">
+                            <div className="h-9 w-14 rounded-xl bg-blue-600/30" />
+                            <div className="h-9 w-24 rounded-xl bg-zinc-100 dark:bg-zinc-800" />
+                            <div className="h-9 w-24 rounded-xl bg-zinc-100 dark:bg-zinc-800" />
+                        </div>
+                        <div className="h-11 w-32 rounded-2xl bg-zinc-900/15 dark:bg-white/15" />
+                    </div>
+
+                    {/* Quota / Capacity Banner */}
+                    <div className="rounded-2xl p-4 sm:p-5 border border-amber-500/20 bg-amber-500/5 dark:bg-amber-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-pulse">
+                        <div className="flex items-center gap-3.5">
+                            <div className="w-10 h-10 rounded-xl bg-amber-500/15 shrink-0" />
+                            <div className="space-y-1.5">
+                                <div className="h-4 w-52 bg-zinc-200 dark:bg-zinc-700 rounded-md" />
+                                <div className="h-3 w-72 bg-zinc-100 dark:bg-zinc-800 rounded" />
+                            </div>
+                        </div>
+                        <div className="h-8 w-28 rounded-xl bg-amber-600/30" />
+                    </div>
+
+                    {/* Applications Grid */}
+                    <SkeletonDeveloperAppsGrid count={8} />
+                </main>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * 6. App Detail Screen Skeleton (Full Screen)
+ */
+export function SkeletonAppDetail() {
+    return (
+        <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 flex transition-colors duration-200">
+            <SkeletonDeveloperSidebar />
+            <div className="flex-1 lg:ml-72 flex flex-col min-h-screen">
+                <SkeletonDeveloperHeader />
+                <main className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full space-y-6 flex-1 animate-pulse">
+                    {/* Back Breadcrumb */}
+                    <div className="flex items-center gap-2">
+                        <div className="h-4 w-28 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                    </div>
+
+                    {/* App Summary Header Card */}
+                    <div className="rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#101012] p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+                        <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 rounded-2xl bg-zinc-200 dark:bg-zinc-800 shrink-0" />
+                            <div className="space-y-1.5">
+                                <div className="flex items-center gap-2">
+                                    <div className="h-5 w-40 bg-zinc-200 dark:bg-zinc-800 rounded-lg" />
+                                    <div className="h-4 w-14 rounded-full bg-emerald-100/60 dark:bg-emerald-950/40" />
+                                </div>
+                                <div className="h-3.5 w-64 bg-zinc-100 dark:bg-zinc-800/80 rounded font-mono" />
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="h-9 w-28 rounded-xl bg-zinc-100 dark:bg-zinc-800" />
+                            <div className="h-9 w-28 rounded-xl bg-blue-600/30" />
+                        </div>
+                    </div>
+
+                    {/* Navigation Tabs */}
+                    <div className="flex gap-2 border-b border-zinc-200/80 dark:border-white/10 pb-2 overflow-x-auto">
+                        {['General', 'OAuth Credentials', '180 Pay Gateway', 'Analytics', 'Webhooks'].map((_, idx) => (
+                            <div key={idx} className={clsx("h-8 rounded-xl px-4 flex items-center shrink-0", idx === 0 ? "bg-zinc-200 dark:bg-white/15" : "bg-zinc-100 dark:bg-white/5")}>
+                                <div className="h-3 w-20 bg-zinc-200 dark:bg-zinc-700 rounded" />
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Configuration / Credentials Form Card */}
+                    <div className="rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#101012] p-6 sm:p-8 space-y-6 shadow-xs">
+                        <div className="space-y-1.5 pb-4 border-b border-zinc-100 dark:border-white/5">
+                            <div className="h-5 w-48 bg-zinc-200 dark:bg-zinc-800 rounded-md" />
+                            <div className="h-3 w-80 bg-zinc-100 dark:bg-zinc-800 rounded" />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            <div className="space-y-2">
+                                <div className="h-3 w-24 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                                <div className="h-11 w-full rounded-2xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-white/5" />
+                            </div>
+                            <div className="space-y-2">
+                                <div className="h-3 w-28 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                                <div className="h-11 w-full rounded-2xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-white/5" />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <div className="h-3 w-36 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                            <div className="h-11 w-full rounded-2xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-white/5" />
+                        </div>
+
+                        <div className="pt-4 border-t border-zinc-100 dark:border-white/5 flex justify-end gap-3">
+                            <div className="h-10 w-24 rounded-2xl bg-zinc-100 dark:bg-zinc-800" />
+                            <div className="h-10 w-32 rounded-2xl bg-blue-600/30" />
+                        </div>
+                    </div>
+                </main>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * 7. Profile Overview Dashboard Skeleton
+ */
+export function SkeletonProfileDashboard() {
+    return (
+        <div className="space-y-6 w-full animate-pulse">
+            {/* User Welcome Banner */}
+            <div className="rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-900 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+                <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-full bg-zinc-200 dark:bg-zinc-800 shrink-0" />
+                    <div className="space-y-1.5">
+                        <div className="h-5 w-44 bg-zinc-200 dark:bg-zinc-800 rounded-md" />
+                        <div className="h-3 w-56 bg-zinc-100 dark:bg-zinc-800/70 rounded" />
+                    </div>
+                </div>
+                <div className="h-9 w-32 rounded-xl bg-zinc-100 dark:bg-zinc-800" />
+            </div>
+
+            {/* Wallet & Metrics 3-Card Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+                {[1, 2, 3].map((i) => (
+                    <div key={i} className="rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-900 p-6 space-y-3 shadow-xs">
+                        <div className="flex items-center justify-between">
+                            <div className="h-3 w-28 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                            <div className="w-8 h-8 rounded-xl bg-zinc-100 dark:bg-zinc-800" />
+                        </div>
+                        <div className="h-8 w-36 bg-zinc-200 dark:bg-zinc-700 rounded-lg" />
+                        <div className="h-2.5 w-48 bg-zinc-100 dark:bg-zinc-800 rounded" />
+                    </div>
+                ))}
+            </div>
+
+            {/* 2-Column Split: Activity + Connected Apps */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-900 p-6 space-y-4 shadow-xs">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
+                        <div className="h-4 w-36 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                        <div className="h-3 w-16 bg-zinc-100 dark:bg-zinc-800 rounded" />
+                    </div>
+                    {[1, 2, 3, 4].map((j) => (
+                        <div key={j} className="flex items-center justify-between p-3 rounded-2xl bg-slate-50/60 dark:bg-zinc-800/40">
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-zinc-200 dark:bg-zinc-700 shrink-0" />
+                                <div className="space-y-1">
+                                    <div className="h-3.5 w-32 bg-zinc-200 dark:bg-zinc-700 rounded" />
+                                    <div className="h-2.5 w-20 bg-zinc-100 dark:bg-zinc-800 rounded" />
+                                </div>
+                            </div>
+                            <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-700 rounded" />
+                        </div>
+                    ))}
+                </div>
+
+                <div className="rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-900 p-6 space-y-4 shadow-xs">
+                    <div className="h-4 w-32 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                    <div className="space-y-3 pt-2">
+                        {[1, 2, 3].map((k) => (
+                            <div key={k} className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50/60 dark:bg-zinc-800/40">
+                                <div className="w-8 h-8 rounded-xl bg-zinc-200 dark:bg-zinc-700 shrink-0" />
+                                <div className="space-y-1 flex-1">
+                                    <div className="h-3 w-24 bg-zinc-200 dark:bg-zinc-700 rounded" />
+                                    <div className="h-2 w-16 bg-zinc-100 dark:bg-zinc-800 rounded" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * 8. Transactions Ledger Screen Skeleton
+ */
+export function SkeletonTransactionsLedger() {
+    return (
+        <div className="space-y-6 w-full animate-pulse">
+            {/* Top Balance & Top-Up Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+                <div className="lg:col-span-1 rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-900 p-6 flex flex-col justify-between shadow-xs space-y-6">
+                    <div>
+                        <div className="flex items-center justify-between">
+                            <div className="h-3 w-36 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                            <div className="h-4 w-14 rounded-full bg-emerald-100/60 dark:bg-emerald-950/40" />
+                        </div>
+                        <div className="h-9 w-40 bg-zinc-200 dark:bg-zinc-700 rounded-lg mt-4" />
+                        <div className="h-3 w-48 bg-zinc-100 dark:bg-zinc-800 rounded mt-2" />
+                    </div>
+                    <div className="flex gap-2">
+                        <div className="h-9 flex-1 rounded-xl bg-blue-600/30" />
+                        <div className="h-9 flex-1 rounded-xl bg-zinc-100 dark:bg-zinc-800" />
+                    </div>
+                </div>
+
+                <div className="lg:col-span-2 rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-900 p-6 space-y-4 shadow-xs">
+                    <div className="h-4 w-40 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2">
+                        {[1, 2, 3, 4].map((i) => (
+                            <div key={i} className="h-10 rounded-xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-100 dark:border-zinc-800" />
+                        ))}
+                    </div>
+                    <div className="h-11 w-full rounded-2xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-100 dark:border-zinc-800" />
+                </div>
+            </div>
+
+            {/* Filter Toolbar */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <div className="h-11 flex-1 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-white/10" />
+                <div className="flex gap-2">
+                    <div className="h-11 w-32 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-white/10" />
+                    <div className="h-11 w-28 rounded-2xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-white/10" />
+                </div>
+            </div>
+
+            {/* Ledger Table */}
+            <div className="rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-900 overflow-hidden shadow-xs">
+                <div className="p-4 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between">
+                    <div className="h-4 w-32 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                    <div className="h-3 w-20 bg-zinc-100 dark:bg-zinc-800 rounded" />
+                </div>
+                <div className="divide-y divide-slate-100 dark:divide-zinc-800">
+                    {[1, 2, 3, 4, 5, 6].map((row) => (
+                        <div key={row} className="p-4 flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-zinc-800 shrink-0" />
+                                <div className="space-y-1">
+                                    <div className="h-3.5 w-36 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                                    <div className="h-2.5 w-24 bg-zinc-100 dark:bg-zinc-800 rounded font-mono" />
+                                </div>
+                            </div>
+                            <div className="hidden sm:block h-3 w-24 bg-zinc-100 dark:bg-zinc-800 rounded" />
+                            <div className="h-4 w-16 rounded-full bg-zinc-100 dark:bg-zinc-800" />
+                            <div className="h-4 w-20 bg-zinc-200 dark:bg-zinc-700 rounded text-right" />
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * 9. Connected Apps Screen Skeleton
+ */
+export function SkeletonConnectedApps() {
+    return (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-8 w-full animate-pulse">
+            <div className="lg:col-span-2 space-y-4">
+                {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-white/10 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex items-start gap-4">
+                            <div className="w-12 h-12 rounded-2xl bg-zinc-200 dark:bg-zinc-800 shrink-0" />
+                            <div className="space-y-1.5">
+                                <div className="flex items-center gap-2">
+                                    <div className="h-4 w-32 bg-zinc-200 dark:bg-zinc-800 rounded-md" />
+                                    <div className="h-3.5 w-14 rounded-full bg-blue-100/60 dark:bg-blue-950/40" />
+                                </div>
+                                <div className="h-3 w-48 bg-zinc-100 dark:bg-zinc-800 rounded" />
+                                <div className="flex gap-1.5 pt-1">
+                                    <div className="h-3.5 w-16 rounded-md bg-zinc-100 dark:bg-zinc-800" />
+                                    <div className="h-3.5 w-20 rounded-md bg-zinc-100 dark:bg-zinc-800" />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="h-9 w-24 rounded-xl bg-zinc-100 dark:bg-zinc-800 shrink-0" />
+                    </div>
+                ))}
+            </div>
+
+            <div className="space-y-4">
+                <div className="p-6 rounded-3xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-white/10 space-y-4 shadow-xs">
+                    <div className="w-10 h-10 rounded-2xl bg-blue-100 dark:bg-blue-950/50" />
+                    <div className="space-y-1">
+                        <div className="h-4 w-32 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                        <div className="h-3 w-full bg-zinc-100 dark:bg-zinc-800 rounded" />
+                    </div>
+                    <div className="h-9 w-full rounded-xl bg-zinc-100 dark:bg-zinc-800" />
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * 10. Profile Settings Screen Skeleton
+ */
+export function SkeletonProfileSettings() {
+    return (
+        <div className="max-w-4xl mx-auto space-y-6 w-full animate-pulse">
+            <div className="p-6 rounded-3xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-white/10 shadow-xs flex items-center gap-5">
+                <div className="w-20 h-20 rounded-full bg-zinc-200 dark:bg-zinc-800 shrink-0" />
+                <div className="space-y-2">
+                    <div className="h-5 w-40 bg-zinc-200 dark:bg-zinc-800 rounded-md" />
+                    <div className="h-3 w-56 bg-zinc-100 dark:bg-zinc-800 rounded" />
+                    <div className="h-8 w-28 rounded-xl bg-zinc-100 dark:bg-zinc-800" />
+                </div>
+            </div>
+
+            <div className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-white/10 space-y-5 shadow-xs">
+                <div className="h-4 w-36 bg-zinc-200 dark:bg-zinc-800 rounded pb-2 border-b border-slate-100 dark:border-zinc-800" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="space-y-1.5">
+                            <div className="h-3 w-20 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                            <div className="h-11 w-full rounded-2xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200 dark:border-zinc-800" />
+                        </div>
+                    ))}
+                </div>
+                <div className="pt-4 border-t border-slate-100 dark:border-zinc-800 flex justify-end">
+                    <div className="h-10 w-32 rounded-2xl bg-blue-600/30" />
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * 11. 180 Pay Escrow Checkout Skeleton
+ */
+export function SkeletonCheckout() {
+    return (
+        <div className="max-w-md mx-auto p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#101012] border border-zinc-200/80 dark:border-white/10 shadow-2xl space-y-6 animate-pulse">
+            {/* Merchant Header */}
+            <div className="flex items-center gap-3 pb-4 border-b border-zinc-100 dark:border-white/5">
+                <div className="w-12 h-12 rounded-2xl bg-zinc-200 dark:bg-zinc-800 shrink-0" />
+                <div className="space-y-1 flex-1">
+                    <div className="h-4 w-32 bg-zinc-200 dark:bg-zinc-800 rounded-md" />
+                    <div className="h-3 w-40 bg-zinc-100 dark:bg-zinc-800/80 rounded" />
+                </div>
+                <div className="h-5 w-16 rounded-full bg-emerald-100/60 dark:bg-emerald-950/40" />
+            </div>
+
+            {/* Order Summary */}
+            <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200/60 dark:border-white/5 space-y-3">
+                <div className="flex justify-between items-center">
+                    <div className="h-3.5 w-24 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                    <div className="h-4 w-16 bg-zinc-200 dark:bg-zinc-700 rounded" />
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                    <div className="h-2.5 w-16 bg-zinc-100 dark:bg-zinc-800 rounded" />
+                    <div className="h-2.5 w-12 bg-zinc-100 dark:bg-zinc-800 rounded" />
+                </div>
+            </div>
+
+            {/* Coupon Code Input */}
+            <div className="flex gap-2">
+                <div className="h-11 flex-1 rounded-2xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-white/5" />
+                <div className="h-11 w-20 rounded-2xl bg-zinc-200 dark:bg-zinc-800" />
+            </div>
+
+            {/* Payment Method Tabs */}
+            <div className="grid grid-cols-3 gap-2">
+                {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-white/5" />
+                ))}
+            </div>
+
+            {/* Pay Button */}
+            <div className="h-12 w-full rounded-2xl bg-blue-600/40 flex items-center justify-center" />
+
+            {/* Escrow Guarantee Footer */}
+            <div className="flex items-center justify-center gap-2 pt-2">
+                <div className="w-3.5 h-3.5 rounded-full bg-zinc-200 dark:bg-zinc-800" />
+                <div className="h-2.5 w-48 bg-zinc-100 dark:bg-zinc-800 rounded" />
+            </div>
+        </div>
+    );
+}
+
+/**
+ * 12. Billing & Subscriptions Screen Skeleton
+ */
+export function SkeletonBilling() {
+    return (
+        <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 flex transition-colors duration-200">
+            <SkeletonDeveloperSidebar />
+            <div className="flex-1 lg:ml-72 flex flex-col min-h-screen">
+                <SkeletonDeveloperHeader />
+                <main className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full space-y-8 flex-1 animate-pulse">
+                    <div className="space-y-2">
+                        <div className="h-6 w-48 bg-zinc-200 dark:bg-zinc-800 rounded-lg" />
+                        <div className="h-3.5 w-80 bg-zinc-100 dark:bg-zinc-800 rounded" />
+                    </div>
+
+                    {/* 3 Tier Pricing Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {[1, 2, 3].map((i) => (
+                            <div key={i} className="rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#101012] p-6 space-y-5 shadow-xs">
+                                <div className="h-4 w-20 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                                <div className="h-8 w-28 bg-zinc-300 dark:bg-zinc-700 rounded-lg" />
+                                <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-white/5">
+                                    {[1, 2, 3, 4].map((j) => (
+                                        <div key={j} className="h-3 w-full bg-zinc-100 dark:bg-zinc-800 rounded" />
+                                    ))}
+                                </div>
+                                <div className="h-10 w-full rounded-2xl bg-zinc-900/15 dark:bg-white/15" />
+                            </div>
+                        ))}
+                    </div>
+                </main>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * 13. API Playground Screen Skeleton
+ */
+export function SkeletonApiPlayground() {
+    return (
+        <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 flex transition-colors duration-200">
+            <SkeletonDeveloperSidebar />
+            <div className="flex-1 lg:ml-72 flex flex-col min-h-screen">
+                <SkeletonDeveloperHeader />
+                <main className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6 flex-1 animate-pulse">
+                    <div className="h-5 w-44 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Request Builder */}
+                        <div className="rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#101012] p-6 space-y-4">
+                            <div className="flex gap-2">
+                                <div className="h-11 w-24 rounded-2xl bg-zinc-200 dark:bg-zinc-800" />
+                                <div className="h-11 flex-1 rounded-2xl bg-zinc-100 dark:bg-zinc-900" />
+                                <div className="h-11 w-20 rounded-2xl bg-blue-600/30" />
+                            </div>
+                            <div className="h-48 w-full rounded-2xl bg-zinc-50 dark:bg-zinc-900" />
+                        </div>
+                        {/* Response Inspector */}
+                        <div className="rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#101012] p-6 space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div className="h-4 w-28 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                                <div className="h-4 w-16 rounded-full bg-emerald-100/60 dark:bg-emerald-950/40" />
+                            </div>
+                            <div className="h-56 w-full rounded-2xl bg-zinc-50 dark:bg-zinc-900" />
+                        </div>
+                    </div>
+                </main>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * 14. Webhook Simulator Screen Skeleton
+ */
+export function SkeletonWebhookSimulator() {
+    return (
+        <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 flex transition-colors duration-200">
+            <SkeletonDeveloperSidebar />
+            <div className="flex-1 lg:ml-72 flex flex-col min-h-screen">
+                <SkeletonDeveloperHeader />
+                <main className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto w-full space-y-6 flex-1 animate-pulse">
+                    <div className="h-5 w-48 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                    <div className="rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#101012] p-6 space-y-4">
+                        <div className="space-y-2">
+                            <div className="h-3 w-32 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                            <div className="h-11 w-full rounded-2xl bg-zinc-100 dark:bg-zinc-900" />
+                        </div>
+                        <div className="flex gap-2">
+                            {[1, 2, 3].map((i) => (
+                                <div key={i} className="h-8 w-28 rounded-xl bg-zinc-100 dark:bg-zinc-800" />
+                            ))}
+                        </div>
+                        <div className="h-40 w-full rounded-2xl bg-zinc-50 dark:bg-zinc-900" />
+                        <div className="h-10 w-36 rounded-2xl bg-blue-600/30" />
+                    </div>
+                </main>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Automatically detects the appropriate screen skeleton based on current pathname and hostname.
+ */
+export function detectScreenFromPath(pathname?: string, hostname?: string): ScreenType {
+    let path = pathname;
+    let host = hostname;
+    if (typeof window !== 'undefined') {
+        if (!path) path = window.location.pathname;
+        if (!host) host = window.location.host;
+    }
+    if (!path) return 'developer-dashboard';
+
+    const p = path.toLowerCase();
+    const h = (host || '').toLowerCase();
+
+    if (p.includes('/checkout')) return 'checkout';
+    if (p.includes('/transactions')) return 'profile-transactions';
+    if (p.includes('/connected-apps')) return 'connected-apps';
+    if (p.includes('/profile') || p.includes('/settings')) return 'profile-settings';
+    if (p.includes('/billing')) return 'billing';
+    if (p.startsWith('/apps/') && p.length > 6) return 'app-detail';
+    if (p.includes('/playground')) return 'api-playground';
+    if (p.includes('/webhooks')) return 'webhooks';
+    if (p.includes('/dashboard') || p === '/apps') {
+        if (h.includes('3008') || h.includes('developer') || p.includes('dashboard')) {
+            return 'developer-dashboard';
+        }
+        return 'profile-overview';
+    }
+    if (h.includes('3009') || h.includes('profile')) {
+        return 'profile-overview';
+    }
+    return 'developer-dashboard';
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * 18. Universal & Adaptive Compound Dispatcher
+ * ───────────────────────────────────────────────────────────── */
+export type ScreenType =
+    | 'auto'
+    | 'developer-dashboard'
+    | 'app-detail'
+    | 'api-playground'
+    | 'webhooks'
+    | 'billing'
+    | 'profile-overview'
+    | 'profile-transactions'
+    | 'connected-apps'
+    | 'profile-settings'
+    | 'checkout';
+
 export type SkeletonType =
     | 'financial'
     | 'focus_stream'
     | 'metrics'
+    | 'metric_card'
+    | 'stats_card'
     | 'kanban'
     | 'projects'
     | 'table'
@@ -800,7 +1501,16 @@ export type SkeletonType =
     | 'tree'
     | 'workspace'
     | 'card'
-    | 'chart';
+    | 'chart'
+    | 'app_card'
+    | 'developer_app_card'
+    | 'apps_grid'
+    | 'developer_apps_grid'
+    | 'developer_sidebar'
+    | 'developer_header'
+    | 'wallet_card'
+    | 'transaction_row'
+    | 'checkout_card';
 
 export interface CompoundLayoutConfig {
     header?: boolean | { title?: string; search?: boolean; actions?: number };
@@ -811,6 +1521,7 @@ export interface CompoundLayoutConfig {
 }
 
 export interface UniversalSkeletonProps {
+    screen?: ScreenType;
     type?: SkeletonType;
     count?: number;
     columns?: number;
@@ -822,9 +1533,11 @@ export interface UniversalSkeletonProps {
 
 /**
  * Universal adaptive skeleton component. One single centralized tag for all platform loading states!
+ * Automatically maps to the exact UI of the active screen, or renders specific mapped components.
  */
 export function UniversalSkeleton({
-    type = 'card',
+    screen,
+    type,
     count = 3,
     columns = 4,
     rows = 5,
@@ -832,7 +1545,7 @@ export function UniversalSkeleton({
     layout,
     className,
 }: UniversalSkeletonProps) {
-    // If a compound layout object is provided, compose dynamically
+    // 1. If a compound layout object is provided, compose dynamically
     if (layout) {
         return (
             <div className={clsx('space-y-6 w-full animate-pulse', className)}>
@@ -876,13 +1589,83 @@ export function UniversalSkeleton({
         );
     }
 
+    // 2. Check if a screen is explicitly requested OR if no type is given (automatic screen adaptation!)
+    if (screen || (!type && !layout)) {
+        const targetScreen = screen && screen !== 'auto' ? screen : detectScreenFromPath();
+        switch (targetScreen) {
+            case 'developer-dashboard':
+                return <SkeletonDeveloperDashboard />;
+            case 'app-detail':
+                return <SkeletonAppDetail />;
+            case 'api-playground':
+                return <SkeletonApiPlayground />;
+            case 'webhooks':
+                return <SkeletonWebhookSimulator />;
+            case 'billing':
+                return <SkeletonBilling />;
+            case 'profile-overview':
+                return <SkeletonProfileDashboard />;
+            case 'profile-transactions':
+                return <SkeletonTransactionsLedger />;
+            case 'connected-apps':
+                return <SkeletonConnectedApps />;
+            case 'profile-settings':
+                return <SkeletonProfileSettings />;
+            case 'checkout':
+                return <SkeletonCheckout />;
+            default:
+                return <SkeletonDeveloperDashboard />;
+        }
+    }
+
+    // 3. Component-level type mapping
     switch (type) {
+        case 'app_card':
+        case 'developer_app_card':
+            return <SkeletonDeveloperAppCard className={className} />;
+        case 'apps_grid':
+        case 'developer_apps_grid':
+            return <SkeletonDeveloperAppsGrid count={count || 8} className={className} />;
+        case 'developer_sidebar':
+            return <SkeletonDeveloperSidebar className={className} />;
+        case 'developer_header':
+            return <SkeletonDeveloperHeader className={className} />;
+        case 'metric_card':
+        case 'stats_card':
+            return <SkeletonStatsCard />;
+        case 'metrics':
+            if (count === 1 || columns === 1) {
+                return <SkeletonStatsCard />;
+            }
+            return <SkeletonMetricGrid count={count} columns={columns as any} />;
+        case 'checkout_card':
+            return <SkeletonCheckout />;
+        case 'wallet_card':
+            return (
+                <div className={clsx("rounded-3xl border border-slate-200 dark:border-white/10 bg-white dark:bg-zinc-900 p-6 space-y-4 shadow-xs animate-pulse", className)}>
+                    <div className="h-3 w-28 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                    <div className="h-8 w-36 bg-zinc-200 dark:bg-zinc-700 rounded-lg" />
+                    <div className="h-2.5 w-48 bg-zinc-100 dark:bg-zinc-800 rounded" />
+                </div>
+            );
+        case 'transaction_row':
+            return (
+                <div className={clsx("p-4 flex items-center justify-between gap-4 animate-pulse", className)}>
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-zinc-800 shrink-0" />
+                        <div className="space-y-1">
+                            <div className="h-3.5 w-36 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                            <div className="h-2.5 w-24 bg-zinc-100 dark:bg-zinc-800 rounded font-mono" />
+                        </div>
+                    </div>
+                    <div className="h-4 w-16 rounded-full bg-zinc-100 dark:bg-zinc-800" />
+                    <div className="h-4 w-20 bg-zinc-200 dark:bg-zinc-700 rounded text-right" />
+                </div>
+            );
         case 'financial':
             return <SkeletonFinancialTrajectory />;
         case 'focus_stream':
             return <SkeletonFocusStream count={count} />;
-        case 'metrics':
-            return <SkeletonMetricGrid count={count} columns={columns as any} />;
         case 'kanban':
             return <SkeletonKanbanBoard columns={columns} />;
         case 'projects':
@@ -918,7 +1701,7 @@ export function UniversalSkeleton({
 }
 
 /**
- * Alias for UniversalSkeleton
+ * Universal Adaptive Skeleton alias
  */
 export const AdaptiveSkeleton = UniversalSkeleton;
 

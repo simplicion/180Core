@@ -302,7 +302,7 @@ export function IdentityAppDetail({
             <div className="p-6 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/5 text-center space-y-2">
               <p className="text-xs text-zinc-500">No users have signed into this app yet.</p>
               <p className="text-[11px] text-purple-600 dark:text-purple-400 font-medium">
-                Embed the &lt;OneEightyAuthButton /&gt; or identity SDK to start authenticating users.
+                Embed the &lt;OneEightyIdentityButton /&gt; or identity SDK to start authenticating users.
               </p>
             </div>
           )}

@@ -14,6 +14,7 @@ import toast from 'react-hot-toast';
 import { getDocsUrl, DOCS_LINKS } from '@/lib/docs-url';
 import {
   UniversalSkeleton,
+  AdaptiveSkeleton,
 } from '@workspace/ui';
 import { OneEightyIdentity, OneEightyPay } from '@workspace/identity-sdk';
 import {
@@ -28,6 +29,8 @@ import {
 import DeveloperSidebar from '@/components/layout/DeveloperSidebar';
 import DeveloperHeader from '@/components/layout/DeveloperHeader';
 import { purgeAuthSession } from '@/lib/auth';
+import { useProject } from '@/context/ProjectContext';
+import { invalidateCache } from '@/lib/cache';
 
 interface AppDetailClientProps {
   initialView?: 'overview' | 'identity' | 'pay';
@@ -57,8 +60,35 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
     }
   }, [params?.id]);
 
-  const [app, setApp] = useState<DeveloperAppDetail | null>(null);
-  const [loading, setLoading] = useState(true);
+  const {
+    project,
+    loading: projectLoading,
+    refreshProject,
+    allProjects: apps,
+    userProfile,
+    isSidebarExpanded,
+    setIsSidebarExpanded,
+    copiedKey,
+    copyToClipboard,
+    authLogs,
+    loadingAuthLogs,
+    fetchAuthLogs,
+    handleRevokeUserSession,
+    revokingUserId,
+    paymentAnalytics,
+    loadingAnalytics,
+    fetchPaymentAnalytics,
+    payoutBalance,
+    payoutHistory: payouts,
+    loadingPayoutHistory,
+    fetchPayoutHistory,
+    bankDetails,
+    setBankDetails,
+    fetchBankDetails,
+  } = useProject();
+
+  const app = project;
+  const loading = projectLoading && !app;
   const [saving, setSaving] = useState(false);
 
   // Sub-view navigation: overview shows app cards, identity/pay have dedicated sub-pages with sidebars
@@ -76,9 +106,6 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
     initialView || 'overview'
   );
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
-  const [apps, setApps] = useState<any[]>([]);
-  const [userProfile, setUserProfile] = useState<any>(null);
   const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
 
   const navigateView = (view: 'overview' | 'identity' | 'pay') => {
@@ -137,11 +164,7 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isRevoking, setIsRevoking] = useState(false);
 
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
-
-  // Payout states
-  const [payoutBalance, setPayoutBalance] = useState<number>(0);
-  const [payouts, setPayouts] = useState<any[]>([]);
+  // Payout Modal States
   const [showPayoutModal, setShowPayoutModal] = useState(false);
   const [payoutAmount, setPayoutAmount] = useState('');
   const [payoutMethod, setPayoutMethod] = useState<'UPI' | 'BANK_TRANSFER'>('UPI');
@@ -151,34 +174,54 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
   const [bankHolder, setBankHolder] = useState('');
   const [isRequestingPayout, setIsRequestingPayout] = useState(false);
 
-  // Real-Time Auth Logs & Live Users Telemetry
-  const [authLogs, setAuthLogs] = useState<{ logs: any[]; totalUsers: number; activeSessionsCount: number } | null>(null);
-  const [loadingAuthLogs, setLoadingAuthLogs] = useState(false);
-  const [revokingUserId, setRevokingUserId] = useState<string | null>(null);
-
-  // Financial Analytics & Transactions Ledger
-  const [paymentAnalytics, setPaymentAnalytics] = useState<{
-    grossVolume: number;
-    thisMonthVolume: number;
-    lastMonthVolume: number;
-    pendingSettlements: number;
-    withdrawableBalance: number;
-    currency: string;
-    totalTransactionsCount: number;
-    transactions: any[];
-  } | null>(null);
-  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
-
   // Settlement Bank Details State
-  const [bankDetails, setBankDetails] = useState<{
-    accountHolderName?: string;
-    accountNumber?: string;
-    ifscCode?: string;
-    bankName?: string;
-    upiId?: string;
-  } | null>(null);
   const [showBankModal, setShowBankModal] = useState(false);
   const [savingBank, setSavingBank] = useState(false);
+
+  // Synchronize form values when project changes
+  useEffect(() => {
+    if (project) {
+      setName(project.name || '');
+      setDescription(project.description || '');
+      setLogoUrl(project.logoUrl || '');
+      setRedirectUrisInput((project.redirectUris || []).join('\n'));
+      setAllowedOriginsInput((project.allowedOrigins || []).join('\n'));
+      setAllowedScopes(project.allowedScopes || []);
+      setEnableAuth(project.enableAuth ?? true);
+      setEnablePay(project.enablePay ?? true);
+      setWebhookUrl(project.webhookUrl || '');
+      setWebhookSecret(project.webhookSecret || '');
+      setAuthUxModes(project.authUxModes || ['popup']);
+      setPayUxModes(project.payUxModes || ['bottom_sheet']);
+      setAuthDesktopDefault(project.authDesktopDefault || 'popup');
+      setAuthMobileDefault(project.authMobileDefault || 'bottom_sheet');
+      setPayDesktopDefault(project.payDesktopDefault || 'bottom_sheet');
+      setPayMobileDefault(project.payMobileDefault || 'bottom_sheet');
+      setAccessTokenTtl(project.accessTokenTtl || 900);
+      setRefreshTokenDays(project.refreshTokenDays || 7);
+    }
+  }, [project]);
+
+  // Synchronize bank detail input fields
+  useEffect(() => {
+    if (bankDetails) {
+      if (bankDetails.accountHolderName) setBankHolder(bankDetails.accountHolderName);
+      if (bankDetails.accountNumber) setBankAccNumber(bankDetails.accountNumber);
+      if (bankDetails.ifscCode) setBankIfsc(bankDetails.ifscCode);
+      if (bankDetails.upiId) setUpiId(bankDetails.upiId);
+    }
+  }, [bankDetails]);
+
+  // Lazy-load sub-tab telemetry only when tab is active (with SWR/TTL caching)
+  useEffect(() => {
+    if (activeView === 'identity' && appId && appId !== 'default') {
+      fetchAuthLogs();
+    } else if (activeView === 'pay' && appId && appId !== 'default') {
+      fetchPaymentAnalytics();
+      fetchPayoutHistory();
+      fetchBankDetails();
+    }
+  }, [activeView, appId, fetchAuthLogs, fetchPaymentAnalytics, fetchPayoutHistory, fetchBankDetails]);
 
   // Payment Transactions Search & Filtering
   const [txSearchQuery, setTxSearchQuery] = useState('');
@@ -212,63 +255,6 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
     }
   };
 
-  const fetchAuthLogs = async () => {
-    setLoadingAuthLogs(true);
-    try {
-      const token = localStorage.getItem('platform_auth_token');
-      const apiBase = getApiBase();
-      const res = await fetchWithTimeout(`${apiBase}/api/v1/developer/apps/${appId}/auth-logs`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res && res.ok) {
-        const data = await res.json();
-        if (data.success) setAuthLogs(data.data);
-      }
-    } catch (_) {}
-    finally { setLoadingAuthLogs(false); }
-  };
-
-  const fetchPaymentAnalytics = async () => {
-    setLoadingAnalytics(true);
-    try {
-      const token = localStorage.getItem('platform_auth_token');
-      const apiBase = getApiBase();
-      const res = await fetchWithTimeout(`${apiBase}/api/v1/developer/apps/${appId}/payment-analytics`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res && res.ok) {
-        const data = await res.json();
-        if (data.success) {
-          setPaymentAnalytics(data.data);
-          if (data.data.withdrawableBalance !== undefined) {
-            setPayoutBalance(data.data.withdrawableBalance);
-          }
-        }
-      }
-    } catch (_) {}
-    finally { setLoadingAnalytics(false); }
-  };
-
-  const fetchBankDetails = async () => {
-    try {
-      const token = localStorage.getItem('platform_auth_token');
-      const apiBase = getApiBase();
-      const res = await fetchWithTimeout(`${apiBase}/api/v1/developer/apps/${appId}/bank-details`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res && res.ok) {
-        const data = await res.json();
-        if (data.success && data.data) {
-          setBankDetails(data.data);
-          if (data.data.accountHolderName) setBankHolder(data.data.accountHolderName);
-          if (data.data.accountNumber) setBankAccNumber(data.data.accountNumber);
-          if (data.data.ifscCode) setBankIfsc(data.data.ifscCode);
-          if (data.data.upiId) setUpiId(data.data.upiId);
-        }
-      }
-    } catch (_) {}
-  };
-
   const handleSaveBankDetails = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!bankHolder || (!bankAccNumber && !upiId)) {
@@ -296,6 +282,7 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
       if (!res.ok || !data.success) throw new Error(data.error || 'Failed to save bank details');
       toast.success('Settlement bank account saved successfully!');
       setBankDetails(data.data);
+      invalidateCache(`bank_details_${appId}`);
       setShowBankModal(false);
     } catch (err: any) {
       toast.error(err.message || 'Error saving bank details');
@@ -320,29 +307,6 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
       setBankIfsc(bankDetails.ifscCode || '');
     }
     setShowPayoutModal(true);
-  };
-
-  const handleRevokeUserSession = async (targetUserId: string, userName: string) => {
-    if (!confirm(`Revoke active token session for ${userName}? The user will be required to re-authenticate with 180 Identity.`)) {
-      return;
-    }
-    setRevokingUserId(targetUserId);
-    try {
-      const token = localStorage.getItem('platform_auth_token');
-      const apiBase = getApiBase();
-      const res = await fetch(`${apiBase}/api/v1/developer/apps/${appId}/users/${targetUserId}/revoke`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to revoke user session');
-      toast.success(`Session for ${userName} has been terminated`);
-      fetchAuthLogs();
-    } catch (err: any) {
-      toast.error(err.message || 'Error revoking session');
-    } finally {
-      setRevokingUserId(null);
-    }
   };
 
   const fetchAdminPayoutsAndAnalytics = async () => {
@@ -427,78 +391,6 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
     });
   };
 
-  useEffect(() => {
-    if (appId && appId !== 'default') {
-      fetchAppDetails();
-      fetchPayouts();
-      fetchAuthLogs();
-      fetchPaymentAnalytics();
-      fetchBankDetails();
-    }
-  }, [appId]);
-
-  useEffect(() => {
-    const fetchAllAppsAndProfile = async () => {
-      try {
-        const token = localStorage.getItem('platform_auth_token');
-        if (!token) return;
-        const apiBase = getApiBase();
-
-        const cachedUser = localStorage.getItem('user');
-        if (cachedUser) {
-          try {
-            setUserProfile(JSON.parse(cachedUser));
-          } catch (_) {}
-        }
-
-        let listRes = await fetchWithTimeout(`${apiBase}/api/v1/identity/developer/apps`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!listRes || !listRes.ok) {
-          listRes = await fetchWithTimeout(`${apiBase}/api/oauth/developer/apps`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-        }
-        if (listRes && listRes.ok) {
-          const listData = await listRes.json();
-          const parsed = (listData.apps || listData || []).map((a: any) => ({
-            id: a.id,
-            name: a.name,
-            clientId: a.clientId,
-            logoUrl: a.logoUrl,
-            enableAuth: a.enableAuth ?? true,
-            enablePay: a.enablePay ?? true,
-          }));
-          setApps(parsed);
-        }
-      } catch (_) {}
-    };
-
-    fetchAllAppsAndProfile();
-  }, []);
-
-  const fetchPayouts = async () => {
-    try {
-      const token = localStorage.getItem('platform_auth_token');
-      const apiBase = getApiBase();
-      let res = await fetchWithTimeout(`${apiBase}/api/v1/identity/developer/apps/${appId}/payouts`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res || !res.ok) {
-        res = await fetchWithTimeout(`${apiBase}/api/oauth/developer/apps/${appId}/payouts`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      }
-      if (res && res.ok) {
-        const data = await res.json();
-        if (data.success) {
-          setPayoutBalance(data.data.availableBalance || 0);
-          setPayouts(data.data.payouts || []);
-        }
-      }
-    } catch (e) {}
-  };
-
   const handleRequestPayout = async (e: React.FormEvent) => {
     e.preventDefault();
     const amountNum = parseFloat(payoutAmount);
@@ -537,67 +429,15 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
       toast.success('Payout request submitted for review!');
       setShowPayoutModal(false);
       setPayoutAmount('');
-      fetchPayouts();
+      invalidateCache(`payouts_${appId}`);
+      invalidateCache(`payment_analytics_${appId}`);
+      fetchPayoutHistory();
+      fetchPaymentAnalytics();
     } catch (err: any) {
       toast.error(err.message || 'Payout request failed');
     } finally {
       setIsRequestingPayout(false);
     }
-  };
-
-  const fetchAppDetails = async () => {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('platform_auth_token');
-      const apiBase = getApiBase();
-
-      let res = await fetch(`${apiBase}/api/v1/identity/developer/apps/${appId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!res.ok) {
-        res = await fetch(`${apiBase}/api/oauth/developer/apps/${appId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      }
-
-      if (!res.ok) {
-        throw new Error('Failed to load application details');
-      }
-
-      const data = await res.json();
-      const appData = data.app;
-      setApp(appData);
-      setName(appData.name);
-      setDescription(appData.description || '');
-      setLogoUrl(appData.logoUrl || '');
-      setRedirectUrisInput((appData.redirectUris || []).join('\n'));
-      setAllowedOriginsInput((appData.allowedOrigins || []).join('\n'));
-      setAllowedScopes(appData.allowedScopes || []);
-      setEnableAuth(appData.enableAuth ?? true);
-      setEnablePay(appData.enablePay ?? true);
-      setWebhookUrl(appData.webhookUrl || '');
-      setWebhookSecret(appData.webhookSecret || '');
-      setAuthUxModes(appData.authUxModes || ['popup']);
-      setPayUxModes(appData.payUxModes || ['bottom_sheet']);
-      setAuthDesktopDefault(appData.authDesktopDefault || 'popup');
-      setAuthMobileDefault(appData.authMobileDefault || 'bottom_sheet');
-      setPayDesktopDefault(appData.payDesktopDefault || 'bottom_sheet');
-      setPayMobileDefault(appData.payMobileDefault || 'bottom_sheet');
-      setAccessTokenTtl(appData.accessTokenTtl || 900);
-      setRefreshTokenDays(appData.refreshTokenDays || 7);
-    } catch (err: any) {
-      toast.error(err.message || 'Error loading application');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const copyToClipboard = (text: string, key: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKey(key);
-    toast.success('Copied to clipboard');
-    setTimeout(() => setCopiedKey(null), 2000);
   };
 
   const handleSaveChanges = async (e?: React.FormEvent | React.SyntheticEvent) => {
@@ -697,8 +537,10 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
         throw new Error(data.message || data.error || 'Failed to save settings');
       }
 
+      invalidateCache(`app_${appId}`);
+      invalidateCache('user_profile_and_projects');
       toast.success('Configuration saved successfully');
-      fetchAppDetails();
+      refreshProject();
     } catch (err: any) {
       toast.error(err.message || 'Error updating settings');
     } finally {
@@ -795,7 +637,8 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
       setNewSecretRevealed(data.clientSecret);
       setSecretCopied(false);
       setHasAcknowledgedSecret(false);
-      fetchAppDetails();
+      invalidateCache(`app_${appId}`);
+      refreshProject();
     } catch (err: any) {
       toast.error(err.message || 'Rotation failed');
     } finally {
@@ -867,39 +710,7 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 flex transition-colors duration-200">
-        <DeveloperSidebar
-          activeTab="apps"
-          onTabChange={(tab) => router.push(`/dashboard?tab=${tab}`)}
-          isMobileOpen={false}
-          onMobileClose={() => {}}
-          appCount={apps.length || 1}
-          apps={apps}
-          currentAppId={appId}
-          onExpandChange={setIsSidebarExpanded}
-          userProfile={userProfile}
-          onSignOut={() => {
-            purgeAuthSession();
-            router.push('/dashboard');
-          }}
-        />
-        <div
-          className={`flex-1 ${
-            isSidebarExpanded
-              ? 'lg:ml-[280px] lg:w-[calc(100%-280px)]'
-              : 'lg:ml-[80px] lg:w-[calc(100%-80px)]'
-          } flex flex-col min-h-screen transition-all duration-300 ease-in-out`}
-        >
-          <div className="p-8 max-w-5xl mx-auto w-full space-y-6">
-            <div className="h-8 w-48 bg-zinc-200 dark:bg-zinc-800 rounded-xl animate-pulse" />
-            <div className="rounded-3xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950 p-6 shadow-sm">
-              <UniversalSkeleton type="form" />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return <AdaptiveSkeleton screen="app-detail" />;
   }
 
   if (!app) {
@@ -1146,7 +957,7 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
           payoutBalance={payoutBalance}
           payoutHistory={payouts}
           loadingPayoutHistory={false}
-          fetchPayoutHistory={fetchPayouts}
+          fetchPayoutHistory={fetchPayoutHistory}
           bankDetails={bankDetails}
           onRequestPayoutClick={handleOpenPayoutModal}
           onSetupBankClick={() => setShowBankModal(true)}

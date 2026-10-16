@@ -172,7 +172,7 @@
         isMobile && !isFullScreen ? 'justify-content: flex-end' : 'justify-content: center',
         'align-items: center',
         'pointer-events: auto',
-        'font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+        'font-family: \'Satoshi\', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
       ].join(';');
 
       // 2. Backdrop
@@ -699,10 +699,10 @@
             ? '<span style="font-size: 10px; font-weight: 500; color: #71717a;">' + subtitle + '</span>'
             : '';
           this.innerHTML = [
-            '<button type="button" style="display: inline-flex; align-items: center; gap: 12px; padding: 10px 18px; border-radius: 14px; background: #ffffff; color: #09090b; border: 1.5px solid #27272a; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12); transition: all 0.18s ease; outline: none;">',
-            '<div style="width: 28px; height: 28px; border-radius: 8px; background: #18181b; border: 1px solid #27272a; display: flex; align-items: center; justify-content: center; position: relative;">',
-            '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f4f4f5" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
-            '<div style="width: 7px; height: 7px; border-radius: 50%; background: #10b981; border: 1.5px solid #ffffff; position: absolute; top: -2px; right: -2px;"></div>',
+            '<button type="button" class="identity-btn-shimmer" style="position: relative; display: inline-flex; align-items: center; gap: 12px; min-height: 44px; padding: 7px 15px; border-radius: 14px; border: 1.5px solid transparent; background: linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(135deg, #2563eb, #4f46e5, #3b82f6, #1d4ed8) border-box; background-size: 100% 100%, 250% 250%; animation: identity-border-flow 4s ease infinite; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px -1px rgba(37, 99, 235, 0.15), 0 1px 3px rgba(0, 0, 0, 0.04); transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); outline: none; user-select: none; overflow: hidden;">',
+            '<div style="width: 28px; height: 28px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center; position: relative;">',
+            '<img src="/black icon.svg" alt="180 Profile" style="width: 17px; height: 17px; object-fit: contain;" onerror="this.src=\'/black-icon.svg\'" />',
+            '<div style="width: 7px; height: 7px; border-radius: 50%; background: #10b981; border: 1px solid #ffffff; position: absolute; top: -2px; right: -2px;"><span style="position: absolute; inset: 0; border-radius: 50%; background: #10b981; opacity: 0.7; animation: ping 1.5s cubic-bezier(0,0,0.2,1) infinite;"></span></div>',
             '</div>',
             '<div style="display: flex; flex-direction: column; text-align: left; line-height: 1.2;">',
             '<span style="font-size: 13.5px; font-weight: 700; color: #09090b;">' + title + '</span>',
@@ -721,6 +721,9 @@
         }
       };
       window.customElements.define('one-eighty-auth-button', OneEightyAuthButtonElement);
+      if (!window.customElements.get('one-eighty-identity-button')) {
+        window.customElements.define('one-eighty-identity-button', OneEightyAuthButtonElement);
+      }
     } catch (_) {}
   }
 
@@ -821,7 +824,7 @@
                 var cardBorder = isDark ? 'rgba(255,255,255,0.1)' : '#e4e4e7';
                 var toggleBg = isDark ? 'rgba(255,255,255,0.06)' : '#f4f4f5';
 
-                var html = '<div style="font-family:system-ui,-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;color:' + text + ';padding:24px 12px;box-sizing:border-box;">';
+                var html = '<div style="font-family:\'Satoshi\',system-ui,-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;color:' + text + ';padding:24px 12px;box-sizing:border-box;">';
 
                 if (config.headline) {
                   html += '<div style="text-align:center;margin-bottom:28px;">';
@@ -853,7 +856,7 @@
                     html += '<p style="margin:0 0 16px 0;font-size:12px;color:' + muted + ';line-height:1.4;">' + p.description + '</p>';
                   }
                   html += '<div style="display:flex;align-items:baseline;gap:4px;margin-bottom:20px;">';
-                  html += '<span style="font-size:32px;font-weight:800;font-family:monospace;">' + curSymbol + amount + '</span>';
+                  html += '<span style="font-size:32px;font-weight:800;font-family:\'Fira Code\',\'JetBrains Mono\',monospace;">' + curSymbol + amount + '</span>';
                   html += '<span style="font-size:12px;color:' + muted + ';">/' + (currentInterval === 'yearly' ? 'yr' : 'mo') + '</span>';
                   html += '</div>';
 

@@ -89,7 +89,7 @@ export class AuthApiController {
         });
       }
 
-      const JWT_SECRET = process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET || '180-identity-jwt-secret-key-prod-super-secure';
+      const JWT_SECRET = process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET || '';
       const token = jwt.sign(
         {
           id: user.id,

@@ -12,9 +12,6 @@ interface GoogleSSOButtonProps {
   onSuccess?: (user: any, token: string, meta?: any) => void;
 }
 
-const DEFAULT_GOOGLE_CLIENT_ID =
-  '188560578303-tqob33d58ednaer1ab0r2u64ouqb55mk.apps.googleusercontent.com';
-
 export function GoogleSSOButton({
   oauthParams,
   label = 'Continue with Google',
@@ -23,7 +20,7 @@ export function GoogleSSOButton({
   const [googleLoading, setGoogleLoading] = useState(false);
   const tokenClientRef = useRef<any>(null);
   const [googleClientId, setGoogleClientId] = useState<string>(
-    process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID
+    process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ''
   );
 
   // Safety timeout and window focus listener to ensure button resets if popup is closed or blocked
@@ -67,7 +64,7 @@ export function GoogleSSOButton({
     };
   }, []);
 
-  const activeClientId = googleClientId || DEFAULT_GOOGLE_CLIENT_ID;
+  const activeClientId = googleClientId || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
 
   // Setup Google Identity Services Client
   useEffect(() => {
@@ -213,7 +210,7 @@ export function GoogleSSOButton({
   };
 
   const handleButtonClick = () => {
-    const effectiveClientId = activeClientId || DEFAULT_GOOGLE_CLIENT_ID;
+    const effectiveClientId = activeClientId || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
 
     if (tokenClientRef.current) {
       setGoogleLoading(true);

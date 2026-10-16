@@ -54,11 +54,11 @@ export const buildR2Key = (category: R2StorageCategory | string, companyId: stri
  * Computes public CDN URL for an R2 object key
  */
 export const getR2PublicUrl = (key: string): string => {
-    const bucketName = process.env.R2_BUCKET_NAME || process.env.CLOUDFLARE_R2_BUCKET_NAME || '180core';
+    const bucketName = process.env.R2_BUCKET_NAME || process.env.CLOUDFLARE_R2_BUCKET_NAME || '';
     const publicUrlBase = process.env.REELS_CDN_URL || process.env.CLOUDFLARE_R2_PUBLIC_URL;
     return publicUrlBase 
         ? `${publicUrlBase}/${key}`
-        : `https://${bucketName}.r2.dev/${key}`;
+        : (bucketName ? `https://${bucketName}.r2.dev/${key}` : `/${key}`);
 };
 
 export const uploadBufferToR2 = async (buffer: Buffer, key: string, mimetype: string) => {

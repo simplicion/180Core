@@ -11,7 +11,6 @@ import {
   KeyRound,
   User,
   Mail,
-  Phone,
   MapPin,
   Sparkles,
   RefreshCw,
@@ -27,7 +26,6 @@ import {
 import { OAuthAppHeader } from '@/components/auth/OAuthAppHeader';
 import { GoogleSSOButton } from '@/components/auth/GoogleSSOButton';
 import { OAuthErrorCard, OAuthErrorDetails } from '@/components/auth/OAuthErrorCard';
-import { SmartAuthInput } from '@/components/auth/SmartAuthInput';
 import { ForgotPasswordModal } from '@/components/auth/ForgotPasswordModal';
 import { getCoreApiUrl } from '@/lib/api';
 
@@ -283,8 +281,14 @@ function LoginFormContent() {
   // ─── 1. SIGN IN SUBMIT ──────────────────────────────────────────────────────
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginEmailOrPhone.trim() || !loginPassword) {
-      toast.error('Please enter your email or phone and password');
+    const cleanEmail = loginEmailOrPhone.trim();
+    if (!cleanEmail || !loginPassword) {
+      toast.error('Please enter your email address and password');
+      return;
+    }
+
+    if (!cleanEmail.includes('@')) {
+      toast.error('Please enter a valid email address');
       return;
     }
 
@@ -297,7 +301,7 @@ function LoginFormContent() {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          emailOrPhone: loginEmailOrPhone.trim(),
+          emailOrPhone: cleanEmail,
           password: loginPassword,
         }),
       });
@@ -340,22 +344,22 @@ function LoginFormContent() {
   const handleInitiateSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = signupName.trim();
-    const cleanInput = signupEmailOrPhone.trim();
+    const cleanEmail = signupEmailOrPhone.trim();
 
-    if (!cleanName || !cleanInput) {
-      toast.error('Full name and email or phone number are required');
+    if (!cleanName || !cleanEmail) {
+      toast.error('Full name and email address are required');
       return;
     }
 
-    const isEmail = cleanInput.includes('@');
-    setIsEmailSignup(isEmail);
+    if (!cleanEmail.includes('@')) {
+      toast.error('Please enter a valid email address. Mobile verification is currently unavailable.');
+      return;
+    }
+
+    setIsEmailSignup(true);
 
     setLoading(true);
-    const toastId = toast.loading(
-      isEmail
-        ? `Sending verification code to ${cleanInput}...`
-        : `Sending WhatsApp verification code to ${cleanInput}...`
-    );
+    const toastId = toast.loading(`Sending verification code to ${cleanEmail}...`);
 
     try {
       const res = await fetch(getCoreApiUrl('/api/oauth/register/initiate'), {
@@ -364,22 +368,22 @@ function LoginFormContent() {
         credentials: 'include',
         body: JSON.stringify({
           name: cleanName,
-          emailOrPhone: cleanInput,
+          emailOrPhone: cleanEmail,
         }),
       });
 
       const { ok, data } = await parseApiResponse(res);
       if (!ok || !data.success) {
         if (data.error === 'email_taken' || data.error === 'phone_taken') {
-          toast.error(data.message || 'An account with this contact already exists. Switching to Sign In.', { id: toastId, duration: 6000 });
-          setLoginEmailOrPhone(cleanInput);
+          toast.error(data.message || 'An account with this email already exists. Switching to Sign In.', { id: toastId, duration: 6000 });
+          setLoginEmailOrPhone(cleanEmail);
           setMode('login');
           return;
         }
         throw new Error(data.message || data.error || 'Failed to dispatch verification code');
       }
 
-      toast.success(data.message || 'Verification code dispatched!', { id: toastId });
+      toast.success(data.message || 'Verification code dispatched to your email!', { id: toastId });
       if (data.devOtp) {
         setDevOtpHint(data.devOtp);
         setOtp(data.devOtp);
@@ -844,7 +848,7 @@ function LoginFormContent() {
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                 </div>
                 <div className="text-xs text-slate-500 font-mono truncate max-w-[200px]">
-                  {cachedUser.email || (cachedUser.username ? `@${cachedUser.username}` : cachedUser.phone || '180 Account')}
+                  {cachedUser.email || (cachedUser.username ? `@${cachedUser.username}` : '180 Account')}
                 </div>
               </div>
             </div>
@@ -900,7 +904,7 @@ function LoginFormContent() {
           ) : (
             <div className="text-center space-y-1">
               <h2 className="text-lg font-bold text-slate-900 tracking-tight">Sign In</h2>
-              <p className="text-xs text-slate-500">Sign in with your email or phone number</p>
+              <p className="text-xs text-slate-500">Sign in with your email address</p>
             </div>
           )}
 
@@ -915,20 +919,29 @@ function LoginFormContent() {
           <div className="relative flex items-center justify-center my-3">
             <div className="border-t border-slate-200/80 w-full" />
             <span className="bg-white px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider relative">
-              or continue with
+              or continue with email
             </span>
           </div>
 
           {/* Single Unified Sign-in Form */}
           <form onSubmit={handleLoginSubmit} className="space-y-3.5">
-            <SmartAuthInput
-              label="Email or Phone Number"
-              placeholder="Enter your email address or phone number"
-              value={loginEmailOrPhone}
-              onChange={setLoginEmailOrPhone}
-              required
-              autoFocus
-            />
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <input
+                  type="email"
+                  placeholder="name@company.com"
+                  value={loginEmailOrPhone}
+                  onChange={(e) => setLoginEmailOrPhone(e.target.value)}
+                  className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-3.5 py-2.5 min-h-[42px] text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                  required
+                  autoFocus
+                />
+              </div>
+            </div>
 
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -992,7 +1005,7 @@ function LoginFormContent() {
       )}
 
       {/* ─────────────────────────────────────────────────────────────────────────────
-          SCREEN 2: SIGN UP INITIATE (NAME + UNIFIED EMAIL/PHONE + GOOGLE)
+          SCREEN 2: SIGN UP INITIATE (NAME + EMAIL + GOOGLE)
       ───────────────────────────────────────────────────────────────────────────── */}
       {mode === 'signup' && (
         <div className="space-y-5 animate-in fade-in duration-200">
@@ -1005,7 +1018,7 @@ function LoginFormContent() {
           ) : (
             <div className="text-center space-y-1">
               <h2 className="text-lg font-bold text-slate-900 tracking-tight">Create an Account</h2>
-              <p className="text-xs text-slate-500">Sign up to get started</p>
+              <p className="text-xs text-slate-500">Sign up with your email to get started</p>
             </div>
           )}
 
@@ -1020,7 +1033,7 @@ function LoginFormContent() {
           <div className="relative flex items-center justify-center my-3">
             <div className="border-t border-slate-200/80 w-full" />
             <span className="bg-white px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider relative">
-              or register with credentials
+              or register with email
             </span>
           </div>
 
@@ -1028,27 +1041,39 @@ function LoginFormContent() {
           <form onSubmit={handleInitiateSignup} className="space-y-3.5">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Full Name</label>
-              <input
-                type="text"
-                placeholder="e.g. Alex Smith"
-                value={signupName}
-                onChange={(e) => setSignupName(e.target.value)}
-                className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3.5 py-2.5 min-h-[42px] text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                required
-                autoFocus
-              />
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <User className="w-4 h-4" />
+                </div>
+                <input
+                  type="text"
+                  placeholder="e.g. Alex Smith"
+                  value={signupName}
+                  onChange={(e) => setSignupName(e.target.value)}
+                  className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-3.5 py-2.5 min-h-[42px] text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                  required
+                  autoFocus
+                />
+              </div>
             </div>
 
             <div>
-              <SmartAuthInput
-                label="Email or Phone Number"
-                placeholder="Enter your email address or phone number"
-                value={signupEmailOrPhone}
-                onChange={setSignupEmailOrPhone}
-                required
-              />
+              <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <input
+                  type="email"
+                  placeholder="name@company.com"
+                  value={signupEmailOrPhone}
+                  onChange={(e) => setSignupEmailOrPhone(e.target.value)}
+                  className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-3.5 py-2.5 min-h-[42px] text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                  required
+                />
+              </div>
               <p className="text-[11px] text-slate-400 mt-1">
-                We will dispatch a secure 6-digit verification code to this contact.
+                We will dispatch a secure 6-digit verification code to your email.
               </p>
             </div>
 
@@ -1102,7 +1127,7 @@ function LoginFormContent() {
             <div className="w-11 h-11 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center mx-auto text-blue-600 mb-2">
               <ShieldCheck className="w-5 h-5" />
             </div>
-            <h2 className="text-lg font-bold text-slate-900 tracking-tight">Verify Your Contact</h2>
+            <h2 className="text-lg font-bold text-slate-900 tracking-tight">Verify Your Email</h2>
             <p className="text-xs text-slate-500">
               Enter the 6-digit code sent to <span className="font-semibold text-slate-700">{signupEmailOrPhone}</span>
             </p>
@@ -1250,9 +1275,7 @@ function LoginFormContent() {
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
                   <Lock className="w-3 h-3 text-slate-400" />
-                  <span>
-                    {currentUser?.email ? 'Verified Email Address' : 'Verified Phone Number'}
-                  </span>
+                  <span>Verified Email Address</span>
                 </label>
                 <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200">
                   <CheckCircle2 className="w-2.5 h-2.5" /> Verified
@@ -1261,22 +1284,8 @@ function LoginFormContent() {
               <input
                 type="text"
                 disabled
-                value={currentUser?.email || currentUser?.phone || signupEmailOrPhone}
+                value={currentUser?.email || signupEmailOrPhone}
                 className="w-full bg-slate-100/80 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-mono text-slate-500 cursor-not-allowed select-none"
-              />
-            </div>
-
-            {/* 2. Optional Alternate Contact */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                {currentUser?.email ? 'Mobile Phone Number (Optional)' : 'Email Address (Optional)'}
-              </label>
-              <input
-                type={currentUser?.email ? 'tel' : 'email'}
-                placeholder={currentUser?.email ? '+91 9876543210' : 'name@company.com'}
-                value={onboardSecondaryContact}
-                onChange={(e) => setOnboardSecondaryContact(e.target.value)}
-                className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
               />
             </div>
 

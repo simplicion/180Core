@@ -25,14 +25,17 @@ import {
   AlertCircle,
   Wallet,
   ExternalLink,
+  Download,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   Button,
   UniversalSkeleton,
+  AdaptiveSkeleton,
   PlatformModal,
   PlatformDrawer,
   LogoLoader,
+  OneEightyIdentityButton,
 } from '@workspace/ui';
 import { use180Identity, use180Pay } from '@workspace/identity-sdk';
 import { AppLogoUploader } from '@/components/apps/AppLogoUploader';
@@ -158,10 +161,8 @@ function DeveloperDashboardContent() {
     name: string;
     isPublic: boolean;
   } | null>(null);
-  const [secretCopied, setSecretCopied] = useState(false);
-  const [clientIdCopied, setClientIdCopied] = useState(false);
-  const [webhookSecretCopied, setWebhookSecretCopied] = useState(false);
-  const [hasAcknowledgedSecret, setHasAcknowledgedSecret] = useState(false);
+  const [hasDownloaded, setHasDownloaded] = useState(false);
+  const [copiedAll, setCopiedAll] = useState(false);
 
   // Secret Rotation Modal
   const [showRotateModal, setShowRotateModal] = useState(false);
@@ -527,8 +528,8 @@ function DeveloperDashboardContent() {
           redirectUris,
           allowedOrigins,
           allowedScopes: DEFAULT_AUTHORIZED_SCOPES,
-          enableAuth: createEnableAuth,
-          enablePay: createEnablePay,
+          enableAuth: true,
+          enablePay: true,
           webhookUrl: createWebhookUrl.trim(),
           enableAutoPay: isAdditionalProject ? true : undefined,
         }),
@@ -549,8 +550,8 @@ function DeveloperDashboardContent() {
             redirectUris,
             allowedOrigins,
             allowedScopes: DEFAULT_AUTHORIZED_SCOPES,
-            enableAuth: createEnableAuth,
-            enablePay: createEnablePay,
+            enableAuth: true,
+            enablePay: true,
             webhookUrl: createWebhookUrl.trim(),
             enableAutoPay: isAdditionalProject ? true : undefined,
           }),
@@ -601,8 +602,8 @@ function DeveloperDashboardContent() {
           name: appName.trim(),
           isPublic: clientType === 'public',
         });
-        setHasAcknowledgedSecret(false);
-        setSecretCopied(false);
+        setHasDownloaded(false);
+        setCopiedAll(false);
       }
 
       setAppName('');
@@ -731,8 +732,8 @@ function DeveloperDashboardContent() {
         name: rotatingApp.name,
         isPublic: false,
       });
-      setHasAcknowledgedSecret(false);
-      setSecretCopied(false);
+      setHasDownloaded(false);
+      setCopiedAll(false);
 
       checkAuthAndFetchApps();
     } catch (err: any) {
@@ -742,16 +743,62 @@ function DeveloperDashboardContent() {
     }
   };
 
-  const copyToClipboard = (text: string, type: 'client' | 'secret') => {
-    navigator.clipboard.writeText(text);
-    if (type === 'client') {
-      setClientIdCopied(true);
-      setTimeout(() => setClientIdCopied(false), 2000);
-    } else {
-      setSecretCopied(true);
-      setTimeout(() => setSecretCopied(false), 2000);
+  const handleCopyAllCredentials = () => {
+    if (!revealedCredentials) return;
+    const lines = [
+      `180_CLIENT_ID=${revealedCredentials.clientId || ''}`,
+    ];
+    if (revealedCredentials.clientSecret) {
+      lines.push(`180_CLIENT_SECRET=${revealedCredentials.clientSecret}`);
     }
-    toast.success('Copied to clipboard');
+    if (revealedCredentials.webhookSecret) {
+      lines.push(`180_WEBHOOK_SECRET=${revealedCredentials.webhookSecret}`);
+    }
+    navigator.clipboard.writeText(lines.join('\n'));
+    setCopiedAll(true);
+    setTimeout(() => setCopiedAll(false), 2000);
+    toast.success('All credentials copied to clipboard!');
+  };
+
+  const handleDownloadCredentials = () => {
+    if (!revealedCredentials) return;
+    const lines = [
+      `# 180 Workspace Client Credentials`,
+      `# Project: ${revealedCredentials.name || 'Application'}`,
+      `# Generated: ${new Date().toISOString()}`,
+      `# Keep this file secure. Never commit this file to public version control.`,
+      '',
+      `180_CLIENT_ID=${revealedCredentials.clientId || ''}`,
+    ];
+    if (revealedCredentials.clientSecret) {
+      lines.push(`180_CLIENT_SECRET=${revealedCredentials.clientSecret}`);
+    }
+    if (revealedCredentials.webhookSecret) {
+      lines.push(`180_WEBHOOK_SECRET=${revealedCredentials.webhookSecret}`);
+    }
+    const content = lines.join('\n');
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const safeName = (revealedCredentials.name || 'app').toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+    link.download = `180-${safeName}-credentials.env`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setHasDownloaded(true);
+    toast.success('Credentials file (.env) downloaded!');
+  };
+
+  const handleCloseCredentialsModal = () => {
+    if (!hasDownloaded) {
+      toast.error('Please download your credentials file (.env) before closing.');
+      return;
+    }
+    setRevealedCredentials(null);
+    setHasDownloaded(false);
+    setCopiedAll(false);
   };
 
   // Generate PKCE Challenge
@@ -878,33 +925,7 @@ function DeveloperDashboardContent() {
   // LOADING STATE
   // ─────────────────────────────────────────────────────────────────────────────
   if (!mounted || loading) {
-    return (
-      <div className="min-h-screen bg-zinc-50 dark:bg-black flex">
-        <aside className="hidden lg:flex w-64 lg:w-72 flex-col fixed inset-y-0 left-0 border-r border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#101012] p-4 space-y-4">
-          <div className="h-10 bg-zinc-200 dark:bg-zinc-800 rounded-xl animate-pulse" />
-          <div className="space-y-2 pt-4">
-            <div className="h-8 bg-zinc-200 dark:bg-zinc-800 rounded-xl animate-pulse" />
-            <div className="h-8 bg-zinc-200 dark:bg-zinc-800 rounded-xl animate-pulse" />
-            <div className="h-8 bg-zinc-200 dark:bg-zinc-800 rounded-xl animate-pulse" />
-          </div>
-        </aside>
-        <div className="flex-1 lg:ml-72 flex flex-col min-h-screen">
-          <header className="h-16 border-b border-zinc-200/80 dark:border-white/10 bg-white dark:bg-black px-6 flex items-center justify-between">
-            <div className="h-6 w-48 bg-zinc-200 dark:bg-zinc-800 rounded-lg animate-pulse" />
-          </header>
-          <main className="p-6 sm:p-8 max-w-7xl mx-auto w-full space-y-8 flex-1">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-              <UniversalSkeleton type="metrics" />
-              <UniversalSkeleton type="metrics" />
-              <UniversalSkeleton type="metrics" />
-            </div>
-            <div className="rounded-3xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950 p-6">
-              <UniversalSkeleton type="table" />
-            </div>
-          </main>
-        </div>
-      </div>
-    );
+    return <AdaptiveSkeleton screen="developer-dashboard" />;
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -912,44 +933,24 @@ function DeveloperDashboardContent() {
   // ─────────────────────────────────────────────────────────────────────────────
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-zinc-50 dark:bg-black flex items-center justify-center p-4">
-        <div
-          role="alert"
-          aria-live="assertive"
-          className="max-w-md w-full p-8 rounded-3xl bg-white dark:bg-[#101012] border border-zinc-200/80 dark:border-white/10 shadow-xl text-center space-y-6"
-        >
-          <div className="w-16 h-16 rounded-3xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-500/20 text-blue-600 dark:text-blue-400 mx-auto flex items-center justify-center shadow-lg">
-            <Lock className="w-8 h-8" />
-          </div>
-          <div className="space-y-2">
-            <h1 className="text-2xl font-extrabold text-zinc-950 dark:text-white tracking-tight">
-              Developer Console Sign In Required
-            </h1>
-            <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-              Sign in with your 180 Identity universal account to manage OAuth 2.0 clients, rotate secrets, and simulate webhooks.
-            </p>
-          </div>
-          <div className="space-y-3 pt-2">
-            <Button
-              onClick={() => launch180Identity(() => checkAuthAndFetchApps())}
-              disabled={isOpeningIdentity}
-              size="lg"
-              className="w-full rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-md shadow-blue-500/25 flex items-center justify-center gap-2 cursor-pointer min-h-[46px]"
-            >
-              {isOpeningIdentity ? (
-                <LogoLoader className="w-4 h-4 animate-spin text-white" />
-              ) : (
-                <Shield className="w-4 h-4" />
-              )}
-              <span>Sign In with 180 ID</span>
-            </Button>
-            <Link href="/products/identity" className="block">
-              <Button variant="ghost" size="lg" className="w-full rounded-2xl min-h-[44px]">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                <span>Explore Products & Docs</span>
-              </Button>
-            </Link>
-          </div>
+      <div className="min-h-screen bg-white dark:bg-black flex flex-col items-center justify-center p-4 relative overflow-hidden">
+        {/* Full Page Minimal Grid Background */}
+        <div className="fixed inset-0 marketing-grid-bg pointer-events-none z-0 opacity-70" />
+
+        {/* Subtle Ambient Gradient Orbs */}
+        <div className="fixed top-0 right-0 w-[450px] h-[450px] bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
+        <div className="fixed bottom-0 left-0 w-[450px] h-[450px] bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col items-center justify-center">
+          <OneEightyIdentityButton
+            onClick={() => launch180Identity(() => checkAuthAndFetchApps())}
+            disabled={isOpeningIdentity}
+            isProcessing={isOpeningIdentity}
+            text="Sign In with 180 Identity"
+            subtitle="Universal Sovereign Account & OAuth 2.0"
+            theme="auto"
+            className="shadow-xl hover:shadow-2xl hover:scale-105 transition-all text-sm px-6 py-3 cursor-pointer"
+          />
         </div>
       </div>
     );
@@ -1507,62 +1508,6 @@ function DeveloperDashboardContent() {
           {/* Project Logo Upload */}
           <AppLogoUploader logoUrl={createLogoUrl} onChange={setCreateLogoUrl} />
 
-          {/* Integrated Apps Selection */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-              Activate Apps in this Project
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <label
-                className={`p-3 rounded-xl border flex items-start gap-2.5 cursor-pointer transition-all ${
-                  createEnableAuth
-                    ? 'bg-blue-50 dark:bg-blue-600/10 border-blue-500/50 text-blue-900 dark:text-white'
-                    : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-white/10 opacity-60'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={createEnableAuth}
-                  onChange={(e) => setCreateEnableAuth(e.target.checked)}
-                  className="mt-0.5 rounded text-blue-600 focus:ring-0 cursor-pointer"
-                />
-                <div>
-                  <div className="font-semibold text-xs text-zinc-900 dark:text-white flex items-center gap-1.5">
-                    <Shield className="w-3.5 h-3.5 text-blue-500" />
-                    <span>180 Identity (SSO)</span>
-                  </div>
-                  <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                    WhatsApp OTP, Google, @usernames
-                  </div>
-                </div>
-              </label>
-
-              <label
-                className={`p-3 rounded-xl border flex items-start gap-2.5 cursor-pointer transition-all ${
-                  createEnablePay
-                    ? 'bg-purple-50 dark:bg-purple-600/10 border-purple-500/50 text-purple-900 dark:text-white'
-                    : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-white/10 opacity-60'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={createEnablePay}
-                  onChange={(e) => setCreateEnablePay(e.target.checked)}
-                  className="mt-0.5 rounded text-purple-600 focus:ring-0 cursor-pointer"
-                />
-                <div>
-                  <div className="font-semibold text-xs text-zinc-900 dark:text-white flex items-center gap-1.5">
-                    <CreditCard className="w-3.5 h-3.5 text-purple-500" />
-                    <span>180 Pay (Checkout)</span>
-                  </div>
-                  <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                    180 Wallet & 2-Way Webhooks
-                  </div>
-                </div>
-              </label>
-            </div>
-          </div>
-
           {/* Optional Webhook URL */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
@@ -1643,21 +1588,7 @@ function DeveloperDashboardContent() {
             />
           </div>
 
-          {/* Developer Project Quota & Access Status */}
-          <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 space-y-2 text-xs">
-            <div className="flex items-center justify-between font-bold text-blue-950 dark:text-blue-200">
-              <span className="flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                <span>Project Allocation: Slot #{apps.length + 1}</span>
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-700 dark:text-blue-300 text-[10px] font-mono">
-                Full 180 Identity & 180 Pay
-              </span>
-            </div>
-            <p className="text-zinc-600 dark:text-zinc-400 text-[11px] leading-relaxed">
-              Engineering developers get <strong>30 days free trial access</strong> (up to 5 projects). Afterwards, continue with Starter ($2/mo for 5 projects) or Pro ($5/mo for 10 projects) via <strong>180 Pay</strong>, or contact Enterprise for custom scale.
-            </p>
-          </div>
+
 
           <div className="pt-4 flex items-center justify-end gap-3">
             <Button
@@ -1685,117 +1616,120 @@ function DeveloperDashboardContent() {
           ───────────────────────────────────────────────────────────────────────────── */}
       <PlatformModal
         isOpen={!!revealedCredentials}
-        onClose={() => setRevealedCredentials(null)}
+        onClose={handleCloseCredentialsModal}
         title="Save Client Credentials"
         icon={Key}
         iconBgClass="bg-amber-500/10"
         iconColorClass="text-amber-600 dark:text-amber-400"
         maxWidthClass="max-w-lg"
       >
-        <div className="space-y-5">
-          <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-xs text-amber-900 dark:text-amber-300 space-y-1.5">
+        <div className="space-y-4">
+          <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-xs text-amber-900 dark:text-amber-300 space-y-1">
             <div className="font-bold flex items-center gap-1.5">
-              <Lock className="w-4 h-4" />
+              <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
               <span>Copy and store your secret safely</span>
             </div>
-            <p className="leading-relaxed opacity-90">
+            <p className="leading-relaxed opacity-90 text-[11px]">
               For security, this client secret is never stored in plaintext and will not be displayed again. If lost, you will need to rotate it.
             </p>
           </div>
 
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">Client ID</label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  readOnly
-                  value={revealedCredentials?.clientId || ''}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs font-mono text-zinc-900 dark:text-white select-all"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => copyToClipboard(revealedCredentials?.clientId || '', 'client')}
-                  className="px-3 shrink-0 min-h-[40px]"
-                >
-                  {clientIdCopied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                </Button>
+          {/* Unified Credentials Box - All in one single field */}
+          <div className="rounded-2xl border border-zinc-200 dark:border-white/10 bg-zinc-950 text-zinc-100 overflow-hidden shadow-xs">
+            {/* Header bar with single copy icon */}
+            <div className="px-3.5 py-2.5 bg-zinc-900/80 border-b border-white/5 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                <span className="text-[11px] font-mono font-medium text-zinc-300 truncate">
+                  .env.local / Credentials
+                </span>
               </div>
+              <button
+                type="button"
+                onClick={handleCopyAllCredentials}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700 border border-white/10 transition-all cursor-pointer shrink-0"
+                title="Copy all credentials at once"
+              >
+                {copiedAll ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="text-emerald-400">Copied All!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-zinc-400" />
+                    <span>Copy</span>
+                  </>
+                )}
+              </button>
             </div>
 
-            {revealedCredentials?.clientSecret && (
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">Client Secret</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={revealedCredentials.clientSecret}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-amber-500/50 text-xs font-mono text-amber-600 dark:text-amber-400 select-all font-semibold"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => copyToClipboard(revealedCredentials.clientSecret!, 'secret')}
-                    className="px-3 shrink-0 min-h-[40px] border-amber-500/30 text-amber-600 dark:text-amber-400"
-                  >
-                    {secretCopied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                  </Button>
-                </div>
+            {/* Single Unified Credentials Content */}
+            <div className="p-3.5 font-mono text-xs space-y-2 select-all overflow-x-auto leading-relaxed bg-zinc-950">
+              <div className="flex items-baseline gap-2">
+                <span className="text-zinc-500 select-none shrink-0">180_CLIENT_ID=</span>
+                <span className="text-zinc-100 break-all select-all font-medium">
+                  {revealedCredentials?.clientId || ''}
+                </span>
               </div>
-            )}
 
-            {revealedCredentials?.webhookSecret && (
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">
-                  Payment Webhook Signing Secret
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={revealedCredentials.webhookSecret}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-purple-500/50 text-xs font-mono text-purple-600 dark:text-purple-400 select-all"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      navigator.clipboard.writeText(revealedCredentials.webhookSecret!);
-                      setWebhookSecretCopied(true);
-                      setTimeout(() => setWebhookSecretCopied(false), 2000);
-                      toast.success('Webhook secret copied');
-                    }}
-                    className="px-3 shrink-0 min-h-[40px]"
-                  >
-                    {webhookSecretCopied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                  </Button>
+              {revealedCredentials?.clientSecret && (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-zinc-500 select-none shrink-0">180_CLIENT_SECRET=</span>
+                  <span className="text-amber-400 break-all select-all font-semibold">
+                    {revealedCredentials.clientSecret}
+                  </span>
                 </div>
-              </div>
-            )}
+              )}
+
+              {revealedCredentials?.webhookSecret && (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-zinc-500 select-none shrink-0">180_WEBHOOK_SECRET=</span>
+                  <span className="text-purple-400 break-all select-all font-medium">
+                    {revealedCredentials.webhookSecret}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
 
-          <label className="flex items-start gap-2.5 pt-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={hasAcknowledgedSecret}
-              onChange={(e) => setHasAcknowledgedSecret(e.target.checked)}
-              className="mt-0.5 rounded text-blue-600 focus:ring-0 cursor-pointer"
-            />
-            <span className="text-xs text-zinc-600 dark:text-zinc-400 leading-snug">
-              I have safely copied my credentials and understand they cannot be shown again.
-            </span>
-          </label>
-
-          <Button
-            type="button"
-            disabled={!hasAcknowledgedSecret}
-            onClick={() => setRevealedCredentials(null)}
-            className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md disabled:opacity-50 cursor-pointer min-h-[44px]"
-          >
-            I Have Saved My Credentials
-          </Button>
+          {/* Action Area: Download button first, then Close button */}
+          {!hasDownloaded ? (
+            <div className="space-y-2 pt-1">
+              <Button
+                type="button"
+                onClick={handleDownloadCredentials}
+                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md shadow-blue-500/20 cursor-pointer min-h-[44px] flex items-center justify-center gap-2 transition-all"
+              >
+                <Download className="w-4 h-4" />
+                <span>Download Credentials (.env)</span>
+              </Button>
+              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 text-center">
+                Download your .env file to enable the Close button and safely backup your keys.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2 pt-1">
+              <Button
+                type="button"
+                onClick={handleCloseCredentialsModal}
+                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-500/20 cursor-pointer min-h-[44px] flex items-center justify-center gap-2 transition-all"
+              >
+                <Check className="w-4 h-4" />
+                <span>Close</span>
+              </Button>
+              <div className="flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={handleDownloadCredentials}
+                  className="text-[11px] font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 underline underline-offset-2 flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Download className="w-3 h-3" />
+                  <span>Download .env file again</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </PlatformModal>
 

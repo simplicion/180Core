@@ -6,7 +6,7 @@ import { SubscriptionService, RecurringBillingEngine, RazorpaySubscriptionServic
 import { developersPrisma as prisma } from '@workspace/db-180core';
 import crypto from 'crypto';
 
-const JWT_SECRET = process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET || '180-identity-jwt-secret-key-prod-super-secure';
+const JWT_SECRET = process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET || '';
 
 function hashSecret(secret: string): string {
   return crypto.createHash('sha256').update(secret).digest('hex');

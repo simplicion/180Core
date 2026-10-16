@@ -16,7 +16,7 @@ import {
   Receipt,
   Download,
 } from 'lucide-react';
-import { UniversalSkeleton, Button } from '@workspace/ui';
+import { UniversalSkeleton, AdaptiveSkeleton, Button } from '@workspace/ui';
 import toast from 'react-hot-toast';
 import { LedgerEntry } from '@/types';
 import { InvoiceModal } from '@/components/InvoiceModal';
@@ -136,15 +136,7 @@ export default function TransactionsPage() {
       </div>
 
       {loading ? (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <UniversalSkeleton type="metrics" count={1} columns={1} />
-            <div className="lg:col-span-2">
-              <UniversalSkeleton type="form" count={4} />
-            </div>
-          </div>
-          <UniversalSkeleton type="table" rows={6} columns={5} />
-        </div>
+        <AdaptiveSkeleton screen="profile-transactions" />
       ) : (
         <>
           {/* Top-Up & Balance Grid */}

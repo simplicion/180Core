@@ -10,7 +10,7 @@ import {
   CheckCircle2,
   SmartphoneNfc,
 } from 'lucide-react';
-import { Button, UniversalSkeleton } from '@workspace/ui';
+import { Button, UniversalSkeleton, AdaptiveSkeleton, OneEightyIdentityButton } from '@workspace/ui';
 import toast from 'react-hot-toast';
 import { getCoreApiUrl } from '@/lib/api';
 import { UserProfile } from '@/types';
@@ -69,27 +69,26 @@ export default function ProfilePage() {
   };
 
   if (loading) {
-    return (
-      <div className="space-y-4 sm:space-y-6">
-        <UniversalSkeleton type="form" count={4} />
-      </div>
-    );
+    return <AdaptiveSkeleton screen="profile-settings" />;
   }
 
   if (!user) {
     return (
-      <div className="max-w-md mx-auto py-12 sm:py-16 text-center space-y-4 px-4">
+      <div className="max-w-md mx-auto py-12 sm:py-16 text-center space-y-4 px-4 flex flex-col items-center">
         <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto border border-blue-100 shadow-xs">
           <User className="w-6 h-6 sm:w-7 sm:h-7" />
         </div>
         <h2 className="text-lg sm:text-xl font-bold text-slate-900">Sign in to view your profile</h2>
         <p className="text-xs text-slate-500">You need an active 180 Profile session to manage your identity &amp; security settings.</p>
-        <Link
-          href="/auth/login"
-          className="inline-flex items-center justify-center px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20"
-        >
-          Sign In with 180
-        </Link>
+        <div className="pt-2">
+          <OneEightyIdentityButton
+            href="/auth/login"
+            text="Sign In with 180 Identity"
+            subtitle="Universal Identity & Prepaid Wallet"
+            theme="light"
+            className="shadow-md hover:shadow-lg transition-all"
+          />
+        </div>
       </div>
     );
   }

@@ -9,8 +9,6 @@ export function verifyJwtToken(token: string): any {
   const secrets = [
     process.env.JWT_SECRET,
     process.env.JWT_ACCESS_SECRET,
-    '195ee7cdf2272463be82f5d065eaf1dc52992c6d5c05241e7cde005eb2cbc71b',
-    '180-identity-jwt-secret-key-prod-super-secure'
   ].filter(Boolean) as string[];
 
   for (const secret of secrets) {

@@ -4,13 +4,13 @@ const isExport = process.env.NEXT_EXPORT === 'true' || process.env.CF_PAGES === 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   env: {
-    NEXT_PUBLIC_180_CLIENT_ID: process.env.NEXT_PUBLIC_180_CLIENT_ID || '180-developers-portal',
-    NEXT_PUBLIC_IDENTITY_CLIENT_ID: process.env.NEXT_PUBLIC_IDENTITY_CLIENT_ID || '180-developers-portal',
-    NEXT_PUBLIC_IDENTITY_SERVER_URL: process.env.NEXT_PUBLIC_IDENTITY_SERVER_URL || (isDev ? 'http://localhost:4002' : 'https://api.180core.cloud'),
-    NEXT_PUBLIC_DEVELOPERS_API_URL: process.env.NEXT_PUBLIC_DEVELOPERS_API_URL || (isDev ? 'http://localhost:4002/api/v1/developers' : 'https://api.180core.cloud/api/v1/developers'),
-    NEXT_PUBLIC_CORE_BACKEND_URL: process.env.NEXT_PUBLIC_CORE_BACKEND_URL || (isDev ? 'http://localhost:4003' : 'https://api.180core.cloud'),
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || (isDev ? 'http://localhost:4003' : 'https://api.180core.cloud'),
-    NEXT_PUBLIC_PROFILE_URL: process.env.NEXT_PUBLIC_PROFILE_URL || (isDev ? 'http://localhost:3009' : 'https://profile.180core.cloud'),
+    NEXT_PUBLIC_180_CLIENT_ID: process.env.NEXT_PUBLIC_180_CLIENT_ID || '',
+    NEXT_PUBLIC_IDENTITY_CLIENT_ID: process.env.NEXT_PUBLIC_IDENTITY_CLIENT_ID || '',
+    NEXT_PUBLIC_IDENTITY_SERVER_URL: process.env.NEXT_PUBLIC_IDENTITY_SERVER_URL || '',
+    NEXT_PUBLIC_DEVELOPERS_API_URL: process.env.NEXT_PUBLIC_DEVELOPERS_API_URL || '',
+    NEXT_PUBLIC_CORE_BACKEND_URL: process.env.NEXT_PUBLIC_CORE_BACKEND_URL || '',
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || '',
+    NEXT_PUBLIC_PROFILE_URL: process.env.NEXT_PUBLIC_PROFILE_URL || '',
   },
   ...(isExport ? { output: 'export', images: { unoptimized: true } } : {}),
   async redirects() {
@@ -40,13 +40,15 @@ const nextConfig = {
     optimizePackageImports: [
       'lucide-react',
       'react-hot-toast',
+      '@workspace/ui',
+      '@workspace/identity-sdk',
     ],
   },
   onDemandEntries: {
-    // Period (in ms) where the server will keep pages in the buffer
-    maxInactiveAge: 60 * 1000,
-    // Number of pages that should be kept simultaneously without being disposed
-    pagesBufferLength: 5,
+    // Keep compiled pages in buffer for 24h to prevent dev recompilations on tab switch
+    maxInactiveAge: 24 * 60 * 60 * 1000,
+    // Keep up to 64 pages simultaneously in memory
+    pagesBufferLength: 64,
   },
   webpack: (config, { dev, isServer }) => {
     if (dev) {

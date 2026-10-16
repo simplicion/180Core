@@ -10,8 +10,18 @@ import { hashSecret } from './oauth.service';
 export const LEGACY_FIRST_PARTY_ALIASES: Record<string, string> = {
     '180-core': '180_client_2d51a605038c38ffb6fa037688988a83',
     '180-core-client': '180_client_2d51a605038c38ffb6fa037688988a83',
+    '180_core_client': '180_client_2d51a605038c38ffb6fa037688988a83',
+    '180-workspace-platform': '180_client_2d51a605038c38ffb6fa037688988a83',
+    '180-workspace': '180_client_2d51a605038c38ffb6fa037688988a83',
+    '180_workspace': '180_client_2d51a605038c38ffb6fa037688988a83',
+    '180-identity': '180_client_2d51a605038c38ffb6fa037688988a83',
+    '180-identity-client': '180_client_2d51a605038c38ffb6fa037688988a83',
+    '180_identity_client': '180_client_2d51a605038c38ffb6fa037688988a83',
+    '180-profile': '180_client_2d51a605038c38ffb6fa037688988a83',
+    '180_profile': '180_client_2d51a605038c38ffb6fa037688988a83',
     '180-developer-portal': '180_client_2d51a605038c38ffb6fa037688988a83',
     '180-developers-portal': '180_client_2d51a605038c38ffb6fa037688988a83',
+    'default': '180_client_2d51a605038c38ffb6fa037688988a83',
     '180_client_70d751541f05347fe803ec8e128f5e83': '180_client_2d51a605038c38ffb6fa037688988a83',
     '180_client_5cc136397553836e34eb37ce22d13a53': '180_client_2d51a605038c38ffb6fa037688988a83',
     '180_client_266753c1171df1e2c4a391483fd2e02e': '180_client_2d51a605038c38ffb6fa037688988a83',
@@ -24,7 +34,7 @@ export const LEGACY_FIRST_PARTY_ALIASES: Record<string, string> = {
 export function resolveCanonicalClientId(clientId: string | undefined | null): string {
     if (!clientId) return '';
     const clean = String(clientId).trim();
-    return LEGACY_FIRST_PARTY_ALIASES[clean] || clean;
+    return LEGACY_FIRST_PARTY_ALIASES[clean] || LEGACY_FIRST_PARTY_ALIASES[clean.toLowerCase()] || clean;
 }
 
 /**
@@ -41,18 +51,38 @@ export const FIRST_PARTY_APPS = [
             'http://localhost:3000/oauth/callback',
             'http://localhost:3001/callback',
             'http://localhost:3001/oauth/callback',
+            'http://localhost:3004/callback',
+            'http://localhost:3004/oauth/callback',
             'http://localhost:3008/callback',
             'http://localhost:3008/oauth/callback',
             'http://localhost:3008/dashboard',
             'http://localhost:3009/callback',
             'http://localhost:3009/oauth/callback',
+            'http://localhost:3009/auth/callback',
+            'http://localhost:3009/auth/login',
+            'http://localhost:3010/callback',
+            'http://localhost:3010/oauth/callback',
+            'http://localhost:5173/callback',
+            'http://localhost:5173/oauth/callback',
+            'http://localhost:8080/callback',
+            'http://localhost:8080/oauth/callback',
             'http://127.0.0.1:3000/callback',
             'http://127.0.0.1:3000/oauth/callback',
+            'http://127.0.0.1:3001/callback',
+            'http://127.0.0.1:3001/oauth/callback',
+            'http://127.0.0.1:3004/callback',
+            'http://127.0.0.1:3004/oauth/callback',
             'http://127.0.0.1:3008/callback',
             'http://127.0.0.1:3008/oauth/callback',
             'http://127.0.0.1:3008/dashboard',
             'http://127.0.0.1:3009/callback',
             'http://127.0.0.1:3009/oauth/callback',
+            'http://127.0.0.1:3009/auth/callback',
+            'http://127.0.0.1:3009/auth/login',
+            'http://127.0.0.1:3010/callback',
+            'http://127.0.0.1:3010/oauth/callback',
+            'http://127.0.0.1:5173/callback',
+            'http://127.0.0.1:5173/oauth/callback',
             'https://180core.cloud/callback',
             'https://180core.cloud/oauth/callback',
             'https://*.180core.cloud/callback',
@@ -62,6 +92,8 @@ export const FIRST_PARTY_APPS = [
             'https://developer.180core.cloud/dashboard',
             'https://profile.180core.cloud/callback',
             'https://profile.180core.cloud/oauth/callback',
+            'https://profile.180core.cloud/auth/login',
+            'https://profile.180core.cloud/auth/callback',
             'https://admin.180core.cloud/callback',
             'https://admin.180core.cloud/oauth/callback'
         ],
@@ -70,12 +102,22 @@ export const FIRST_PARTY_APPS = [
             'http://127.0.0.1:3000',
             'http://localhost:3001',
             'http://127.0.0.1:3001',
+            'http://localhost:3002',
+            'http://127.0.0.1:3002',
             'http://localhost:3004',
             'http://127.0.0.1:3004',
             'http://localhost:3008',
             'http://127.0.0.1:3008',
             'http://localhost:3009',
             'http://127.0.0.1:3009',
+            'http://localhost:3010',
+            'http://127.0.0.1:3010',
+            'http://localhost:5173',
+            'http://127.0.0.1:5173',
+            'http://localhost:8080',
+            'http://127.0.0.1:8080',
+            'http://localhost:8081',
+            'http://127.0.0.1:8081',
             'https://180core.cloud',
             'https://*.180core.cloud',
             'https://developer.180core.cloud',
@@ -95,6 +137,7 @@ export const FIRST_PARTY_APPS = [
         ],
         isVerified: true,
         isActive: true,
+        enableAuth: true,
         enablePay: true,
         authDesktopDefault: 'popup',
         authMobileDefault: 'bottom_sheet',
@@ -129,8 +172,8 @@ export async function seedFirstPartyOAuthApps(): Promise<void> {
 
             const knownSecret =
                 app.clientId === '180_client_2d51a605038c38ffb6fa037688988a83' || app.clientId === '180-core-client'
-                    ? (process.env.CORE_CLIENT_SECRET || '180_secret_4ec57dc29aa77c5e41c870ca3042997793198c6dd75ab47728b10856092ec3ab')
-                    : `180_secret_${app.clientId}`;
+                    ? (process.env.CORE_CLIENT_SECRET || '')
+                    : (process.env.CORE_CLIENT_SECRET || '');
 
             if (!existing) {
                 await prisma.oAuthApp.create({

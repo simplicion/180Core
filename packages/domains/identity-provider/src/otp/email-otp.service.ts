@@ -232,7 +232,7 @@ export class EmailOtpService {
     }
 
     const html = this.generateEmailHtml(otp, title, subtitle);
-    const fromAddress = process.env.EMAIL_FROM || process.env.SMTP_USER || 'no-reply@180workspace.com';
+    const fromAddress = process.env.EMAIL_FROM || process.env.SMTP_USER || '';
 
     try {
       const transporter = this.getTransporter();
@@ -301,7 +301,7 @@ export class EmailOtpService {
   <meta charset="utf-8">
   <title>${title}</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #09090b; color: #f4f4f5; margin: 0; padding: 32px 16px; }
+    body { font-family: 'Satoshi', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #09090b; color: #f4f4f5; margin: 0; padding: 32px 16px; }
     .card { max-width: 540px; margin: 0 auto; background: #121215; border: 1px solid rgba(244,63,94,0.3); border-radius: 20px; padding: 36px 28px; box-shadow: 0 16px 40px rgba(0,0,0,0.6); }
     .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; background: rgba(244,63,94,0.15); color: #f43f5e; border: 1px solid rgba(244,63,94,0.3); border-radius: 9999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 20px; }
     h1 { font-size: 20px; font-weight: 800; color: #ffffff; margin: 0 0 12px; }
@@ -333,7 +333,7 @@ export class EmailOtpService {
 
     try {
       const transporter = this.getTransporter();
-      const fromAddress = process.env.EMAIL_FROM || process.env.SMTP_USER || 'security@180workspace.com';
+      const fromAddress = process.env.EMAIL_FROM || process.env.SMTP_USER || '';
       await transporter.sendMail({
         from: `"180 Platform Security" <${fromAddress}>`,
         to: cleanEmail,

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Activity,
   RotateCw,
@@ -31,13 +31,17 @@ export function IdentityLogsView() {
 
   const rawLogs = authLogs?.logs || [];
 
-  const filteredLogs = rawLogs.filter((log: any) => {
-    if (logFilter === 'SUCCESS') return log.status === 'ACTIVE_SESSION';
-    if (logFilter === 'REVOKED') return log.status !== 'ACTIVE_SESSION';
-    return true;
-  });
+  const filteredLogs = useMemo(() => {
+    return rawLogs.filter((log: any) => {
+      if (logFilter === 'SUCCESS') return log.status === 'ACTIVE_SESSION';
+      if (logFilter === 'REVOKED') return log.status !== 'ACTIVE_SESSION';
+      return true;
+    });
+  }, [rawLogs, logFilter]);
 
-  const visibleLogs = filteredLogs.slice(0, displayedLogsCount);
+  const visibleLogs = useMemo(() => {
+    return filteredLogs.slice(0, displayedLogsCount);
+  }, [filteredLogs, displayedLogsCount]);
 
   // Lazy loading scroll
   useEffect(() => {
@@ -82,7 +86,7 @@ export function IdentityLogsView() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={fetchAuthLogs}
+              onClick={() => fetchAuthLogs(true)}
               disabled={loadingAuthLogs}
               className="p-2 rounded-xl border border-zinc-200 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-600 dark:text-zinc-300 transition-colors cursor-pointer"
               title="Refresh logs"

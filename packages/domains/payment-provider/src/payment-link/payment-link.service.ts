@@ -2,7 +2,7 @@
 
 import crypto from 'crypto';
 import axios from 'axios';
-import { developersPrisma as prisma } from '@workspace/db-180core';
+import { developersPrisma as prisma, resolveAppId } from '@workspace/db-180core';
 import { WebhookDispatcherService } from '../webhook/webhook-dispatcher.service';
 import { GeoPricingService, COUNTRY_DIRECTORY } from '../geo/geo-pricing.service';
 import { CheckoutService } from '../checkout/checkout.service';
@@ -109,6 +109,7 @@ export class PaymentLinkService {
    * 1. Creates a shareable Payment Link.
    */
   static async createPaymentLink(appId: string, data: CreatePaymentLinkInput) {
+    const targetAppId = await resolveAppId(appId);
     if (!data.title || !data.title.trim()) {
       throw new Error('Payment link title is required');
     }
@@ -134,7 +135,7 @@ export class PaymentLinkService {
 
     return await (prisma as any).paymentLink.create({
       data: {
-        appId,
+        appId: targetAppId,
         slug,
         title: data.title.trim(),
         description: data.description || '',
@@ -644,7 +645,7 @@ export class PaymentLinkService {
     }
 
     // Default / Stripe: Universal Web Checkout URL
-    const publicBase = process.env.PUBLIC_URL || process.env.NEXT_PUBLIC_PUBLIC_BASE || 'https://profile.180workspace.com';
+    const publicBase = process.env.PUBLIC_URL || process.env.NEXT_PUBLIC_PUBLIC_BASE || process.env.PROFILE_FRONTEND_URL || process.env.NEXT_PUBLIC_PROFILE_URL || '';
     const webUrl = link ? `${publicBase}/link/${link.slug}` : `${publicBase}/pay/${appId}`;
     return {
       qrType: 'UNIVERSAL_WEB_LINK',

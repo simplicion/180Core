@@ -279,7 +279,7 @@ export const OneEightyPricingTable: React.FC<PricingTableProps> = ({
       const profileBase =
         (window as any).__180_PROFILE_URL ||
         process.env.NEXT_PUBLIC_PROFILE_URL ||
-        (isInternalDev ? 'http://localhost:3009' : 'https://profile.180workspace.com');
+        (isInternalDev ? 'http://localhost:3009' : '');
       const checkoutUrl = `${profileBase}/checkout?appId=${encodeURIComponent(appId)}&planCode=${encodeURIComponent(plan.planCode || plan.id || '')}&interval=${interval.toUpperCase()}&amount=${plan.monthlyAmount || plan.amount || 0}&currency=${encodeURIComponent(plan.currency || 'USD')}&title=${encodeURIComponent(plan.name)}`;
       window.open(checkoutUrl, '_blank');
     }
@@ -509,7 +509,7 @@ export const OneEightyPricingTable: React.FC<PricingTableProps> = ({
                 )}
 
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', margin: '20px 0 24px 0' }}>
-                  <span style={{ fontSize: '42px', fontWeight: 900, fontFamily: 'monospace', letterSpacing: '-0.03em' }}>
+                  <span style={{ fontSize: '42px', fontWeight: 900, fontFamily: "'Fira Code', 'JetBrains Mono', monospace", letterSpacing: '-0.03em' }}>
                     {pricing.currencySymbol}{pricing.amount}
                   </span>
                   <span style={{ fontSize: '13px', fontWeight: 600, color: s.mutedText, textTransform: 'uppercase', letterSpacing: '0.04em' }}>

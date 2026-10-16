@@ -67,7 +67,7 @@ export function FloatingSupportWidget({
   const [shouldHide, setShouldHide] = useState(() => {
     if (typeof window !== 'undefined') {
       const p = (window.location.pathname || '').toLowerCase();
-      if (p.includes('/checkout') || p.includes('/embed') || p.includes('/link') || p.includes('/pay/l')) {
+      if (p.includes('/auth') || p.includes('/checkout') || p.includes('/embed') || p.includes('/link') || p.includes('/pay/l')) {
         return true;
       }
     }
@@ -77,7 +77,7 @@ export function FloatingSupportWidget({
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const p = (window.location.pathname || '').toLowerCase();
-      if (p.includes('/checkout') || p.includes('/embed') || p.includes('/link') || p.includes('/pay/l')) {
+      if (p.includes('/auth') || p.includes('/checkout') || p.includes('/embed') || p.includes('/link') || p.includes('/pay/l')) {
         setShouldHide(true);
       }
     }

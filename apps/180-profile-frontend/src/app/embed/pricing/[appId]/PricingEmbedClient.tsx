@@ -146,9 +146,9 @@ export function PricingEmbedClient({ appId: initialAppId }: { appId?: string } =
   const getProfileBase = () => {
     if (typeof window !== 'undefined') {
       const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      return isLocal ? 'http://localhost:3009' : (process.env.NEXT_PUBLIC_PROFILE_URL || 'https://profile.180workspace.com');
+      return isLocal ? 'http://localhost:3009' : (process.env.NEXT_PUBLIC_PROFILE_URL || window.location.origin);
     }
-    return process.env.NEXT_PUBLIC_PROFILE_URL || 'https://profile.180workspace.com';
+    return process.env.NEXT_PUBLIC_PROFILE_URL || '';
   };
 
   const fetchConfig = useCallback(async (targetAppId?: string) => {

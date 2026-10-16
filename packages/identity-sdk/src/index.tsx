@@ -67,6 +67,7 @@ export interface CheckoutResponse {
 }
 
 export interface CheckoutOptions {
+  clientId?: string;
   sessionId?: string;
   amount?: number;
   currency?: string;
@@ -691,8 +692,8 @@ export const OneEightyIdentity = {
     const clientId =
       options.clientId ||
       (typeof window !== 'undefined' && (window as any).__180_CLIENT_ID) ||
-      (typeof process !== 'undefined' ? (process.env?.NEXT_PUBLIC_180_CLIENT_ID || process.env?.NEXT_PUBLIC_IDENTITY_CLIENT_ID) : undefined) ||
-      '180_client_2d51a605038c38ffb6fa037688988a83';
+      (typeof process !== 'undefined' ? (process.env?.NEXT_PUBLIC_CORE_CLIENT_ID || process.env?.NEXT_PUBLIC_180_CLIENT_ID || process.env?.NEXT_PUBLIC_IDENTITY_CLIENT_ID) : undefined) ||
+      '';
 
     const env = resolveEnvironmentMode(options.environment);
     const authServer = getAuthServerUrl(options.authServerUrl, env);
@@ -1278,7 +1279,7 @@ export const OneEightyPay = {
     } else if (options.uxMode === 'bottom_sheet') {
       effectiveMode = 'bottom_sheet';
     } else {
-      const clientId = options.metadata?.clientId || (typeof process !== 'undefined' ? (process.env?.NEXT_PUBLIC_180_CLIENT_ID || process.env?.NEXT_PUBLIC_IDENTITY_CLIENT_ID) : undefined);
+      const clientId = options.clientId || options.metadata?.clientId || (typeof process !== 'undefined' ? (process.env?.NEXT_PUBLIC_180_CLIENT_ID || process.env?.NEXT_PUBLIC_IDENTITY_CLIENT_ID) : undefined);
       const cached = clientId ? getCachedAppConfig(clientId) : null;
       const configuredMode = isMobile ? cached?.payMobileDefault : cached?.payDesktopDefault;
       if (configuredMode === 'popup' || configuredMode === 'bottom_sheet' || configuredMode === 'full_page') {
@@ -1294,6 +1295,7 @@ export const OneEightyPay = {
       options.title ? `title=${encodeURIComponent(options.title)}` : '',
       options.description ? `description=${encodeURIComponent(options.description)}` : '',
       options.couponCode ? `coupon=${encodeURIComponent(options.couponCode)}` : '',
+      options.clientId ? `client_id=${encodeURIComponent(options.clientId)}` : '',
       `appName=${encodeURIComponent('180 Workspace')}`,
       'app=pay',
       `ux_mode=${encodeURIComponent(effectiveMode)}`,
@@ -1570,8 +1572,8 @@ export function use180Identity(defaultClientId?: string) {
     const id =
       defaultClientId ||
       (typeof window !== 'undefined' && (window as any).__180_CLIENT_ID) ||
-      (typeof process !== 'undefined' ? (process.env?.NEXT_PUBLIC_180_CLIENT_ID || process.env?.NEXT_PUBLIC_IDENTITY_CLIENT_ID) : undefined) ||
-      '180_client_2d51a605038c38ffb6fa037688988a83';
+      (typeof process !== 'undefined' ? (process.env?.NEXT_PUBLIC_CORE_CLIENT_ID || process.env?.NEXT_PUBLIC_180_CLIENT_ID || process.env?.NEXT_PUBLIC_IDENTITY_CLIENT_ID) : undefined) ||
+      '';
     if (id) {
       prefetchAppConfig(id).catch(() => {});
     }
@@ -1587,8 +1589,8 @@ export function use180Identity(defaultClientId?: string) {
           opts.clientId ||
           defaultClientId ||
           (typeof window !== 'undefined' && (window as any).__180_CLIENT_ID) ||
-          (typeof process !== 'undefined' ? (process.env?.NEXT_PUBLIC_180_CLIENT_ID || process.env?.NEXT_PUBLIC_IDENTITY_CLIENT_ID) : undefined) ||
-          '180_client_2d51a605038c38ffb6fa037688988a83';
+          (typeof process !== 'undefined' ? (process.env?.NEXT_PUBLIC_CORE_CLIENT_ID || process.env?.NEXT_PUBLIC_180_CLIENT_ID || process.env?.NEXT_PUBLIC_IDENTITY_CLIENT_ID) : undefined) ||
+          '';
 
         const res = await OneEightyIdentity.openAuth({
           clientId,

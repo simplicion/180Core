@@ -7,8 +7,9 @@ import { FloatingSupportWidget } from '@workspace/ui';
 export function ProfileSupportWrapper() {
   const pathname = usePathname();
 
-  // Do not display Quick Support button on checkout modals, embed pages, or payment links
+  // Do not display Quick Support button on auth screens, checkout modals, embed pages, or payment links
   if (
+    pathname?.startsWith('/auth') ||
     pathname?.startsWith('/checkout') ||
     pathname?.startsWith('/embed') ||
     pathname?.startsWith('/link') ||

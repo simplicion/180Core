@@ -50,9 +50,9 @@ for (const dir of targetDirs) {
 const r2Endpoint = process.env.CLOUDFLARE_R2_ENDPOINT || process.env.R2_ENDPOINT;
 const r2AccessKey = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || process.env.R2_ACCESS_KEY;
 const r2SecretKey = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || process.env.R2_SECRET_KEY;
-const r2Bucket = process.env.R2_BUCKET_NAME || process.env.CLOUDFLARE_R2_BUCKET_NAME || '180core';
+const r2Bucket = process.env.R2_BUCKET_NAME || process.env.CLOUDFLARE_R2_BUCKET_NAME || '';
 
-if (r2Endpoint && r2AccessKey && r2SecretKey) {
+if (r2Endpoint && r2AccessKey && r2SecretKey && r2Bucket) {
   console.log('\n2️⃣ Cloudflare R2 Global CDN Credentials Detected — Synchronizing Edge Bucket...');
   try {
     const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');

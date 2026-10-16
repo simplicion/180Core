@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react';
 import {
   Users,
   Search,
@@ -28,6 +28,7 @@ export function IdentityUsersView() {
   } = useProject();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'EXPIRED'>('ALL');
 
   // Lazy loading pagination state
@@ -47,7 +48,7 @@ export function IdentityUsersView() {
       const email = (log.user?.email || '').toLowerCase();
       const username = (log.user?.username || log.appSpecificUsernames?.[project?.id || ''] || '').toLowerCase();
       const userId = (log.userId || '').toLowerCase();
-      const q = searchQuery.toLowerCase().trim();
+      const q = deferredSearchQuery.toLowerCase().trim();
 
       const matchesSearch = !q || name.includes(q) || email.includes(q) || username.includes(q) || userId.includes(q);
 
@@ -58,7 +59,7 @@ export function IdentityUsersView() {
 
       return true;
     });
-  }, [rawLogs, searchQuery, statusFilter, project?.id]);
+  }, [rawLogs, deferredSearchQuery, statusFilter, project?.id]);
 
   const visibleLogs = useMemo(() => {
     return filteredLogs.slice(0, displayedCount);
@@ -109,7 +110,7 @@ export function IdentityUsersView() {
             </span>
             <button
               type="button"
-              onClick={fetchAuthLogs}
+              onClick={() => fetchAuthLogs(true)}
               disabled={loadingAuthLogs}
               className="p-2 rounded-xl border border-zinc-200 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-600 dark:text-zinc-300 transition-colors cursor-pointer"
               title="Refresh directory"

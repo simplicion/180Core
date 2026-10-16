@@ -4,8 +4,8 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { getPrivateKey, getPublicKey, getKeyId, getJwks } from '../crypto/rsa-keys.service';
 
-export const JWT_SECRET = process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET || '180-identity-jwt-secret-key-prod-super-secure';
-export const ISSUER = process.env.IDENTITY_ISSUER || process.env.OAUTH_ISSUER || 'https://180identity.180workspace.com';
+export const JWT_SECRET = process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET || '';
+export const ISSUER = process.env.IDENTITY_ISSUER || process.env.OAUTH_ISSUER || process.env.NEXT_PUBLIC_CORE_BACKEND_URL || '';
 
 /**
  * High-entropy random token generator with custom prefix

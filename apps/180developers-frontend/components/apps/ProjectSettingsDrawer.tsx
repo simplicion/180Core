@@ -209,16 +209,12 @@ export function ProjectSettingsDrawer({
           </div>
 
           {/* Project Logo Upload */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-              Project Brand Logo
-            </label>
-            <AppLogoUploader
-              logoUrl={logoUrl}
-              onChange={setLogoUrl}
-              appId={app.id}
-            />
-          </div>
+          <AppLogoUploader
+            logoUrl={logoUrl}
+            onChange={setLogoUrl}
+            appId={app.id}
+            label="Project Brand Logo"
+          />
         </div>
 
         {/* 3. Project-Level Security & Web Configuration */}

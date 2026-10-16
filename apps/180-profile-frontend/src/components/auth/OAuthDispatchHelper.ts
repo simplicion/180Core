@@ -13,7 +13,7 @@ export interface OAuthParams {
 
 export function extractOAuthParams(searchParams: URLSearchParams): OAuthParams {
   return {
-    clientId: searchParams.get('client_id') || '180-workspace-platform',
+    clientId: searchParams.get('client_id') || '180_client_2d51a605038c38ffb6fa037688988a83',
     redirectUri: searchParams.get('redirect_uri') || '',
     state: searchParams.get('state') || '',
     scope: searchParams.get('scope') || 'openid identity:read identity:email',
@@ -37,10 +37,17 @@ export function buildOAuthQueryString(params: OAuthParams): string {
 }
 
 export function resolveAppName(clientId: string): string {
-  if (clientId === '180-workspace-platform') return '180 Workspace';
-  if (clientId === '180-developer-portal') return '180 Developers';
+  if (clientId === '180-workspace-platform' || clientId === '180-workspace') return '180 Workspace';
+  if (
+    clientId === '180-core' ||
+    clientId === '180-core-client' ||
+    clientId === '180_core_client' ||
+    clientId === '180_client_2d51a605038c38ffb6fa037688988a83'
+  ) return '180 Core';
+  if (clientId === '180-developer-portal' || clientId === '180-developers-portal') return '180 Developers';
   if (clientId === '180-traffic-director' || clientId === '180_client_b26aee801c22cb3295f041ff2a3597db') return '180 Traffic Director';
   if (clientId === '180-profile') return '180 Profile';
+  if (clientId === '180-identity' || clientId === '180-identity-client') return '180 Identity';
   return clientId.replace(/-/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
 }
 

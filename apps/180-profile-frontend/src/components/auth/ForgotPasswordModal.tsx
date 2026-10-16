@@ -10,10 +10,10 @@ import {
   RotateCcw,
   CheckCircle2,
   Lock,
+  Mail,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PlatformModal, LogoLoader } from '@workspace/ui';
-import { SmartAuthInput } from './SmartAuthInput';
 import { getCoreApiUrl } from '@/lib/api';
 import { OAuthParams } from './OAuthDispatchHelper';
 
@@ -105,7 +105,11 @@ export function ForgotPasswordModal({
     if (e) e.preventDefault();
     const cleanInput = emailOrPhone.trim();
     if (!cleanInput) {
-      toast.error('Please enter your email or phone number');
+      toast.error('Please enter your email address');
+      return;
+    }
+    if (!cleanInput.includes('@')) {
+      toast.error('Please enter a valid email address');
       return;
     }
 
@@ -251,7 +255,7 @@ export function ForgotPasswordModal({
             >
               {step === 'request' ? '1' : '✓'}
             </span>
-            <span>Contact</span>
+            <span>Email</span>
           </span>
           <span className="text-slate-300 dark:text-zinc-700">→</span>
           <span className="flex items-center gap-1.5">
@@ -290,18 +294,32 @@ export function ForgotPasswordModal({
           <form onSubmit={handleSendOtp} className="space-y-4 pt-1">
             <div className="space-y-1">
               <p className="text-xs text-slate-600 dark:text-zinc-300">
-                Enter your registered email address or mobile number. We will send you a 6-digit verification code to reset your password.
+                Enter your registered email address. We will send you a 6-digit verification code to reset your password.
               </p>
             </div>
 
-            <SmartAuthInput
-              label="Email or Mobile Number"
-              placeholder="Enter your email address or phone number"
-              value={emailOrPhone}
-              onChange={setEmailOrPhone}
-              required
-              autoFocus
-            />
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-zinc-300 mb-1">
+                Email Address
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <input
+                  type="email"
+                  placeholder="name@company.com"
+                  value={emailOrPhone}
+                  onChange={(e) => setEmailOrPhone(e.target.value)}
+                  className="w-full bg-slate-50/80 dark:bg-zinc-900 border border-slate-200 dark:border-white/10 rounded-xl pl-10 pr-3.5 py-2.5 min-h-[42px] text-xs font-medium text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                  required
+                  autoFocus
+                />
+              </div>
+              <p className="text-[11px] text-slate-400 dark:text-zinc-500 mt-1">
+                Enter your registered email address to receive a 6-digit reset code.
+              </p>
+            </div>
 
             <div className="pt-2 flex items-center justify-end gap-2.5">
               <button

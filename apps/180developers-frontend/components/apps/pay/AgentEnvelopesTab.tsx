@@ -269,7 +269,7 @@ X-180-Agent-Key: 180_agent_key_xxxxxxxxxxxxxxxxxxxxxxxx
 Idempotency-Key: idemp_93817492
 
 {
-  "appId": "${appId || 'app_xxxxxxxx'}",
+  "clientId": "${appId || '180_client_xxxxxxxx'}",
   "amount": 4.99,
   "currency": "USD",
   "title": "On-demand GPU 30-min Inference Credit",
@@ -286,7 +286,7 @@ Idempotency-Key: idemp_93817492
 // Initialize with pre-authorized envelope key
 const agent = new OneEightyAgent({
   apiKey: process.env.ONE_EIGHTY_AGENT_KEY, // 180_agent_key_...
-  appId: '${appId || 'app_xxxxxxxx'}',
+  clientId: '${appId || '180_client_xxxxxxxx'}',
 });
 
 // Execute autonomous micro-purchase within bounded budget
@@ -309,7 +309,7 @@ from one_eighty_pay import AgentEnvelopeClient
 # Initialize client using scoped envelope key
 client = AgentEnvelopeClient(
     api_key=os.environ["ONE_EIGHTY_AGENT_KEY"],
-    app_id="${appId || 'app_xxxxxxxx'}"
+    client_id="${appId || '180_client_xxxxxxxx'}"
 )
 
 # Autonomous purchase within per-transaction and total budget ceiling

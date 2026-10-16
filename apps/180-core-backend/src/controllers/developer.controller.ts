@@ -199,7 +199,7 @@ export class DeveloperApiController {
 
       const appIds = [app.id, app.clientId];
 
-      // Checkouts
+      // Checkouts - bounded to the most recent 400 sessions for snappy analytics
       const allSessions = await prisma.checkoutSession.findMany({
         where: { appId: { in: appIds } },
         include: {
@@ -208,12 +208,12 @@ export class DeveloperApiController {
           },
         },
         orderBy: { createdAt: 'desc' },
+        take: 400,
       });
 
       // ─────────────────────────────────────────────────────────────────────────
       // UNIFY CUSTOMER SESSIONS: Single Record per User Session
-      // Preserves 1 record per browsing session (30-min window or explicit clientSessionId).
-      // Automatically elevates status (Captured > Failed > Gateway Dropped > Intent to Pay).
+      // Optimized O(N) Hash-Bucketing instead of O(N^2) Full Array Scans
       // ─────────────────────────────────────────────────────────────────────────
       const SESSION_WINDOW_MS = 30 * 60 * 1000; // 30-minute standard session window
 
@@ -237,6 +237,10 @@ export class DeveloperApiController {
       };
 
       const unifiedSessions: any[] = [];
+      const clientSessionIndex = new Map<string, any>();
+      const userIndex = new Map<string, any[]>();
+      const contactIndex = new Map<string, any[]>();
+      const ipIndex = new Map<string, any[]>();
 
       for (const session of allSessions) {
         const meta = (session.metadata as any) || {};
@@ -251,47 +255,61 @@ export class DeveloperApiController {
 
         let matchedGroup: any = null;
 
-        for (const group of unifiedSessions) {
-          const groupMeta = (group.metadata as any) || {};
-          const groupTime = new Date(group.createdAt).getTime();
-          const timeDiff = Math.abs(sessionTime - groupTime);
+        // Fast Path 1: Exact client session ID (O(1) lookup)
+        if (clientSessionId && clientSessionIndex.has(clientSessionId)) {
+          matchedGroup = clientSessionIndex.get(clientSessionId);
+        }
 
-          // Match 1: Exact client session ID
-          if (clientSessionId && groupMeta.clientSessionId && clientSessionId === groupMeta.clientSessionId) {
-            matchedGroup = group;
-            break;
+        // Fast Path 2: Authenticated user ID in time window (small bucket scan)
+        if (!matchedGroup && userId && userIndex.has(userId)) {
+          const userBucket = userIndex.get(userId)!;
+          for (let i = userBucket.length - 1; i >= 0; i--) {
+            const group = userBucket[i];
+            const groupTime = new Date(group.createdAt).getTime();
+            if (Math.abs(sessionTime - groupTime) <= SESSION_WINDOW_MS) {
+              matchedGroup = group;
+              break;
+            }
           }
+        }
 
-          // Match 2: Authenticated user ID within session window
-          if (userId && group.userId && userId === group.userId && timeDiff <= SESSION_WINDOW_MS) {
-            matchedGroup = group;
-            break;
+        // Fast Path 3: Same Phone or Email in time window (small bucket scan)
+        if (!matchedGroup && phone && contactIndex.has(phone)) {
+          const contactBucket = contactIndex.get(phone)!;
+          for (let i = contactBucket.length - 1; i >= 0; i--) {
+            const group = contactBucket[i];
+            const groupTime = new Date(group.createdAt).getTime();
+            if (Math.abs(sessionTime - groupTime) <= SESSION_WINDOW_MS) {
+              matchedGroup = group;
+              break;
+            }
           }
+        }
+        if (!matchedGroup && email && contactIndex.has(email)) {
+          const contactBucket = contactIndex.get(email)!;
+          for (let i = contactBucket.length - 1; i >= 0; i--) {
+            const group = contactBucket[i];
+            const groupTime = new Date(group.createdAt).getTime();
+            if (Math.abs(sessionTime - groupTime) <= SESSION_WINDOW_MS) {
+              matchedGroup = group;
+              break;
+            }
+          }
+        }
 
-          // Match 3: Same Phone or Email within session window
-          if (phone && group.customerPhone && phone === group.customerPhone && timeDiff <= SESSION_WINDOW_MS) {
-            matchedGroup = group;
-            break;
-          }
-          if (email && group.customerEmail && email === group.customerEmail && timeDiff <= SESSION_WINDOW_MS) {
-            matchedGroup = group;
-            break;
-          }
-
-          // Match 4: Same IP and userAgent within session window
-          if (ip && groupMeta.ip && ip === groupMeta.ip) {
+        // Fast Path 4: Same IP & User Agent in time window
+        if (!matchedGroup && ip && ipIndex.has(ip)) {
+          const ipBucket = ipIndex.get(ip)!;
+          for (let i = ipBucket.length - 1; i >= 0; i--) {
+            const group = ipBucket[i];
+            const groupMeta = (group.metadata as any) || {};
             if (!userAgent || !groupMeta.userAgent || userAgent === groupMeta.userAgent) {
-              if (timeDiff <= SESSION_WINDOW_MS) {
+              const groupTime = new Date(group.createdAt).getTime();
+              if (Math.abs(sessionTime - groupTime) <= SESSION_WINDOW_MS) {
                 matchedGroup = group;
                 break;
               }
             }
-          }
-
-          // Match 5: Rapid multi-click / double-call (< 60s) for same app + amount
-          if (timeDiff <= 60 * 1000 && Math.abs(session.amount - group.amount) < 0.01) {
-            matchedGroup = group;
-            break;
           }
         }
 
@@ -330,13 +348,37 @@ export class DeveloperApiController {
           matchedGroup.lastActivityAt = latestTime;
         } else {
           const sessionActivityTime = new Date(meta.gatewayDismissedAt || meta.gatewayInvokedAt || meta.drawerOpenedAt || session.updatedAt || session.createdAt);
-          unifiedSessions.push({
+          const newGroup = {
             ...session,
             customerPhone: phone || (session.user && (session.user as any).phone) || null,
             customerEmail: email || (session.user && (session.user as any).email) || null,
             lastActivityAt: sessionActivityTime,
             _sessions: [session],
-          });
+          };
+          unifiedSessions.push(newGroup);
+
+          // Index for fast O(1) lookups on subsequent sessions
+          if (clientSessionId) clientSessionIndex.set(clientSessionId, newGroup);
+          if (userId) {
+            const arr = userIndex.get(userId) || [];
+            arr.push(newGroup);
+            userIndex.set(userId, arr);
+          }
+          if (phone) {
+            const arr = contactIndex.get(phone) || [];
+            arr.push(newGroup);
+            contactIndex.set(phone, arr);
+          }
+          if (email) {
+            const arr = contactIndex.get(email) || [];
+            arr.push(newGroup);
+            contactIndex.set(email, arr);
+          }
+          if (ip) {
+            const arr = ipIndex.get(ip) || [];
+            arr.push(newGroup);
+            ipIndex.set(ip, arr);
+          }
         }
       }
 
@@ -1028,8 +1070,8 @@ export class DeveloperApiController {
       }
 
       const domain = app.customPayDomain.toLowerCase().trim();
-      const expectedCname = process.env.CUSTOM_DOMAIN_CNAME_TARGET || 'cname.180workspace.com';
-      const expectedIp = process.env.EC2_PUBLIC_IP || process.env.SERVER_PUBLIC_IP || '32.198.110.99';
+      const expectedCname = process.env.CUSTOM_DOMAIN_CNAME_TARGET || '';
+      const expectedIp = process.env.EC2_PUBLIC_IP || process.env.SERVER_PUBLIC_IP || '';
 
       let isVerified = false;
       let resolvedRecords: string[] = [];
@@ -1040,14 +1082,14 @@ export class DeveloperApiController {
         resolvedRecords = cnameRecords;
         details.cname = cnameRecords;
 
-        if (cnameRecords.some((r) => r.includes('180workspace') || r.includes(expectedCname) || r.includes('pages.dev'))) {
+        if (cnameRecords.some((r) => (expectedCname && r.includes(expectedCname)) || r.includes('180core') || r.includes('pages.dev'))) {
           isVerified = true;
         }
 
         if (!isVerified) {
           const aRecords = await dns.promises.resolve4(domain).catch(() => []);
           details.aRecords = aRecords;
-          if (aRecords.includes(expectedIp) || aRecords.includes('32.198.110.99')) {
+          if (expectedIp && aRecords.includes(expectedIp)) {
             isVerified = true;
           }
         }

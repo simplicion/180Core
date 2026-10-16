@@ -5,12 +5,13 @@ import { useParams, useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { DeveloperAppDetail, PaymentAnalyticsData, BankDetailsData, PayoutRecord, WebhookTestResult } from '@/components/apps/types';
 import { purgeAuthSession, getStoredAuthToken } from '@/lib/auth';
+import { cachedFetch, invalidateCache } from '@/lib/cache';
 
 interface ProjectContextValue {
   project: DeveloperAppDetail | null;
   projectId: string;
   loading: boolean;
-  refreshProject: () => Promise<void>;
+  refreshProject: (forceBypass?: boolean | unknown) => Promise<void>;
   userProfile: any;
   allProjects: any[];
   isSidebarExpanded: boolean;
@@ -27,19 +28,20 @@ interface ProjectContextValue {
   // Telemetry for Identity
   authLogs: { logs: any[]; totalUsers: number; activeSessionsCount: number } | null;
   loadingAuthLogs: boolean;
-  fetchAuthLogs: () => Promise<void>;
+  fetchAuthLogs: (forceBypass?: any) => Promise<void>;
   handleRevokeUserSession: (targetUserId: string, userName: string) => Promise<void>;
   revokingUserId: string | null;
   // Telemetry for Pay
   paymentAnalytics: PaymentAnalyticsData | null;
   loadingAnalytics: boolean;
-  fetchPaymentAnalytics: () => Promise<void>;
+  fetchPaymentAnalytics: (forceBypass?: any) => Promise<void>;
   payoutBalance: number;
   payoutHistory: PayoutRecord[];
   loadingPayoutHistory: boolean;
-  fetchPayoutHistory: () => Promise<void>;
+  fetchPayoutHistory: (forceBypass?: any) => Promise<void>;
   bankDetails: BankDetailsData | null;
   setBankDetails: (val: BankDetailsData | null) => void;
+  fetchBankDetails: (forceBypass?: any) => Promise<void>;
   // Webhook
   webhookUrl: string;
   setWebhookUrl: (val: string) => void;
@@ -144,8 +146,8 @@ export function ProjectProvider({
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  // Fetch Project Details
-  const refreshProject = useCallback(async () => {
+  // Fetch Project Details (Cached & In-Flight Deduplicated)
+  const refreshProject = useCallback(async (forceBypass: boolean | unknown = false) => {
     if (!projectId || projectId === 'default') {
       setLoading(false);
       return;
@@ -159,37 +161,46 @@ export function ProjectProvider({
       }
       const apiBase = getApiBase();
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      if (forceBypass === true) {
+        invalidateCache(`app_${projectId}`);
+      }
 
-      let res = await fetch(`${apiBase}/api/v1/identity/developer/apps/${projectId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: controller.signal,
-      }).catch(() => null);
+      const appData = await cachedFetch(`app_${projectId}`, async () => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-      if (!res || !res.ok) {
-        res = await fetch(`${apiBase}/api/oauth/developer/apps/${projectId}`, {
+        let res = await fetch(`${apiBase}/api/v1/identity/developer/apps/${projectId}`, {
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
         }).catch(() => null);
-      }
 
-      clearTimeout(timeoutId);
+        if (!res || !res.ok) {
+          res = await fetch(`${apiBase}/api/oauth/developer/apps/${projectId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: controller.signal,
+          }).catch(() => null);
+        }
 
-      if (!res || !res.ok) {
-        throw new Error('Failed to load project details');
-      }
+        clearTimeout(timeoutId);
 
-      const data = await res.json();
-      const appData = data.app || data.data || data;
-      setProject(appData);
-      if (appData.bankDetails) {
-        setBankDetails(appData.bankDetails);
+        if (!res || !res.ok) {
+          throw new Error('Failed to load project details');
+        }
+
+        const data = await res.json();
+        return data.app || data.data || data;
+      }, 60000);
+
+      if (appData) {
+        setProject(appData);
+        if (appData.bankDetails) {
+          setBankDetails(appData.bankDetails);
+        }
+        setEnableAuth(appData.enableAuth ?? true);
+        setEnablePay(appData.enablePay ?? true);
+        setWebhookUrl(appData.webhookUrl || '');
+        setWebhookSecret(appData.webhookSecret || '');
       }
-      setEnableAuth(appData.enableAuth ?? true);
-      setEnablePay(appData.enablePay ?? true);
-      setWebhookUrl(appData.webhookUrl || '');
-      setWebhookSecret(appData.webhookSecret || '');
     } catch (err: any) {
       console.warn('[ProjectContext] Failed to load project:', err?.message);
     } finally {
@@ -245,53 +256,83 @@ export function ProjectProvider({
     };
   }, [router]);
 
-  // Fetch All Projects & User Profile
-  const fetchAllProjectsAndProfile = useCallback(async () => {
+  // Fetch All Projects & User Profile (Cached & Deduplicated)
+  const fetchAllProjectsAndProfile = useCallback(async (forceBypass = false) => {
     try {
       const token = getAuthToken();
       if (!token) return;
       const apiBase = getApiBase();
 
-      const userRes = await fetch(`${apiBase}/api/oauth/userinfo`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (userRes.status === 401) {
-        purgeAuthSession();
-        router.push('/dashboard');
-        return;
-      }
-      if (userRes.ok) {
-        const uData = await userRes.json();
-        setUserProfile(uData.user || uData);
+      if (forceBypass) {
+        invalidateCache('user_profile_and_projects');
       }
 
-      const appsRes = await fetch(`${apiBase}/api/v1/identity/developer/apps`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (appsRes.ok) {
-        const appsData = await appsRes.json();
-        setAllProjects(appsData.apps || []);
+      const payload = await cachedFetch('user_profile_and_projects', async () => {
+        const [userRes, appsRes] = await Promise.all([
+          fetch(`${apiBase}/api/oauth/userinfo`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${apiBase}/api/v1/identity/developer/apps`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+
+        let user = null;
+        if (userRes.status === 401) {
+          purgeAuthSession();
+          router.push('/dashboard');
+          return null;
+        }
+        if (userRes.ok) {
+          const uData = await userRes.json();
+          user = uData.user || uData;
+        }
+
+        let apps: any[] = [];
+        if (appsRes.ok) {
+          const appsData = await appsRes.json();
+          apps = appsData.apps || [];
+        }
+
+        return { user, apps };
+      }, 60000);
+
+      if (payload) {
+        if (payload.user) setUserProfile(payload.user);
+        if (payload.apps) setAllProjects(payload.apps);
       }
     } catch (_) {}
   }, [router]);
 
-  // Fetch Auth Logs
-  const fetchAuthLogs = useCallback(async () => {
+  // Fetch Auth Logs (Cached & Deduplicated)
+  const fetchAuthLogs = useCallback(async (forceBypass?: any) => {
     if (!projectId || projectId === 'default') return;
     setLoadingAuthLogs(true);
     try {
       const token = getAuthToken();
       const apiBase = getApiBase();
-      const res = await fetch(`${apiBase}/api/v1/identity/developer/apps/${projectId}/auth-logs`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAuthLogs({
-          logs: data.logs || [],
-          totalUsers: data.totalUsers || 0,
-          activeSessionsCount: data.activeSessionsCount || 0,
+
+      if (forceBypass === true) {
+        invalidateCache(`auth_logs_${projectId}`);
+      }
+
+      const authData = await cachedFetch(`auth_logs_${projectId}`, async () => {
+        const res = await fetch(`${apiBase}/api/v1/identity/developer/apps/${projectId}/auth-logs`, {
+          headers: { Authorization: `Bearer ${token}` },
         });
+        if (res.ok) {
+          const data = await res.json();
+          return {
+            logs: data.logs || [],
+            totalUsers: data.totalUsers || 0,
+            activeSessionsCount: data.activeSessionsCount || 0,
+          };
+        }
+        return null;
+      }, 30000);
+
+      if (authData) {
+        setAuthLogs(authData);
       }
     } catch (_) {}
     finally {
@@ -315,7 +356,8 @@ export function ProjectProvider({
       });
       if (!res.ok) throw new Error('Revoke session request failed');
       toast.success(`Active session for ${userName || targetUserId} terminated`);
-      fetchAuthLogs();
+      invalidateCache(`auth_logs_${projectId}`);
+      fetchAuthLogs(true);
     } catch (err: any) {
       toast.error(err.message || 'Revocation failed');
     } finally {
@@ -323,27 +365,33 @@ export function ProjectProvider({
     }
   };
 
-  // Fetch Payment Analytics
-  const fetchPaymentAnalytics = useCallback(async () => {
+  // Fetch Payment Analytics (Cached & Direct Canonical Route)
+  const fetchPaymentAnalytics = useCallback(async (forceBypass?: any) => {
     if (!projectId || projectId === 'default') return;
     setLoadingAnalytics(true);
     try {
       const token = getAuthToken();
       const apiBase = getApiBase();
-      let res = await fetch(`${apiBase}/api/v1/identity/developer/apps/${projectId}/analytics`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.status === 404) {
-        res = await fetch(`${apiBase}/api/v1/identity/developer/apps/${projectId}/payment-analytics`, {
+
+      if (forceBypass === true) {
+        invalidateCache(`payment_analytics_${projectId}`);
+      }
+
+      const analyticsData = await cachedFetch(`payment_analytics_${projectId}`, async () => {
+        const res = await fetch(`${apiBase}/api/v1/identity/developer/apps/${projectId}/analytics`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-      }
-      if (res.ok) {
-        const data = await res.json();
-        const analytics = data.analytics || data.data || data;
-        setPaymentAnalytics(analytics || null);
-        if (typeof analytics?.withdrawableBalance === 'number') {
-          setPayoutBalance(analytics.withdrawableBalance);
+        if (res.ok) {
+          const data = await res.json();
+          return data.analytics || data.data || data || null;
+        }
+        return null;
+      }, 30000);
+
+      if (analyticsData) {
+        setPaymentAnalytics(analyticsData);
+        if (typeof analyticsData?.withdrawableBalance === 'number') {
+          setPayoutBalance(analyticsData.withdrawableBalance);
         }
       }
     } catch (_) {}
@@ -352,24 +400,64 @@ export function ProjectProvider({
     }
   }, [projectId]);
 
-  // Fetch Payout History
-  const fetchPayoutHistory = useCallback(async () => {
+  // Fetch Payout History (Cached & Deduplicated)
+  const fetchPayoutHistory = useCallback(async (forceBypass?: any) => {
     if (!projectId || projectId === 'default') return;
     setLoadingPayoutHistory(true);
     try {
       const token = getAuthToken();
       const apiBase = getApiBase();
-      const res = await fetch(`${apiBase}/api/v1/identity/developer/apps/${projectId}/payouts`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setPayoutHistory(data.payouts || data.data || []);
+
+      if (forceBypass === true) {
+        invalidateCache(`payouts_${projectId}`);
+      }
+
+      const payoutsData = await cachedFetch(`payouts_${projectId}`, async () => {
+        const res = await fetch(`${apiBase}/api/v1/identity/developer/apps/${projectId}/payouts`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return data.payouts || data.data || [];
+        }
+        return null;
+      }, 30000);
+
+      if (payoutsData) {
+        setPayoutHistory(payoutsData);
       }
     } catch (_) {}
     finally {
       setLoadingPayoutHistory(false);
     }
+  }, [projectId]);
+
+  // Fetch Bank Details (Cached & Deduplicated)
+  const fetchBankDetails = useCallback(async (forceBypass?: any) => {
+    if (!projectId || projectId === 'default') return;
+    try {
+      const token = getAuthToken();
+      const apiBase = getApiBase();
+
+      if (forceBypass === true) {
+        invalidateCache(`bank_details_${projectId}`);
+      }
+
+      const data = await cachedFetch(`bank_details_${projectId}`, async () => {
+        const res = await fetch(`${apiBase}/api/v1/identity/developer/apps/${projectId}/bank-details`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const json = await res.json();
+          return json.data || json || null;
+        }
+        return null;
+      }, 60000);
+
+      if (data) {
+        setBankDetails(data);
+      }
+    } catch (_) {}
   }, [projectId]);
 
   // Webhook Test & Rotate
@@ -424,6 +512,7 @@ export function ProjectProvider({
       if (!res.ok) throw new Error('Secret rotation failed');
       const data = await res.json();
       setWebhookSecret(data.webhookSecret);
+      invalidateCache(`app_${projectId}`);
       toast.success('Webhook signature secret rotated successfully');
     } catch (err: any) {
       toast.error(err.message || 'Failed to rotate secret');
@@ -462,8 +551,10 @@ export function ProjectProvider({
         throw new Error(data.message || data.error || 'Failed to update settings');
       }
 
+      invalidateCache(`app_${projectId}`);
+      invalidateCache('user_profile_and_projects');
       toast.success('Settings saved successfully');
-      await refreshProject();
+      await refreshProject(true);
       return true;
     } catch (err: any) {
       toast.error(err.message || 'Error saving settings');
@@ -511,6 +602,7 @@ export function ProjectProvider({
         fetchPayoutHistory,
         bankDetails,
         setBankDetails,
+        fetchBankDetails,
         webhookUrl,
         setWebhookUrl,
         webhookSecret,

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useDeferredValue } from 'react';
 import {
   Receipt,
   Search,
@@ -35,6 +35,7 @@ export function PayTransactionsView() {
   const { paymentAnalytics, loadingAnalytics, fetchPaymentAnalytics, copiedKey, copyToClipboard } = useProject();
 
   const [txSearchQuery, setTxSearchQuery] = useState('');
+  const deferredTxSearchQuery = useDeferredValue(txSearchQuery);
   const [txStatusFilter, setTxStatusFilter] = useState<FilterStatus>('ALL');
   const [selectedTx, setSelectedTx] = useState<any>(null);
 
@@ -64,8 +65,8 @@ export function PayTransactionsView() {
           return false;
         }
       }
-      if (txSearchQuery.trim()) {
-        const q = txSearchQuery.toLowerCase();
+      if (deferredTxSearchQuery.trim()) {
+        const q = deferredTxSearchQuery.toLowerCase();
         const matchId = (tx.id || '').toLowerCase().includes(q);
         const matchPhone = (tx.customerPhone || '').toLowerCase().includes(q);
         const matchName = (tx.customerName || '').toLowerCase().includes(q);
@@ -75,7 +76,7 @@ export function PayTransactionsView() {
       }
       return true;
     });
-  }, [rawTxs, txStatusFilter, txSearchQuery]);
+  }, [rawTxs, txStatusFilter, deferredTxSearchQuery]);
 
   const visibleTxs = useMemo(() => {
     return filteredTxs.slice(0, displayedCount);
@@ -549,7 +550,7 @@ export function PayTransactionsView() {
 
           <button
             type="button"
-            onClick={fetchPaymentAnalytics}
+            onClick={() => fetchPaymentAnalytics(true)}
             disabled={loadingAnalytics}
             className="p-2 rounded-xl border border-zinc-200 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-600 dark:text-zinc-300 transition-colors cursor-pointer self-start sm:self-auto"
             title="Refresh transactions"

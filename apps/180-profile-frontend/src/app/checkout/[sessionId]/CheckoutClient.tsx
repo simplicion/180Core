@@ -27,7 +27,7 @@ import {
   X,
   Download,
 } from 'lucide-react';
-import { Button, LogoLoader, AILogoIcon } from '@workspace/ui';
+import { Button, LogoLoader, AILogoIcon, AdaptiveSkeleton } from '@workspace/ui';
 import toast from 'react-hot-toast';
 import { getCoreApiUrl } from '@/lib/api';
 import { locationService, DetectedLocation, CountryItem } from '@/lib/location-service';
@@ -1206,12 +1206,7 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
 
 
   if (loading) {
-    return (
-      <div className="w-full py-16 text-center space-y-4 flex flex-col items-center justify-center font-sans">
-        <LogoLoader size={40} className="w-10 h-10 text-blue-600" />
-        <p className="text-xs text-slate-500 font-medium">Loading 180 Pay checkout...</p>
-      </div>
-    );
+    return <AdaptiveSkeleton screen="checkout" />;
   }
 
   if (completed) {
@@ -1527,6 +1522,20 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
     )
   );
 
+  const isDeveloperBilling = Boolean(
+    sessionId?.startsWith('sess_dev_') ||
+    session?.metadata?.source === 'DEVELOPER_PORTAL_BILLING' ||
+    session?.title?.toLowerCase().includes('developer portal')
+  );
+
+  const vendorDisplayName = isDeveloperBilling
+    ? '180 Developer Portal'
+    : (session.app?.name || 'Merchant');
+
+  const vendorSubtitle = isDeveloperBilling
+    ? 'Official Platform Subscription'
+    : 'Verified Merchant';
+
   return (
     <div className="w-full space-y-5 text-slate-900 dark:text-zinc-100 font-sans antialiased">
       {/* Vendor Header */}
@@ -1534,10 +1543,14 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-11 h-11 min-w-[44px] min-h-[44px] max-w-[44px] max-h-[44px] rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 p-[1px] shadow-xs shrink-0 overflow-hidden">
             <div className="w-full h-full bg-white dark:bg-zinc-900 rounded-2xl flex items-center justify-center font-bold text-blue-700 dark:text-blue-400 text-xs overflow-hidden">
-              {session.app?.logoUrl ? (
+              {isDeveloperBilling ? (
+                <div className="w-full h-full bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 rounded-2xl flex items-center justify-center font-black text-white text-xs tracking-tighter">
+                  180
+                </div>
+              ) : session.app?.logoUrl ? (
                 <img
                   src={session.app.logoUrl}
-                  alt={session.app.name || 'Merchant'}
+                  alt={vendorDisplayName}
                   className="w-full h-full object-cover"
                   onError={(e) => {
                     (e.currentTarget as HTMLElement).style.display = 'none';
@@ -1550,10 +1563,10 @@ export function CheckoutClient({ initialSessionId }: { initialSessionId?: string
           </div>
           <div className="min-w-0">
             <h1 className="text-sm font-bold text-slate-900 dark:text-zinc-100 flex items-center gap-1.5 tracking-tight truncate">
-              {session.app?.name || 'Merchant'}
+              {vendorDisplayName}
               <ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
             </h1>
-            <span className="text-[11px] text-slate-500 dark:text-zinc-400 font-medium">Verified Merchant</span>
+            <span className="text-[11px] text-slate-500 dark:text-zinc-400 font-medium">{vendorSubtitle}</span>
           </div>
         </div>
 

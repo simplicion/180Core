@@ -19,6 +19,7 @@ export interface AppLogoUploaderProps {
   onChange: (url: string) => void;
   appId?: string;
   className?: string;
+  label?: string;
 }
 
 export function AppLogoUploader({
@@ -26,6 +27,7 @@ export function AppLogoUploader({
   onChange,
   appId,
   className = '',
+  label = 'App Logo',
 }: AppLogoUploaderProps) {
   const [activeTab, setActiveTab] = useState<'upload' | 'url'>('upload');
   const [isUploading, setIsUploading] = useState(false);
@@ -83,7 +85,7 @@ export function AppLogoUploader({
     }
 
     setIsUploading(true);
-    const toastId = toast.loading('Uploading app logo to 180 Media Pipeline (Cloudflare R2)...');
+    const toastId = toast.loading('Uploading logo to 180 Media Pipeline (R2)...');
 
     try {
       const formData = new FormData();
@@ -124,7 +126,7 @@ export function AppLogoUploader({
 
       if (remoteSuccess && uploadedUrl) {
         onChange(uploadedUrl);
-        toast.success('App logo uploaded to 180 Media Pipeline (R2)!', { id: toastId });
+        toast.success('App logo uploaded to 180 Media Pipeline!', { id: toastId });
       } else {
         // High-resolution client-side data URI fallback so developer is never blocked
         const base64DataUrl = await new Promise<string>((resolve, reject) => {
@@ -165,43 +167,37 @@ export function AppLogoUploader({
     }
   };
 
+  const hasLogo = Boolean(logoUrl && logoUrl.trim());
+
   return (
-    <div className={`space-y-2.5 ${className}`}>
-      {/* Header and Mode Selector */}
+    <div className={`space-y-1.5 ${className}`}>
+      {/* Sleek, Compact Header */}
       <div className="flex items-center justify-between">
         <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
           <ImageIcon className="w-3.5 h-3.5 text-blue-500" />
-          <span>App Logo (White-label OAuth Branding)</span>
-          <span className="text-red-500">*</span>
+          <span>{label}</span>
+          <span className="text-[10px] font-normal text-zinc-400 dark:text-zinc-500">(OAuth Branding)</span>
         </label>
 
-        {/* Tab switch: Upload vs URL */}
-        <div className="flex items-center p-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800/80 border border-zinc-200 dark:border-white/10">
+        {!hasLogo && (
           <button
             type="button"
-            onClick={() => setActiveTab('upload')}
-            className={`px-2 py-0.5 text-[11px] font-medium rounded-md transition-all flex items-center gap-1 ${
-              activeTab === 'upload'
-                ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs'
-                : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
-            }`}
+            onClick={() => setActiveTab(activeTab === 'upload' ? 'url' : 'upload')}
+            className="text-[11px] font-medium text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 transition-colors"
           >
-            <UploadCloud className="w-3 h-3" />
-            Upload File
+            {activeTab === 'upload' ? (
+              <>
+                <Link2 className="w-3 h-3" />
+                <span>Custom URL</span>
+              </>
+            ) : (
+              <>
+                <UploadCloud className="w-3 h-3" />
+                <span>Upload File</span>
+              </>
+            )}
           </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('url')}
-            className={`px-2 py-0.5 text-[11px] font-medium rounded-md transition-all flex items-center gap-1 ${
-              activeTab === 'url'
-                ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs'
-                : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
-            }`}
-          >
-            <Link2 className="w-3 h-3" />
-            Custom URL
-          </button>
-        </div>
+        )}
       </div>
 
       {/* Hidden File Input */}
@@ -217,81 +213,79 @@ export function AppLogoUploader({
         }}
       />
 
-      {/* Existing Logo Display Card */}
-      {logoUrl.trim() && (
-        <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/90 border border-zinc-200 dark:border-white/10">
-          <div className="flex items-center gap-3 min-w-0">
-            {/* Square Preview */}
-            <div className="relative w-12 h-12 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950 overflow-hidden flex items-center justify-center p-1.5 shrink-0 shadow-xs">
+      {/* State 1: Active Logo - Sleek horizontal bar (No redundant dropzone) */}
+      {hasLogo ? (
+        <div className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/80 border border-zinc-200 dark:border-white/10 shadow-xs">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {/* Compact 40x40 Thumbnail Preview */}
+            <div className="relative w-10 h-10 rounded-lg border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950 overflow-hidden flex items-center justify-center p-1 shrink-0 shadow-2xs">
               <img
                 src={logoUrl.trim()}
                 alt="App logo preview"
-                className="w-full h-full object-contain rounded-lg"
+                className="w-full h-full object-contain rounded-md"
                 onError={(e) => {
                   (e.currentTarget as HTMLElement).style.display = 'none';
                 }}
               />
             </div>
 
-            <div className="min-w-0 space-y-0.5">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-zinc-900 dark:text-white truncate">
-                  Current Logo
-                </span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-zinc-900 dark:text-white">Logo Active</span>
                 {isR2Hosted(logoUrl) ? (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[9px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                     <Sparkles className="w-2.5 h-2.5" />
-                    180 Media Pipeline (R2)
+                    180 CDN
                   </span>
                 ) : logoUrl.startsWith('data:') ? (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                    Direct Upload
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[9px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                    Uploaded
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-                    External URL
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[9px] font-medium bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                    URL
                   </span>
                 )}
               </div>
-              <p className="text-[11px] font-mono text-zinc-400 truncate max-w-[280px] sm:max-w-md">
-                {logoUrl}
+              <p className="text-[10px] text-zinc-400 font-mono truncate max-w-[220px] sm:max-w-xs mt-0.5">
+                {logoUrl.startsWith('data:') ? 'Custom asset attached' : logoUrl}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+          <div className="flex items-center gap-1 shrink-0 ml-2">
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+              className="px-2.5 py-1 text-xs font-medium rounded-lg text-zinc-700 dark:text-zinc-200 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-1"
             >
-              <UploadCloud className="w-3.5 h-3.5 text-blue-500" />
+              <UploadCloud className="w-3 h-3 text-blue-500" />
               <span>Replace</span>
             </button>
-            <a
-              href={logoUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
-              title="Open logo in new tab"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
+            {logoUrl.startsWith('http') && (
+              <a
+                href={logoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+                title="Open logo in new tab"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
             <button
               type="button"
               onClick={() => onChange('')}
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-red-500 transition-colors"
+              className="p-1 rounded-lg text-zinc-400 hover:text-rose-500 transition-colors"
               title="Remove logo"
             >
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
-      )}
-
-      {/* Main Interactive Action: Dropzone or URL Input */}
-      {activeTab === 'upload' ? (
+      ) : activeTab === 'upload' ? (
+        /* State 2: Empty - Minimized Compact Dropzone */
         <div
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
@@ -299,66 +293,65 @@ export function AppLogoUploader({
           onClick={() => {
             if (!isUploading) fileInputRef.current?.click();
           }}
-          className={`relative group cursor-pointer border-2 border-dashed rounded-xl p-4 sm:p-5 text-center transition-all ${
+          className={`group cursor-pointer border border-dashed rounded-xl px-3.5 py-2.5 flex items-center justify-between gap-3 transition-all ${
             isDragOver
-              ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-500/10 ring-4 ring-blue-500/10'
-              : 'border-zinc-200 dark:border-white/15 bg-zinc-50/60 dark:bg-zinc-900/40 hover:border-blue-500/60 hover:bg-blue-50/20 dark:hover:bg-blue-900/10'
+              ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-500/10 ring-2 ring-blue-500/20'
+              : 'border-zinc-200 dark:border-white/15 bg-zinc-50/50 dark:bg-zinc-900/40 hover:border-blue-500/50 hover:bg-blue-50/10'
           }`}
         >
           {isUploading ? (
-            <div className="flex flex-col items-center justify-center py-2 space-y-2">
-              <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
-              <div className="space-y-0.5">
-                <p className="text-xs font-semibold text-zinc-900 dark:text-white">
-                  Streaming to Media Pipeline...
-                </p>
-                <p className="text-[11px] text-zinc-400">
-                  Uploading and optimizing logo on Cloudflare R2 CDN
-                </p>
-              </div>
+            <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 py-0.5">
+              <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+              <span>Uploading logo to 180 Media Pipeline (R2)...</span>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center space-y-2">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center group-hover:scale-105 transition-transform shadow-xs">
-                <UploadCloud className="w-5 h-5" />
+            <>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <UploadCloud className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-zinc-800 dark:text-zinc-200">
+                    <span className="text-blue-600 dark:text-blue-400 font-semibold underline underline-offset-2">
+                      Click to upload
+                    </span>{' '}
+                    or drag logo
+                  </p>
+                  <p className="text-[10px] text-zinc-400">PNG, JPG, SVG, WebP up to 5MB (1:1 ratio)</p>
+                </div>
               </div>
-              <div className="space-y-0.5">
-                <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
-                  <span className="text-blue-600 dark:text-blue-400 font-bold underline decoration-blue-500/30 underline-offset-2">
-                    Click to upload
-                  </span>{' '}
-                  or drag and drop your logo
-                </p>
-                <p className="text-[11px] text-zinc-400">
-                  PNG, JPEG, WebP, SVG or GIF (up to 5MB, square 1:1 ratio recommended)
-                </p>
-              </div>
-            </div>
+              <span className="px-2.5 py-1 text-xs font-medium rounded-lg bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-white/10 shrink-0 group-hover:border-blue-500/40 transition-colors">
+                Browse
+              </span>
+            </>
           )}
         </div>
       ) : (
-        /* Manual URL input fallback */
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
+        /* State 3: Custom URL Input */
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Link2 className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="url"
-              required
-              placeholder="https://yourapp.com/logo.png"
+              placeholder="https://example.com/logo.png"
               value={logoUrl}
               onChange={(e) => onChange(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full pl-9 pr-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs text-zinc-900 dark:text-white font-mono focus:outline-none focus:border-blue-500 transition-colors"
             />
           </div>
-          <p className="text-[10px] text-zinc-400 flex items-center gap-1">
-            <AlertCircle className="w-3 h-3 text-amber-500 shrink-0" />
-            Provide an absolute HTTPS link to your logo asset. Using direct upload is recommended for faster global CDN delivery.
-          </p>
+          <button
+            type="button"
+            onClick={() => setActiveTab('upload')}
+            className="px-2.5 py-2 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-white shrink-0"
+          >
+            Cancel
+          </button>
         </div>
       )}
 
       {/* Helpful context footnote */}
-      <p className="text-[10px] text-zinc-400">
-        Displayed in 180 Identity OAuth 2.0 authorization prompts and 1-Click Checkout headers for your users.
+      <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
+        Displayed in 180 Identity OAuth prompts and 180 Pay Checkout headers.
       </p>
     </div>
   );

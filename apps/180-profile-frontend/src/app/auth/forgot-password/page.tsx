@@ -2,7 +2,7 @@
 
 import React, { useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { KeyRound, ArrowRight } from 'lucide-react';
+import { KeyRound, ArrowRight, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { LogoLoader, Button } from '@workspace/ui';
 import {
@@ -10,7 +10,6 @@ import {
   buildOAuthQueryString,
 } from '@/components/auth/OAuthDispatchHelper';
 import { getCoreApiUrl } from '@/lib/api';
-import { SmartAuthInput } from '@/components/auth/SmartAuthInput';
 
 function ForgotPasswordContent() {
   const searchParams = useSearchParams();
@@ -26,7 +25,11 @@ function ForgotPasswordContent() {
     e.preventDefault();
     const cleanInput = emailOrPhone.trim();
     if (!cleanInput) {
-      toast.error('Please enter your email or phone number');
+      toast.error('Please enter your email address');
+      return;
+    }
+    if (!cleanInput.includes('@')) {
+      toast.error('Please enter a valid email address');
       return;
     }
 
@@ -53,7 +56,7 @@ function ForgotPasswordContent() {
         throw new Error(data.message || 'Failed to dispatch reset code');
       }
 
-      toast.success(data.message || 'Verification code dispatched!', { id: toastId });
+      toast.success(data.message || 'Verification code dispatched to your email!', { id: toastId });
 
       // Navigate to dedicated OTP verification screen
       const resetParams = new URLSearchParams(searchParams.toString());
@@ -79,19 +82,31 @@ function ForgotPasswordContent() {
           </div>
           <h2 className="text-lg font-bold text-slate-900 tracking-tight">Forgot Password</h2>
           <p className="text-xs text-slate-500">
-            Enter your registered email or phone to receive a 6-digit verification code
+            Enter your registered email address to receive a 6-digit verification code
           </p>
         </div>
 
         <form onSubmit={handleForgotSubmit} className="space-y-3.5">
-          <SmartAuthInput
-            label="Email or Mobile Number"
-            placeholder="Enter your email address or phone number"
-            value={emailOrPhone}
-            onChange={setEmailOrPhone}
-            required
-            autoFocus
-          />
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <Mail className="w-4 h-4" />
+              </div>
+              <input
+                type="email"
+                placeholder="name@company.com"
+                value={emailOrPhone}
+                onChange={(e) => setEmailOrPhone(e.target.value)}
+                className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-3.5 py-2.5 min-h-[42px] text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                required
+                autoFocus
+              />
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">
+              We will dispatch a secure 6-digit reset code to this email.
+            </p>
+          </div>
 
           <button
             type="submit"

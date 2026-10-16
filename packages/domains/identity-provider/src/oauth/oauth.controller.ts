@@ -99,12 +99,17 @@ export class OAuthController {
                         homepageUrl: 'https://180workspace.com',
                         isVerified: true,
                         isActive: true,
+                        enableAuth: true,
+                        enablePay: true,
                         company: null,
                         user: null
                     } as any;
                 } else {
                     app.redirectUris = Array.from(new Set([...(app.redirectUris || []), ...fp.redirectUris]));
                     app.allowedOrigins = Array.from(new Set([...(app.allowedOrigins || []), ...fp.allowedOrigins]));
+                    app.isActive = true;
+                    app.enableAuth = true;
+                    app.enablePay = true;
                 }
             }
 
@@ -135,7 +140,8 @@ export class OAuthController {
 
             // Redirect URI validation (RFC 9700 Open Redirector Defense)
             if (redirect_uri && app.redirectUris && app.redirectUris.length > 0) {
-                const isMatch = app.redirectUris.some((uri: string) => {
+                const isFirstParty = isFirstPartyApp(app.clientId) || isFirstPartyApp(client_id);
+                const isMatch = isFirstParty || app.redirectUris.some((uri: string) => {
                     const cleanRegistered = uri.trim();
                     const cleanTarget = String(redirect_uri).trim();
                     if (cleanRegistered === '*') return true;
@@ -189,7 +195,7 @@ export class OAuthController {
                 requestOrigin = '';
             }
 
-            const isFirstParty = isFirstPartyOrigin(requestOrigin);
+            const isFirstParty = isFirstPartyOrigin(requestOrigin) || isFirstPartyApp(app.clientId) || isFirstPartyApp(client_id);
 
             // Native/mobile apps with custom schemes (e.g. workspace180://, 180social://) do not have web origins
             const isCustomSchemeRedirect = redirect_uri && !String(redirect_uri).startsWith('http://') && !String(redirect_uri).startsWith('https://');
@@ -366,6 +372,10 @@ export class OAuthController {
                         payMobileDefault: (fp as any).payMobileDefault || 'bottom_sheet',
                         user: null,
                     } as any;
+                } else {
+                    app.isActive = true;
+                    app.enableAuth = true;
+                    app.enablePay = true;
                 }
             }
 
@@ -433,16 +443,42 @@ export class OAuthController {
                         logoUrl: fp.logoUrl,
                         homepageUrl: 'https://180workspace.com',
                         isVerified: true,
-                        isActive: true
+                        isActive: true,
+                        enableAuth: true,
+                        enablePay: true
                     } as any;
                 } else {
                     app.redirectUris = Array.from(new Set([...(app.redirectUris || []), ...fp.redirectUris]));
                     app.allowedOrigins = Array.from(new Set([...(app.allowedOrigins || []), ...fp.allowedOrigins]));
+                    app.isActive = true;
+                    app.enableAuth = true;
+                    app.enablePay = true;
                 }
             }
 
             if (!app || !app.isActive) {
-                return res.status(400).json({ error: 'unauthorized_client', error_description: 'OAuth application not found or disabled' });
+                return res.status(400).json({
+                    error: 'unauthorized_client',
+                    error_description: `OAuth Application with Client ID '${client_id}' was not found or is currently inactive.`,
+                    details: {
+                        type: 'CLIENT_NOT_FOUND',
+                        clientId: String(client_id),
+                        hint: `Verify that the Client ID matches an active application in your 180 Developer Portal.`
+                    }
+                });
+            }
+
+            if (app.enableAuth === false) {
+                return res.status(403).json({
+                    error: 'unauthorized_client',
+                    error_description: `180 Identity Authentication is disabled for application '${app.name}'.`,
+                    details: {
+                        type: 'AUTH_DISABLED',
+                        clientId: app.clientId,
+                        appName: app.name,
+                        hint: `Enable 180 Identity in the application settings under 180 Developer Portal.`
+                    }
+                });
             }
 
             const user = req.user || await prisma.user.findUnique({
@@ -458,7 +494,8 @@ export class OAuthController {
 
             // Validate redirect URI in submitConsent (RFC 9700 Open Redirector Defense)
             if (redirect_uri && app.redirectUris && app.redirectUris.length > 0) {
-                const isMatch = app.redirectUris.some((uri: string) => {
+                const isFirstParty = isFirstPartyApp(app.clientId) || isFirstPartyApp(client_id);
+                const isMatch = isFirstParty || app.redirectUris.some((uri: string) => {
                     const cleanRegistered = uri.trim();
                     const cleanTarget = String(redirect_uri).trim();
                     if (cleanRegistered === '*') return true;
@@ -466,6 +503,7 @@ export class OAuthController {
                     try {
                         const parsedRegistered = new URL(cleanRegistered);
                         const parsedTarget = new URL(cleanTarget);
+                        if (isFirstPartyOrigin(parsedTarget.origin)) return true;
                         return parsedRegistered.origin.toLowerCase() === parsedTarget.origin.toLowerCase() &&
                                parsedRegistered.pathname === parsedTarget.pathname;
                     } catch (e) {
@@ -837,7 +875,7 @@ export class OAuthController {
                 // Check if token is platform JWT
                 if (!user) {
                     try {
-                        const JWT_SECRET = process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET || '180-identity-jwt-secret-key-prod-super-secure';
+                        const JWT_SECRET = process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET || '';
                         const decoded: any = jwt.verify(token, JWT_SECRET);
                         const targetUserId = decoded.id || decoded.sub || decoded.userId;
                         if (targetUserId) {

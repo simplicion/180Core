@@ -310,7 +310,7 @@ export function PayOverviewView({ onOpenUxDrawer }: { onOpenUxDrawer?: () => voi
 
             <button
               type="button"
-              onClick={fetchPaymentAnalytics}
+              onClick={() => fetchPaymentAnalytics(true)}
               disabled={loadingAnalytics}
               className="p-2 rounded-xl border border-zinc-200 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-600 dark:text-zinc-300 transition-colors cursor-pointer"
               title="Refresh analytics"
