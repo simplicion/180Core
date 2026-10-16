@@ -1279,32 +1279,43 @@ export class CheckoutService {
         const inrAmount = GeoPricingService.convertCurrency(targetAmount, targetCurrency, 'INR');
         const inrPaise = Math.max(100, Math.round(inrAmount * 100));
         console.log(`[Razorpay Fallback] Retrying order creation in INR (${inrPaise} paise)...`);
-        rzpResponse = await axios.post(
-          'https://api.razorpay.com/v1/orders',
-          {
-            amount: inrPaise,
-            currency: 'INR',
-            receipt: `cs_${session.id.replace(/-/g, '').slice(0, 36)}`,
-            notes: {
-              sessionId: session.id,
-              appId: session.appId,
-              appName: session.app?.name || '180 App',
-              title: session.title,
+        try {
+          rzpResponse = await axios.post(
+            'https://api.razorpay.com/v1/orders',
+            {
+              amount: inrPaise,
               currency: 'INR',
-              originalCurrency: targetCurrency,
-              originalAmount: String(targetAmount),
+              receipt: `cs_${session.id.replace(/-/g, '').slice(0, 36)}`,
+              notes: {
+                sessionId: session.id,
+                appId: session.appId,
+                appName: session.app?.name || '180 App',
+                title: session.title,
+                currency: 'INR',
+                originalCurrency: targetCurrency,
+                originalAmount: String(targetAmount),
+              },
             },
-          },
-          {
-            headers: {
-              Authorization: authHeader,
-              'Content-Type': 'application/json',
-            },
-            timeout: 10000,
-          }
-        );
+            {
+              headers: {
+                Authorization: authHeader,
+                'Content-Type': 'application/json',
+              },
+              timeout: 10000,
+            }
+          );
+        } catch (inrErr: any) {
+          const inrErrorDesc = inrErr.response?.data?.error?.description || inrErr.message;
+          const sanitizedErr = inrErrorDesc === 'Authentication failed'
+            ? 'Payment gateway authorization failed. Please check merchant account credentials.'
+            : inrErrorDesc || 'Failed to initialize payment with Razorpay';
+          throw new Error(sanitizedErr);
+        }
       } else {
-        throw new Error(errorDesc || 'Failed to initialize payment with Razorpay');
+        const sanitizedErr = errorDesc === 'Authentication failed'
+          ? 'Payment gateway authorization failed. Please check merchant account credentials.'
+          : errorDesc || 'Failed to initialize payment with Razorpay';
+        throw new Error(sanitizedErr);
       }
     }
 

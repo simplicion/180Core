@@ -131,6 +131,8 @@ jobs:
           CORE_CLIENT_ID: ${{ secrets.CORE_CLIENT_ID }}
           CORE_CLIENT_SECRET: ${{ secrets.CORE_CLIENT_SECRET }}
           CORE_WEBHOOK_SECRET: ${{ secrets.CORE_WEBHOOK_SECRET }}
+          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
         run: |
           echo "Preparing zero-downtime SSM parameters for EC2 ($INSTANCE_ID)..."
           SYNC_NGINX_SCRIPT=$(cat scripts/sync-nginx-config.py)
@@ -143,6 +145,8 @@ jobs:
             --arg coreClientId "$CORE_CLIENT_ID" \
             --arg coreClientSecret "$CORE_CLIENT_SECRET" \
             --arg coreWebhookSecret "$CORE_WEBHOOK_SECRET" \
+            --arg rzpKeyId "$RAZORPAY_KEY_ID" \
+            --arg rzpKeySecret "$RAZORPAY_KEY_SECRET" \
             --arg hostHdr "Host: api.180core.cloud" \
             --arg nginxScript "$SYNC_NGINX_SCRIPT" \
             '{commands: [
@@ -158,8 +162,10 @@ jobs:
               "docker network create 180workspace-net 2>/dev/null || true",
               ("if [ -n " + ($googleId | @sh) + " ]; then sed -i \"s/^GOOGLE_CLIENT_ID=.*/GOOGLE_CLIENT_ID=\"$googleId\"/\" /home/ubuntu/app/.env 2>/dev/null || true; fi"),
               ("if [ -n " + ($googleSecret | @sh) + " ]; then sed -i \"s/^GOOGLE_CLIENT_SECRET=.*/GOOGLE_CLIENT_SECRET=\"$googleSecret\"/\" /home/ubuntu/app/.env 2>/dev/null || true; fi"),
+              ("if [ -n " + ($rzpKeyId | @sh) + " ]; then sed -i \"s/^RAZORPAY_KEY_ID=.*/RAZORPAY_KEY_ID=\"$rzpKeyId\"/\" /home/ubuntu/app/.env 2>/dev/null || true; fi"),
+              ("if [ -n " + ($rzpKeySecret | @sh) + " ]; then sed -i \"s/^RAZORPAY_KEY_SECRET=.*/RAZORPAY_KEY_SECRET=\"$rzpKeySecret\"/\" /home/ubuntu/app/.env 2>/dev/null || true; fi"),
               "echo === 5. LAUNCH 180CORE BACKEND CONTAINER ===",
-              ("docker run -d --name 180workspace-core-backend --restart always --network app_180workspace-net --network-alias core-backend -p 4003:4003 --add-host host.docker.internal:host-gateway --env-file /home/ubuntu/app/.env " + (if ($googleId | length) > 0 then "-e GOOGLE_CLIENT_ID=" + ($googleId | @sh) + " " else "" end) + (if ($googleSecret | length) > 0 then "-e GOOGLE_CLIENT_SECRET=" + ($googleSecret | @sh) + " " else "" end) + (if ($coreClientId | length) > 0 then "-e CORE_CLIENT_ID=" + ($coreClientId | @sh) + " " else "" end) + (if ($coreClientSecret | length) > 0 then "-e CORE_CLIENT_SECRET=" + ($coreClientSecret | @sh) + " " else "" end) + (if ($coreWebhookSecret | length) > 0 then "-e CORE_WEBHOOK_SECRET=" + ($coreWebhookSecret | @sh) + " " else "" end) + "-e PORT=4003 -e NODE_ENV=production -e REDIS_URL=redis://host.docker.internal:6379 -e REDIS_INTERNAL_URL=redis://host.docker.internal:6379 -e DATABASE_URL=" + ($coreDb | @sh) + " -e CORE_DATABASE_URL=" + ($coreDb | @sh) + " ghcr.io/simplicion/180core-core-backend:latest"),
+              ("docker run -d --name 180workspace-core-backend --restart always --network app_180workspace-net --network-alias core-backend -p 4003:4003 --add-host host.docker.internal:host-gateway --env-file /home/ubuntu/app/.env " + (if ($googleId | length) > 0 then "-e GOOGLE_CLIENT_ID=" + ($googleId | @sh) + " " else "" end) + (if ($googleSecret | length) > 0 then "-e GOOGLE_CLIENT_SECRET=" + ($googleSecret | @sh) + " " else "" end) + (if ($coreClientId | length) > 0 then "-e CORE_CLIENT_ID=" + ($coreClientId | @sh) + " " else "" end) + (if ($coreClientSecret | length) > 0 then "-e CORE_CLIENT_SECRET=" + ($coreClientSecret | @sh) + " " else "" end) + (if ($coreWebhookSecret | length) > 0 then "-e CORE_WEBHOOK_SECRET=" + ($coreWebhookSecret | @sh) + " " else "" end) + (if ($rzpKeyId | length) > 0 then "-e RAZORPAY_KEY_ID=" + ($rzpKeyId | @sh) + " " else "" end) + (if ($rzpKeySecret | length) > 0 then "-e RAZORPAY_KEY_SECRET=" + ($rzpKeySecret | @sh) + " " else "" end) + "-e PORT=4003 -e NODE_ENV=production -e REDIS_URL=redis://host.docker.internal:6379 -e REDIS_INTERNAL_URL=redis://host.docker.internal:6379 -e DATABASE_URL=" + ($coreDb | @sh) + " -e CORE_DATABASE_URL=" + ($coreDb | @sh) + " ghcr.io/simplicion/180core-core-backend:latest"),
               "docker network connect 180workspace-net 180workspace-core-backend --alias core-backend 2>/dev/null || true",
               "docker network connect app_180workspace-net 180workspace-proxy 2>/dev/null || true",
               "docker network connect 180workspace-net 180workspace-proxy 2>/dev/null || true",
