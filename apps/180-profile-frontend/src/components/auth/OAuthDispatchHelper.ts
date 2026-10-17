@@ -105,7 +105,9 @@ export async function dispatchOAuthSuccess(
         details: errorData.details,
       };
 
-      if (typeof window !== 'undefined') {
+      // Only broadcast fatal errors to parent if not a 401 session expiry
+      const isAuthExpiry = consentRes.status === 401 || errorData.error === 'unauthorized';
+      if (typeof window !== 'undefined' && !isAuthExpiry) {
         const mobileChannel = (window as any).OneEightyMobileChannel;
         if (mobileChannel && typeof mobileChannel.postMessage === 'function') {
           try {

@@ -133,13 +133,18 @@ function LoginFormContent() {
             localStorage.setItem('user', JSON.stringify(validUser));
           } else {
             localStorage.removeItem('platform_auth_token');
+            localStorage.removeItem('token');
+            localStorage.removeItem('accessToken');
             localStorage.removeItem('user');
             setCachedUser(null);
+            setShowFullLogin(true);
           }
         })
         .catch(() => {
           // If network slow or offline, keep cached user
         });
+    } else {
+      setShowFullLogin(true);
     }
   }, []);
 
@@ -227,11 +232,21 @@ function LoginFormContent() {
   // 1-Click Quick Login
   const handleQuickLogin = async () => {
     if (!cachedUser) return;
+    const token =
+      localStorage.getItem('platform_auth_token') ||
+      localStorage.getItem('token') ||
+      localStorage.getItem('accessToken');
+
+    if (!token) {
+      toast.error('Session expired. Please enter your password to continue.');
+      setShowFullLogin(true);
+      return;
+    }
+
     setLoading(true);
     const toastId = toast.loading(`Signing in as ${cachedUser.name || 'User'}...`);
 
     try {
-      const token = localStorage.getItem('platform_auth_token') || '';
       toast.success('Session verified!', { id: toastId });
       await dispatchOAuthSuccess(cachedUser, token, oauthParams);
     } catch (err: any) {

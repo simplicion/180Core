@@ -765,8 +765,9 @@ export const OneEightyIdentity = {
                 localStorage.setItem('platform_auth_token', bestToken);
                 localStorage.setItem('token', bestToken);
                 const isProd = window.location.protocol === 'https:';
+                const isCore = window.location.hostname.endsWith('180core.cloud');
                 const is180 = window.location.hostname.endsWith('180workspace.com');
-                const domainAttr = is180 ? '; domain=.180workspace.com' : '';
+                const domainAttr = isCore ? '; domain=.180core.cloud' : (is180 ? '; domain=.180workspace.com' : '');
                 const secureAttr = isProd ? '; Secure' : '';
                 document.cookie = `platform_auth_token=${bestToken}; path=/; max-age=604800; SameSite=Lax${secureAttr}${domainAttr}`;
               }
@@ -832,8 +833,9 @@ export const OneEightyIdentity = {
                 localStorage.setItem('platform_auth_token', bestToken);
                 localStorage.setItem('token', bestToken);
                 const isProd = window.location.protocol === 'https:';
+                const isCore = window.location.hostname.endsWith('180core.cloud');
                 const is180 = window.location.hostname.endsWith('180workspace.com');
-                const domainAttr = is180 ? '; domain=.180workspace.com' : '';
+                const domainAttr = isCore ? '; domain=.180core.cloud' : (is180 ? '; domain=.180workspace.com' : '');
                 const secureAttr = isProd ? '; Secure' : '';
                 document.cookie = `platform_auth_token=${bestToken}; path=/; max-age=604800; SameSite=Lax${secureAttr}${domainAttr}`;
               }
@@ -896,8 +898,9 @@ export const OneEightyIdentity = {
               localStorage.setItem('platform_auth_token', bestToken);
               localStorage.setItem('token', bestToken);
               const isProd = window.location.protocol === 'https:';
+              const isCore = window.location.hostname.endsWith('180core.cloud');
               const is180 = window.location.hostname.endsWith('180workspace.com');
-              const domainAttr = is180 ? '; domain=.180workspace.com' : '';
+              const domainAttr = isCore ? '; domain=.180core.cloud' : (is180 ? '; domain=.180workspace.com' : '');
               const secureAttr = isProd ? '; Secure' : '';
               document.cookie = `platform_auth_token=${bestToken}; path=/; max-age=604800; SameSite=Lax${secureAttr}${domainAttr}`;
             }

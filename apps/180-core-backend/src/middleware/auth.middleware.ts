@@ -3,9 +3,12 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { developersPrisma as prisma } from '@workspace/db-180core';
-import { isFirstPartyApp } from '@workspace/identity-provider';
+import { isFirstPartyApp, verifyIdToken } from '@workspace/identity-provider';
 
 export function verifyJwtToken(token: string): any {
+  if (!token || typeof token !== 'string') return null;
+
+  // 1. Check symmetric HMAC secrets (HS256)
   const secrets = [
     process.env.JWT_SECRET,
     process.env.JWT_ACCESS_SECRET,
@@ -16,6 +19,15 @@ export function verifyJwtToken(token: string): any {
       return jwt.verify(token, secret);
     } catch (_) {}
   }
+
+  // 2. Check asymmetric RSA public key (RS256 OIDC ID Token / Sovereign Identity)
+  try {
+    const res = verifyIdToken(token);
+    if (res.valid && res.payload) {
+      return res.payload;
+    }
+  } catch (_) {}
+
   return null;
 }
 
