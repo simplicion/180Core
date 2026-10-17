@@ -515,7 +515,7 @@ export function IdentityUsersView() {
                               <div className="font-semibold text-zinc-950 dark:text-white flex items-center gap-1 truncate">
                                 <span>{log.user?.name || '180 User'}</span>
                                 {log.user?.isVerified && (
-                                  <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" title="Verified Identity" />
+                                  <span title="Verified Identity"><CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" /></span>
                                 )}
                               </div>
                               <div className="text-[10px] text-zinc-400 font-mono truncate">
@@ -871,7 +871,7 @@ export function IdentityUsersView() {
                     <div className="mt-0.5 text-zinc-950 dark:text-white font-mono flex items-center gap-1 truncate">
                       <span className="truncate">{selectedUser.user?.email || 'Not shared'}</span>
                       {selectedUser.user?.isEmailVerified && (
-                        <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" title="Email Verified" />
+                        <span title="Email Verified"><CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" /></span>
                       )}
                     </div>
                   </div>
@@ -881,7 +881,7 @@ export function IdentityUsersView() {
                     <div className="mt-0.5 text-zinc-950 dark:text-white font-mono flex items-center gap-1">
                       <span>{selectedUser.user?.phone || 'Not provided'}</span>
                       {selectedUser.user?.isPhoneVerified && (
-                        <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" title="Phone Verified" />
+                        <span title="Phone Verified"><CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" /></span>
                       )}
                     </div>
                   </div>

@@ -956,6 +956,14 @@ export const OneEightyIdentity = {
   },
 
   /**
+   * Cryptographically verifies an RS256 OpenID Connect ID Token using public JWKS keyring
+   */
+  async verifyIdToken(idToken: string, expectedAudience?: string) {
+    const verifier = new JwksVerifier();
+    return verifier.verifyToken(idToken, expectedAudience);
+  },
+
+  /**
    * Plain Vanilla DOM Button Renderer
    */
   renderButton(target: HTMLElement | string, options: RenderButtonOptions): void {
@@ -1504,62 +1512,156 @@ export const OneEightyPay = {
    * Webhook HMAC Verification Helper
    */
   webhooks: {
-    constructEvent(rawBody: string | any, signature: string, secret: string) {
-      // In Node.js environment
-      try {
-        const crypto = require('crypto');
-        const payloadString = typeof rawBody === 'string' ? rawBody : rawBody.toString('utf8');
-        const expected = crypto.createHmac('sha256', secret).update(payloadString).digest('hex');
-        if (expected !== signature) {
-          throw new Error('Invalid 180 Webhook Signature');
-        }
-        return JSON.parse(payloadString);
-      } catch (e: any) {
-        throw new Error(`[180 Webhook Verification] ${e.message}`);
+    constructEvent<T = any>(
+      rawBody: string | Buffer | any,
+      signature: string,
+      secret: string,
+      timestamp?: string | number
+    ): T {
+      const isValid = verifyWebhookSignature({
+        rawBody,
+        signature,
+        secret,
+        timestamp,
+      });
+      if (!isValid) {
+        throw new Error('[180 Pay Webhook Verification] Cryptographic signature mismatch or expired replay window.');
       }
+      const bodyString = Buffer.isBuffer(rawBody)
+        ? rawBody.toString('utf8')
+        : typeof rawBody === 'string'
+          ? rawBody
+          : JSON.stringify(rawBody);
+      return JSON.parse(bodyString);
     },
     verifySignature(options: VerifyWebhookOptions): boolean {
       return verifyWebhookSignature(options);
+    },
+    createMiddleware(options: {
+      secret: string;
+      toleranceSeconds?: number;
+      onEvent: (event: any, req: any, res: any) => Promise<void> | void;
+      onError?: (err: Error, req: any, res: any) => void;
+    }) {
+      return async (req: any, res: any) => {
+        try {
+          const rawBody = req.body;
+          const signature = (req.headers['x-180-signature'] || req.headers['X-180-Signature']) as string;
+          const timestamp = (req.headers['x-180-timestamp'] || req.headers['X-180-Timestamp']) as string;
+          const event = OneEightyPay.webhooks.constructEvent(rawBody, signature, options.secret, timestamp);
+          await options.onEvent(event, req, res);
+          if (!res.headersSent) {
+            res.status(200).json({ received: true });
+          }
+        } catch (err: any) {
+          if (options.onError) {
+            options.onError(err, req, res);
+          } else {
+            res.status(401).json({ error: err.message });
+          }
+        }
+      };
     }
   }
 };
 
 export interface VerifyWebhookOptions {
-  payload: string | any;
-  signature: string;
+  payload?: string | Buffer | any;
+  rawBody?: string | Buffer | any;
+  signature?: string;
+  timestamp?: string | number;
+  headers?: Record<string, any>;
   secret: string;
   toleranceSeconds?: number;
 }
 
 export function verifyWebhookSignature(options: VerifyWebhookOptions): boolean {
   try {
-    const { payload, signature, secret, toleranceSeconds = 300 } = options;
-    const crypto = require('crypto');
-    const payloadString = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    const { secret, toleranceSeconds = 300 } = options;
+    if (!secret) return false;
 
-    if (signature && signature.includes('t=') && signature.includes('v1=')) {
-      const parts = signature.split(',');
-      const tPart = parts.find((p: string) => p.trim().startsWith('t='));
-      const v1Part = parts.find((p: string) => p.trim().startsWith('v1='));
-      if (!tPart || !v1Part) return false;
-      const timestamp = parseInt(tPart.replace('t=', '').trim(), 10);
-      const sigHex = v1Part.replace('v1=', '').trim();
+    const rawPayload = options.rawBody !== undefined ? options.rawBody : options.payload;
+    if (rawPayload === undefined || rawPayload === null) return false;
 
-      const now = Math.floor(Date.now() / 1000);
-      if (Math.abs(now - timestamp) > toleranceSeconds) {
-        return false;
-      }
-
-      const expected = crypto.createHmac('sha256', secret).update(`${timestamp}.${payloadString}`).digest('hex');
+    let payloadString = '';
+    if (Buffer.isBuffer(rawPayload)) {
+      payloadString = rawPayload.toString('utf8');
+    } else if (typeof rawPayload === 'string') {
+      payloadString = rawPayload;
+    } else {
       try {
-        return crypto.timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(sigHex, 'hex'));
+        payloadString = JSON.stringify(rawPayload);
       } catch (_) {
-        return expected === sigHex;
+        return false;
       }
     }
 
-    const expected = crypto.createHmac('sha256', secret).update(payloadString).digest('hex');
-    return expected === signature;
+    let signature = options.signature;
+    let timestamp = options.timestamp;
+
+    if (options.headers) {
+      if (!signature) {
+        signature =
+          options.headers['x-180-signature'] ||
+          options.headers['X-180-Signature'] ||
+          options.headers['x_180_signature'];
+      }
+      if (!timestamp) {
+        timestamp =
+          options.headers['x-180-timestamp'] ||
+          options.headers['X-180-Timestamp'] ||
+          options.headers['x_180_timestamp'];
+      }
+    }
+
+    if (!signature || typeof signature !== 'string') return false;
+
+    // Handle stripe-style t=timestamp,v1=signature compound header
+    if (signature.includes('t=') && signature.includes('v1=')) {
+      const parts = signature.split(',');
+      const tPart = parts.find((p: string) => p.trim().startsWith('t='));
+      const v1Part = parts.find((p: string) => p.trim().startsWith('v1='));
+      if (tPart && !timestamp) {
+        timestamp = tPart.replace('t=', '').trim();
+      }
+      if (v1Part) {
+        signature = v1Part.replace('v1=', '').trim();
+      }
+    }
+
+    const crypto = require('crypto');
+    const safeTimingCompare = (a: string, b: string): boolean => {
+      if (!a || !b) return false;
+      const bufA = Buffer.from(a.trim());
+      const bufB = Buffer.from(b.trim());
+      if (bufA.length !== bufB.length) return false;
+      return crypto.timingSafeEqual(bufA, bufB);
+    };
+
+    if (timestamp) {
+      const parsedTimestamp = typeof timestamp === 'number' ? timestamp : parseInt(String(timestamp), 10);
+      const now = Math.floor(Date.now() / 1000);
+      if (isNaN(parsedTimestamp) || Math.abs(now - parsedTimestamp) > toleranceSeconds) {
+        return false;
+      }
+
+      const expectedWithTimestamp = crypto
+        .createHmac('sha256', secret)
+        .update(`${parsedTimestamp}.${payloadString}`)
+        .digest('hex');
+
+      if (safeTimingCompare(expectedWithTimestamp, signature)) {
+        return true;
+      }
+    }
+
+    // Direct payload verification fallback
+    const expectedDirect = crypto
+      .createHmac('sha256', secret)
+      .update(payloadString)
+      .digest('hex');
+
+    return safeTimingCompare(expectedDirect, signature);
   } catch (_) {
     return false;
   }
@@ -1926,6 +2028,9 @@ export const OneEighty = {
   version: '1.0.0-sovereign',
   auth: OneEightyIdentity,
   pay: OneEightyPay,
+  webhooks: OneEightyPay.webhooks,
+  verifyWebhook: (options: VerifyWebhookOptions) => verifyWebhookSignature(options),
+  verifyIdToken: (idToken: string, expectedAudience?: string) => OneEightyIdentity.verifyIdToken(idToken, expectedAudience),
   signIn: (opts?: any) => OneEightyIdentity.openAuthModal(opts),
   signOut: () => OneEightyIdentity.signOut(),
   getUser: () => OneEightyIdentity.getUser(),

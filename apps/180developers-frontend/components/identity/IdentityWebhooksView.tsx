@@ -84,9 +84,9 @@ export async function POST(req: Request) {
       .update(payloadToSign)
       .digest('hex');
 
-    // 4. Timing-safe constant-time comparison
-    const sigBuffer = Buffer.from(signature, 'hex');
-    const expBuffer = Buffer.from(expectedSignature, 'hex');
+    // 4. Timing-safe constant-time comparison (Length-guarded to prevent RangeError)
+    const sigBuffer = Buffer.from(signature.trim());
+    const expBuffer = Buffer.from(expectedSignature.trim());
 
     if (sigBuffer.length !== expBuffer.length || !crypto.timingSafeEqual(sigBuffer, expBuffer)) {
       return NextResponse.json({ error: 'Invalid HMAC signature' }, { status: 401 });
@@ -135,10 +135,10 @@ const router = express.Router();
 
 router.post(
   '/180-identity',
-  express.raw({ type: 'application/json' }),
+  express.raw({ type: '*/*' }),
   async (req, res) => {
     try {
-      const rawBody = req.body.toString('utf-8');
+      const rawBody = req.body ? req.body.toString('utf-8') : '';
       const signature = req.headers['x-180-signature'] as string;
       const timestamp = req.headers['x-180-timestamp'] as string;
       const secret = process.env.ONE_EIGHTY_WEBHOOK_SECRET!;
@@ -156,8 +156,9 @@ router.post(
       const payload = \`\${timestamp}.\${rawBody}\`;
       const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex');
 
-      const sigBuf = Buffer.from(signature, 'hex');
-      const expBuf = Buffer.from(expected, 'hex');
+      // Length-safe constant-time comparison
+      const sigBuf = Buffer.from(signature.trim());
+      const expBuf = Buffer.from(expected.trim());
 
       if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
         return res.status(401).send('Invalid signature');

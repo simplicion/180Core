@@ -64,15 +64,35 @@ export class JwksVerifier {
   }
 
   /**
-   * Fetch JWKS from remote endpoint
+   * Fetch JWKS from remote endpoint with intelligent endpoint fallbacks
    */
   async refreshKeys(): Promise<void> {
-    const res = await fetch(this.jwksUrl);
-    if (!res.ok) {
-      throw new Error(`Failed to fetch JWKS from ${this.jwksUrl}: ${res.statusText}`);
+    const candidateUrls = Array.from(new Set([
+      this.jwksUrl,
+      'https://api.180core.cloud/certs/jwks.json',
+      'https://api.180core.cloud/.well-known/jwks.json',
+      'https://api.180core.cloud/api/oauth/jwks.json',
+      'https://api.180core.cloud/oauth/certs',
+      'https://profile.180core.cloud/.well-known/jwks.json'
+    ]));
+
+    let lastError: any = null;
+    for (const url of candidateUrls) {
+      try {
+        const res = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (res.ok) {
+          const data: JwksResponse = await res.json();
+          if (data && Array.isArray(data.keys) && data.keys.length > 0) {
+            this.setKeys(data);
+            return;
+          }
+        }
+      } catch (err) {
+        lastError = err;
+      }
     }
-    const data: JwksResponse = await res.json();
-    this.setKeys(data);
+
+    throw new Error(`Failed to fetch JWKS from candidate endpoints (${candidateUrls.join(', ')}): ${lastError?.message || 'Keyring unavailable'}`);
   }
 
   /**

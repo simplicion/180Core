@@ -624,8 +624,96 @@
       return OneEightyPay.checkout(Object.assign({}, options, { uxMode: 'full_page' }));
     },
     resolveEnvironmentMode: resolveEnvironmentMode,
-    generateReferenceCode: generateReferenceCode
+    generateReferenceCode: generateReferenceCode,
+    webhooks: {
+      verifySignature: function (options) {
+        return verifyWebhookSignature(options);
+      },
+      constructEvent: function (rawBody, signature, secret, timestamp) {
+        var isValid = verifyWebhookSignature({
+          rawBody: rawBody,
+          signature: signature,
+          secret: secret,
+          timestamp: timestamp
+        });
+        if (!isValid) {
+          throw new Error('[180 Pay Webhook Verification] Cryptographic signature mismatch or expired replay window.');
+        }
+        var bodyString = (typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(rawBody))
+          ? rawBody.toString('utf8')
+          : (typeof rawBody === 'string' ? rawBody : JSON.stringify(rawBody));
+        return JSON.parse(bodyString);
+      }
+    }
   };
+
+  function verifyWebhookSignature(options) {
+    try {
+      if (!options || !options.secret) return false;
+      var rawPayload = options.rawBody !== undefined ? options.rawBody : options.payload;
+      if (rawPayload === undefined || rawPayload === null) return false;
+
+      var payloadString = '';
+      if (typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(rawPayload)) {
+        payloadString = rawPayload.toString('utf8');
+      } else if (typeof rawPayload === 'string') {
+        payloadString = rawPayload;
+      } else {
+        try { payloadString = JSON.stringify(rawPayload); } catch (_) { return false; }
+      }
+
+      var signature = options.signature;
+      var timestamp = options.timestamp;
+
+      if (options.headers) {
+        if (!signature) {
+          signature = options.headers['x-180-signature'] || options.headers['X-180-Signature'] || options.headers['x_180_signature'];
+        }
+        if (!timestamp) {
+          timestamp = options.headers['x-180-timestamp'] || options.headers['X-180-Timestamp'] || options.headers['x_180_timestamp'];
+        }
+      }
+
+      if (!signature || typeof signature !== 'string') return false;
+
+      if (signature.indexOf('t=') !== -1 && signature.indexOf('v1=') !== -1) {
+        var parts = signature.split(',');
+        for (var i = 0; i < parts.length; i++) {
+          var part = parts[i].trim();
+          if (part.indexOf('t=') === 0 && !timestamp) timestamp = part.replace('t=', '').trim();
+          if (part.indexOf('v1=') === 0) signature = part.replace('v1=', '').trim();
+        }
+      }
+
+      if (typeof require !== 'undefined') {
+        var crypto = require('crypto');
+        var safeTimingCompare = function(a, b) {
+          if (!a || !b) return false;
+          var bufA = Buffer.from(a.trim());
+          var bufB = Buffer.from(b.trim());
+          if (bufA.length !== bufB.length) return false;
+          return crypto.timingSafeEqual(bufA, bufB);
+        };
+
+        var tolerance = options.toleranceSeconds || 300;
+        if (timestamp) {
+          var parsedTimestamp = typeof timestamp === 'number' ? timestamp : parseInt(String(timestamp), 10);
+          var now = Math.floor(Date.now() / 1000);
+          if (isNaN(parsedTimestamp) || Math.abs(now - parsedTimestamp) > tolerance) {
+            return false;
+          }
+          var expectedWithTimestamp = crypto.createHmac('sha256', options.secret).update(parsedTimestamp + '.' + payloadString).digest('hex');
+          if (safeTimingCompare(expectedWithTimestamp, signature)) return true;
+        }
+
+        var expectedDirect = crypto.createHmac('sha256', options.secret).update(payloadString).digest('hex');
+        return safeTimingCompare(expectedDirect, signature);
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
 
   // ─── 180 UI ADAPTIVE SERVICE ──────────────────────────────────────────────
   var OneEightyUi = {
@@ -677,6 +765,10 @@
     auth: OneEightyAuth,
     pay: OneEightyPay,
     ui: OneEightyUi,
+    webhooks: OneEightyPay.webhooks,
+    verifyWebhook: function (options) {
+      return verifyWebhookSignature(options);
+    },
     resolveEnvironmentMode: resolveEnvironmentMode,
     generateReferenceCode: generateReferenceCode,
     signIn: OneEightyAuth.signIn,

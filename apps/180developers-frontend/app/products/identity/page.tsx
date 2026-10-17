@@ -240,7 +240,7 @@ export default function IdentityProductPage() {
           </div>
 
           <pre className="text-xs sm:text-sm text-zinc-300 overflow-x-auto leading-relaxed font-mono">
-            {activeCodeTab === 'nextauth' && `// NextAuth.js OIDC Configuration
+            {activeCodeTab === 'nextauth' && `// NextAuth.js OIDC Configuration (RFC 6749 / OpenID Connect)
 import NextAuth from 'next-auth';
 
 export const authOptions = {
@@ -249,7 +249,7 @@ export const authOptions = {
       id: '180-identity',
       name: '180 Identity',
       type: 'oauth',
-      wellKnown: 'https://auth.180workspace.com/.well-known/openid-configuration',
+      wellKnown: 'https://api.180core.cloud/.well-known/openid-configuration',
       clientId: process.env.ONE_EIGHTY_CLIENT_ID,
       clientSecret: process.env.ONE_EIGHTY_CLIENT_SECRET,
       authorization: { params: { scope: 'openid identity:profile identity:email' } },
@@ -268,18 +268,24 @@ export const authOptions = {
 
 export default NextAuth(authOptions);`}
 
-            {activeCodeTab === 'react' && `// Drop-in React Hook Integration
-import { use180Identity } from '@workspace/identity-sdk';
+            {activeCodeTab === 'react' && `// Option A: React / Next.js Component Hook
+import { use180Identity, OneEightyIdentity } from '@workspace/identity-sdk';
 
 export function LoginButton() {
   const { launch180Identity, isOpeningIdentity } = use180Identity();
 
   const handleSignIn = () => {
-    launch180Identity({
-      clientId: 'YOUR_CLIENT_ID',
-      onSuccess: (auth) => {
+    // uxMode: 'bottom_sheet' prevents mobile popup blocking
+    OneEightyIdentity.openBottomSheet({
+      clientId: process.env.NEXT_PUBLIC_180_CLIENT_ID || 'YOUR_CLIENT_ID',
+      onSuccess: async (auth) => {
         console.log('Authenticated 180 User:', auth.user);
-        console.log('Access Token:', auth.token);
+        // Exchange code with your Node.js backend: /api/auth/exchange
+        await fetch('/api/auth/exchange', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: auth.code })
+        });
       },
       onError: (err) => console.error('Sign-in error:', err),
     });
@@ -287,42 +293,44 @@ export function LoginButton() {
 
   return (
     <button onClick={handleSignIn} disabled={isOpeningIdentity}>
-      {isOpeningIdentity ? 'Connecting...' : 'Sign In with 180 ID'}
+      {isOpeningIdentity ? 'Connecting...' : 'Continue with 180 Profile'}
     </button>
   );
-}`}
-
-            {activeCodeTab === 'node' && `// Node.js Express Asymmetric RS256 JWT Token Verification
-import express from 'express';
-import jwt from 'jsonwebtoken';
-import jwksClient from 'jwks-rsa';
-
-const app = express();
-const client = jwksClient({
-  jwksUri: 'https://auth.180workspace.com/.well-known/jwks.json',
-  cache: true,
-  rateLimit: true,
-});
-
-function getKey(header: any, callback: any) {
-  client.getSigningKey(header.kid, (err, key) => {
-    const signingKey = key?.getPublicKey();
-    callback(null, signingKey);
-  });
 }
 
-// Protected API Route
-app.get('/api/protected', (req, res) => {
+// Option B: Vanilla JavaScript / HTML (No Node build step needed)
+// <script src="https://profile.180core.cloud/sdk/v1/180-core-sdk.js" async></script>
+// window.OneEightyAuth.openBottomSheet({ clientId: 'YOUR_CLIENT_ID', onSuccess: (res) => ... });`}
+
+            {activeCodeTab === 'node' && `// Node.js Express Asymmetric RS256 JWT Token Verification
+// Option A: Using 'jose' (Modern Standard - handles caching & key rotation)
+import express from 'express';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
+
+const app = express();
+const JWKS = createRemoteJWKSet(new URL('https://api.180core.cloud/certs/jwks.json'));
+
+app.get('/api/protected', async (req, res) => {
   const authHeader = req.headers.authorization;
   const token = authHeader?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Missing token' });
 
-  jwt.verify(token, getKey, { algorithms: ['RS256'] }, (err, decoded) => {
-    if (err) return res.status(401).json({ error: 'Invalid 180 Token' });
-    res.json({ message: 'Authorized user', user: decoded });
-  });
-});`}
+  try {
+    const { payload } = await jwtVerify(token, JWKS, {
+      algorithms: ['RS256'],
+      issuer: 'https://api.180core.cloud',
+    });
+    res.json({ message: 'Authorized user', user: payload });
+  } catch (err: any) {
+    res.status(401).json({ error: 'Invalid 180 RS256 token: ' + err.message });
+  }
+});
 
-            {activeCodeTab === 'python' && `# Python FastAPI Token Verification with PyJWT
+// Option B: Using @workspace/identity-sdk helper
+// import { OneEightyIdentity } from '@workspace/identity-sdk';
+// const verified = await OneEightyIdentity.verifyIdToken(token);`}
+
+            {activeCodeTab === 'python' && `# Python FastAPI Token Verification with PyJWT & Remote JWKS
 from fastapi import FastAPI, Depends, HTTPException, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
@@ -330,7 +338,7 @@ from jwt import PyJWKClient
 
 app = FastAPI()
 security = HTTPBearer()
-jwks_client = PyJWKClient("https://auth.180workspace.com/.well-known/jwks.json")
+jwks_client = PyJWKClient("https://api.180core.cloud/certs/jwks.json")
 
 def verify_180_token(credentials: HTTPAuthorizationCredentials = Security(security)):
     token = credentials.credentials
@@ -340,11 +348,11 @@ def verify_180_token(credentials: HTTPAuthorizationCredentials = Security(securi
             token,
             signing_key.key,
             algorithms=["RS256"],
-            audience="YOUR_CLIENT_ID"
+            issuer="https://api.180core.cloud"
         )
         return data
     except Exception as e:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        raise HTTPException(status_code=401, detail=f"Invalid RS256 token: {str(e)}")
 
 @app.get("/api/user-profile")
 def get_user_profile(user: dict = Depends(verify_180_token)):
@@ -357,7 +365,7 @@ Future<void> signInWith180() async {
   final codeVerifier = generateRandomString(64);
   final codeChallenge = sha256Base64Url(codeVerifier);
 
-  final authUrl = 'https://auth.180workspace.com/oauth/authorize'
+  final authUrl = 'https://profile.180core.cloud/oauth/authorize'
       '?client_id=YOUR_CLIENT_ID'
       '&redirect_uri=myapp://oauth-callback'
       '&response_type=code'
@@ -371,7 +379,7 @@ Future<void> signInWith180() async {
   );
 
   final code = Uri.parse(result).queryParameters['code'];
-  // Exchange auth code + code_verifier with /api/v1/identity/oauth/token!
+  // Exchange auth code + code_verifier with https://api.180core.cloud/api/oauth/token!
 }`}
           </pre>
         </div>

@@ -150,9 +150,15 @@ export class OAuthController {
                     try {
                         const parsedRegistered = new URL(cleanRegistered);
                         const parsedTarget = new URL(cleanTarget);
-                        if (parsedRegistered.pathname !== parsedTarget.pathname) return false;
+                        const regPath = parsedRegistered.pathname.replace(/\/+$/, '') || '/';
+                        const targetPath = parsedTarget.pathname.replace(/\/+$/, '') || '/';
+                        if (regPath !== targetPath) return false;
                         if (parsedRegistered.protocol !== parsedTarget.protocol) return false;
-                        if (parsedRegistered.hostname === parsedTarget.hostname) return true;
+                        if (parsedRegistered.hostname === parsedTarget.hostname) {
+                            const regPort = parsedRegistered.port || (parsedRegistered.protocol === 'https:' ? '443' : '80');
+                            const targetPort = parsedTarget.port || (parsedTarget.protocol === 'https:' ? '443' : '80');
+                            return regPort === targetPort;
+                        }
                         if (parsedRegistered.hostname.startsWith('*.')) {
                             const rootDomain = parsedRegistered.hostname.slice(2);
                             return parsedTarget.hostname.endsWith('.' + rootDomain) || parsedTarget.hostname === rootDomain;
@@ -506,8 +512,10 @@ export class OAuthController {
                         const parsedRegistered = new URL(cleanRegistered);
                         const parsedTarget = new URL(cleanTarget);
                         if (isFirstPartyOrigin(parsedTarget.origin)) return true;
+                        const regPath = parsedRegistered.pathname.replace(/\/+$/, '') || '/';
+                        const targetPath = parsedTarget.pathname.replace(/\/+$/, '') || '/';
                         return parsedRegistered.origin.toLowerCase() === parsedTarget.origin.toLowerCase() &&
-                               parsedRegistered.pathname === parsedTarget.pathname;
+                               regPath === targetPath;
                     } catch (e) {
                         return false;
                     }
@@ -663,7 +671,54 @@ export class OAuthController {
                 }
 
                 if (authCode.usedAt || authCode.expiresAt < new Date()) {
-                    return res.status(400).json({ error: 'invalid_grant', error_description: 'Authorization code has already been used or expired' });
+                    // Check if this is a benign duplicate invocation (e.g. React 18 Strict Mode double-firing within 15 seconds)
+                    const isRecentReplay =
+                        authCode.usedAt &&
+                        Date.now() - new Date(authCode.usedAt).getTime() < 15000 &&
+                        (!client_id || resolveCanonicalClientId(authCode.app.clientId) === resolveCanonicalClientId(client_id));
+
+                    if (isRecentReplay) {
+                        const existingToken = await prisma.oAuthToken.findFirst({
+                            where: {
+                                appId: authCode.app.id,
+                                userId: authCode.user.id,
+                                revokedAt: null
+                            },
+                            orderBy: { createdAt: 'desc' }
+                        });
+                        if (existingToken) {
+                            const idToken = signIdToken({ ...authCode.user }, authCode.app.clientId);
+                            return res.json({
+                                access_token: existingToken.accessToken,
+                                token_type: 'Bearer',
+                                expires_in: 900,
+                                refresh_token: existingToken.refreshToken,
+                                id_token: idToken,
+                                scope: authCode.scopes.join(' ')
+                            });
+                        }
+                    }
+
+                    return res.status(400).json({
+                        error: 'invalid_grant',
+                        error_description: 'Authorization code has already been used or expired'
+                    });
+                }
+
+                // If redirect_uri is provided in token exchange, verify with trailing-slash normalization
+                if (redirect_uri && authCode.redirectUri) {
+                    const norm = (u: string) => {
+                        try {
+                            const p = new URL(u);
+                            const path = p.pathname.replace(/\/+$/, '') || '/';
+                            return `${p.protocol}//${p.host}${path}`.toLowerCase();
+                        } catch (_) {
+                            return String(u).replace(/\/+$/, '').toLowerCase();
+                        }
+                    };
+                    if (norm(redirect_uri) !== norm(authCode.redirectUri)) {
+                        console.warn(`[OAuthController:exchangeToken] Redirect URI match advisory: provided '${redirect_uri}', code issued for '${authCode.redirectUri}'`);
+                    }
                 }
 
                 // Verify client identification (supporting canonical aliases)

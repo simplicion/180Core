@@ -26,6 +26,7 @@ import agentCheckoutRoutes from './routes/agent-checkout.routes';
 import pricingTableRoutes from './routes/pricing-table.routes';
 import adminRoutes from './routes/admin.routes';
 import supportRoutes from './routes/support.routes';
+import { AuthApiController } from './controllers/auth.controller';
 import { generalApiLimiter } from './middleware/rate-limiter.middleware';
 import { RsaKeysService, seedFirstPartyOAuthApps, DeveloperBillingService } from '@workspace/identity-provider';
 import { RecurringBillingEngine } from '@workspace/payment-provider';
@@ -168,6 +169,14 @@ app.get('/health', (req, res) => {
     domains: ['identity', 'wallet', 'checkout', 'developer', 'payout'],
   });
 });
+
+// ─── Universal Root-Level OIDC & JWKS Discovery Aliases ─────────────────────
+// Enables jose, jwks-rsa, Python PyJWKClient, and standard OIDC discovery across all canonical paths
+app.get('/.well-known/openid-configuration', AuthApiController.getOpenIdConfiguration);
+app.get('/.well-known/jwks.json', AuthApiController.getJwks);
+app.get('/certs/jwks.json', AuthApiController.getJwks);
+app.get('/certs', AuthApiController.getJwks);
+app.get('/jwks.json', AuthApiController.getJwks);
 
 // ─── Domain Routes Registration ──────────────────────────────────────────────
 app.use('/oauth', authRoutes);

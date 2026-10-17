@@ -239,114 +239,155 @@ export default function PayProductPage() {
           </div>
 
           <pre className="text-xs sm:text-sm text-zinc-300 overflow-x-auto leading-relaxed font-mono">
-            {activeCodeTab === 'checkout' && `// 1. Frontend: Trigger 1-Click 180 Pay Checkout Popup
+            {activeCodeTab === 'checkout' && `// 1. Frontend: 1-Click Sovereign Checkout (NPM or CDN Script Tag)
+// Option A: In Next.js / React with @workspace/identity-sdk
 import { OneEightyPay } from '@workspace/identity-sdk';
 
-export async function handlePurchase(productId: string) {
-  // Step 1: Create checkout session on your backend
-  const res = await fetch('/api/create-checkout-session', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ productId, amount: 499, currency: 'INR' }),
-  });
-  const { sessionId } = await res.json();
-
-  // Step 2: Open standalone 180 Pay popup modal
-  const payment = await OneEightyPay.checkout({
-    sessionId,
-    title: 'Pro Plan Monthly License',
-    amount: 499,
+export function handlePurchase(productId: string) {
+  // uxMode: 'bottom_sheet' provides native in-DOM mobile-friendly slide-up sheet (No popup blockers!)
+  OneEightyPay.openBottomSheet({
+    amount: 499.00,
     currency: 'INR',
+    title: 'Pro Plan Monthly License',
+    description: 'Instant sovereign checkout via 180 Pay',
+    onSuccess: (res) => {
+      console.log('Payment successful! Transaction:', res.transactionId || res.orderId);
+      window.location.href = '/checkout/success?order=' + res.orderId;
+    },
+    onCancel: () => console.log('Checkout dismissed')
   });
+}
 
-  console.log('Payment Authorized by User:', payment.transactionId);
-}`}
+// Option B: In Vanilla HTML / JavaScript via CDN Script Tag
+// <script src="https://profile.180core.cloud/sdk/v1/180-core-sdk.js" async></script>
+// window.OneEightyPay.openBottomSheet({ amount: 499, currency: 'INR', title: 'Pro Plan' });`}
 
-            {activeCodeTab === 'webhook' && `// 2. Developer Backend: 2-Way Payment Verification Webhook Handler
+            {activeCodeTab === 'webhook' && `// 2. Developer Backend: Cryptographic 2-Way Payment Verification
+// Using @workspace/identity-sdk official helper (Zero math errors)
 import express from 'express';
-import crypto from 'crypto';
+import { OneEightyPay } from '@workspace/identity-sdk';
 
 const app = express();
+// CRITICAL: Capture raw body buffer for the webhook route BEFORE express.json()
+app.use('/api/webhooks/180-pay', express.raw({ type: '*/*' }));
 app.use(express.json());
 
+const WEBHOOK_SECRET = process.env.ONE_EIGHTY_WEBHOOK_SECRET; // whsec_...
+
 app.post('/api/webhooks/180-pay', (req, res) => {
-  const signature = req.headers['x-180-signature'];
-  const webhookSecret = process.env.ONE_EIGHTY_WEBHOOK_SECRET; // whsec_...
+  try {
+    const rawBody = req.body; // Buffer from express.raw()
+    const signature = req.headers['x-180-signature'];
+    const timestamp = req.headers['x-180-timestamp'];
 
-  const expectedSignature = crypto
-    .createHmac('sha256', webhookSecret)
-    .update(JSON.stringify(req.body))
-    .digest('hex');
+    // constructEvent validates timestamp replay attack & timing-safe HMAC pre-image
+    const event = OneEightyPay.webhooks.constructEvent(
+      rawBody,
+      signature,
+      WEBHOOK_SECRET,
+      timestamp
+    );
 
-  if (signature !== expectedSignature) {
-    return res.status(401).json({ error: 'Invalid HMAC signature' });
+    if (event.event === 'payment.captured' || event.type === 'payment.succeeded') {
+      console.log('Payment Confirmed for:', event.data?.customerEmail);
+      console.log('Amount Credited:', event.data?.amount, event.data?.currency);
+      // Fulfill order in your database!
+    }
+
+    res.status(200).json({ received: true });
+  } catch (err) {
+    res.status(401).json({ error: err.message });
   }
-
-  const { event, data } = req.body;
-  if (event === 'payment.captured') {
-    console.log('Payment Confirmed for:', data.customerEmail);
-    console.log('Amount Credited:', data.amount);
-    // Fulfill order in your database!
-  }
-
-  res.json({ received: true });
 });`}
 
-            {activeCodeTab === 'node' && `// Node.js Express Create Checkout Session Endpoint
-import express from 'express';
-
+            {activeCodeTab === 'node' && `// Node.js Express Complete Server: Native HMAC Verification & Session Creation
+const express = require('express');
+const crypto = require('crypto');
 const app = express();
 
-app.post('/api/create-checkout-session', async (req, res) => {
-  const { amount, currency, title } = req.body;
+const WEBHOOK_SECRET = process.env.ONE_EIGHTY_WEBHOOK_SECRET;
 
-  const response = await fetch('https://api.180core.cloud/api/v1/checkout/sessions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: \`Bearer \${process.env.ONE_EIGHTY_CLIENT_SECRET}\`,
-    },
-    body: JSON.stringify({
-      clientId: process.env.ONE_EIGHTY_CLIENT_ID,
-      amount,
-      currency: currency || 'INR',
-      title,
-      returnUrl: 'https://myapp.com/checkout/success',
-      cancelUrl: 'https://myapp.com/checkout/cancel',
-    }),
-  });
+// 1. MUST mount raw body parser before express.json() for HMAC verification
+app.use('/api/webhooks/180-pay', express.raw({ type: '*/*' }));
+app.use(express.json());
 
-  const session = await response.json();
-  res.json({ sessionId: session.id });
+// 2. Turnkey HMAC-SHA256 Webhook Verification Route with Replay Defense
+app.post('/api/webhooks/180-pay', (req, res) => {
+  try {
+    const rawBody = req.body ? req.body.toString('utf8') : '';
+    const signature = req.headers['x-180-signature'];
+    const timestamp = req.headers['x-180-timestamp'];
+
+    if (!signature || !WEBHOOK_SECRET) {
+      return res.status(400).json({ error: 'Missing security headers or secret' });
+    }
+
+    // 5-minute replay attack defense (300s)
+    if (timestamp) {
+      const now = Math.floor(Date.now() / 1000);
+      if (Math.abs(now - parseInt(timestamp, 10)) > 300) {
+        return res.status(401).json({ error: 'Timestamp expired' });
+      }
+    }
+
+    // Canonical payload: \`\${timestamp}.\${rawBody}\`
+    const signPayload = timestamp ? \`\${timestamp}.\${rawBody}\` : rawBody;
+    const expected = crypto.createHmac('sha256', WEBHOOK_SECRET).update(signPayload).digest('hex');
+
+    // Constant-time length-safe comparison (Never throws RangeError)
+    const bufA = Buffer.from(signature);
+    const bufB = Buffer.from(expected);
+    if (bufA.length !== bufB.length || !crypto.timingSafeEqual(bufA, bufB)) {
+      return res.status(401).json({ error: 'Invalid HMAC signature' });
+    }
+
+    const event = JSON.parse(rawBody);
+    console.log('Order fulfilled for:', event.data?.customerEmail);
+    return res.status(200).json({ received: true });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 });`}
 
-            {activeCodeTab === 'python' && `# Python FastAPI Webhook & Signature Verification
+            {activeCodeTab === 'python' && `# Python FastAPI Webhook & Signature Verification with Timestamp Pre-Image
 import hmac
 import hashlib
 import json
+import time
 from fastapi import FastAPI, Header, HTTPException, Request
 
 app = FastAPI()
 WEBHOOK_SECRET = "whsec_YOUR_SECRET"
 
 @app.post("/webhooks/180-pay")
-async def handle_180_webhook(request: Request, x_180_signature: str = Header(None)):
+async def handle_180_webhook(
+    request: Request,
+    x_180_signature: str = Header(None),
+    x_180_timestamp: str = Header(None)
+):
     raw_body = await request.body()
+    if not x_180_signature or not WEBHOOK_SECRET:
+        raise HTTPException(status_code=400, detail="Missing signature header")
+
+    # 5-minute replay window
+    if x_180_timestamp:
+        if abs(int(time.time()) - int(x_180_timestamp)) > 300:
+            raise HTTPException(status_code=401, detail="Expired timestamp")
+        payload = f"{x_180_timestamp}.".encode("utf-8") + raw_body
+    else:
+        payload = raw_body
+
     expected_sig = hmac.new(
-        WEBHOOK_SECRET.encode(),
-        raw_body,
+        WEBHOOK_SECRET.encode("utf-8"),
+        payload,
         hashlib.sha256
     ).hexdigest()
 
-    if not hmac.compare_digest(x_180_signature or "", expected_sig):
+    if not hmac.compare_digest(x_180_signature.strip(), expected_sig):
         raise HTTPException(status_code=401, detail="Invalid HMAC signature")
 
-    payload = json.loads(raw_body)
-    if payload.get("event") == "payment.captured":
-        # Fulfill product
-        print("Payment captured:", payload["data"]["transactionId"])
-
-    return {"status": "success"}`}
+    payload_data = json.loads(raw_body)
+    return {"received": True}`}
           </pre>
         </div>
       </section>
