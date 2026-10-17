@@ -44,6 +44,10 @@ export function middleware(request: NextRequest) {
     if (pathname.startsWith('/auth')) {
       return NextResponse.next();
     }
+    // If accessing checkout or pay on auth domain, allow pass through
+    if (pathname.startsWith('/checkout') || pathname.startsWith('/pay')) {
+      return NextResponse.next();
+    }
     // Route any unspecified paths under auth
     url.pathname = `/auth${pathname}`;
     return NextResponse.rewrite(url);

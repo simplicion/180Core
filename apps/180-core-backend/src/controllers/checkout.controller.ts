@@ -23,28 +23,62 @@ export class CheckoutApiController {
         displayMode,
       } = req.body;
 
-      const clientId = req.body.clientId;
-      const clientSecret = req.body.clientSecret;
+      const headerAuth = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+      const clientId =
+        req.body.clientId ||
+        req.body.client_id ||
+        (req.headers['x-client-id'] as string) ||
+        (req.headers['x-180-client-id'] as string);
+      let clientSecret =
+        req.body.clientSecret ||
+        req.body.client_secret ||
+        (req.headers['x-client-secret'] as string) ||
+        (req.headers['x-180-client-secret'] as string);
 
-      if (!amount || Number(amount) <= 0) {
+      if (!clientSecret && headerAuth && headerAuth.startsWith('180_sec_')) {
+        clientSecret = headerAuth;
+      }
+
+      // Handle currency units: 180 Pay expects whole currency units (e.g. 499 for $499 or ₹499)
+      let parsedAmount = Number(amount);
+      const smallestUnit =
+        req.body.amountInCents ||
+        req.body.amount_in_cents ||
+        req.body.amountInPaise ||
+        req.body.amount_in_paise;
+
+      if ((!amount || Number(amount) <= 0) && smallestUnit) {
+        parsedAmount = Number(smallestUnit) / 100;
+      }
+
+      if (!parsedAmount || parsedAmount <= 0) {
         return res.status(400).json({
           success: false,
-          error: 'Payment amount must be greater than zero',
+          error:
+            'Payment amount must be greater than zero. Note: 180 Pay accepts whole currency units (e.g. amount: 499 for ₹499 or $499).',
         });
       }
+
+      const effectiveReturnUrl = returnUrl || req.body.return_url || req.body.redirectUrl || req.body.redirect_uri;
+      const effectiveCancelUrl = cancelUrl || req.body.cancel_url;
+      const effectiveTitle = title || req.body.productName || req.body.name || '180 Pay Sovereign Checkout';
+      const effectiveMetadata = {
+        ...(metadata || {}),
+        orderId: req.body.orderId || req.body.order_id || metadata?.orderId || metadata?.order_id,
+      };
 
       // If client credentials provided, use standard 3rd-party developer flow
       if (clientId && clientSecret) {
         const session = await CheckoutService.createSession({
           clientId,
           clientSecret,
-          amount: Number(amount),
+          amount: parsedAmount,
           currency,
-          title: title || '180 Pay Sovereign Checkout',
+          title: effectiveTitle,
           description,
-          returnUrl,
-          cancelUrl,
-          metadata,
+          returnUrl: effectiveReturnUrl,
+          cancelUrl: effectiveCancelUrl,
+          metadata: effectiveMetadata,
         });
 
         // If couponCode was passed, attempt application

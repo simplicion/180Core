@@ -528,8 +528,25 @@ export class OAuthController {
                         if (isFirstPartyOrigin(parsedTarget.origin)) return true;
                         const regPath = parsedRegistered.pathname.replace(/\/+$/, '') || '/';
                         const targetPath = parsedTarget.pathname.replace(/\/+$/, '') || '/';
-                        return parsedRegistered.origin.toLowerCase() === parsedTarget.origin.toLowerCase() &&
-                               regPath === targetPath;
+                        if (regPath !== targetPath) return false;
+                        const isLoopbackHost = (h: string) =>
+                            h === 'localhost' || h === '127.0.0.1' || h === '10.0.2.2' || h === '0.0.0.0' || h === '::1';
+
+                        if (isLoopbackHost(parsedRegistered.hostname) && isLoopbackHost(parsedTarget.hostname)) {
+                            // RFC 8252 Section 7.3: Loopback interface redirects for native and local development allow dynamic port allocation.
+                            return true;
+                        }
+
+                        if (parsedRegistered.hostname === parsedTarget.hostname) {
+                            const regPort = parsedRegistered.port || (parsedRegistered.protocol === 'https:' ? '443' : '80');
+                            const targetPort = parsedTarget.port || (parsedTarget.protocol === 'https:' ? '443' : '80');
+                            return regPort === targetPort;
+                        }
+                        if (parsedRegistered.hostname.startsWith('*.')) {
+                            const rootDomain = parsedRegistered.hostname.slice(2);
+                            return parsedTarget.hostname.endsWith('.' + rootDomain) || parsedTarget.hostname === rootDomain;
+                        }
+                        return false;
                     } catch (e) {
                         return false;
                     }
@@ -1034,29 +1051,45 @@ export class OAuthController {
             }
 
             const nameParts = (user.name || '').trim().split(/\s+/);
+            const displayName = user.name || user.username || '';
+            const userHandle = user.username || user.name || '';
+            const userPhone = user.phone || null;
+            const userAvatar = user.avatarUrl || '';
 
             return res.json({
                 sub: user.id,
                 id: user.id,
-                name: user.name || '',
-                given_name: nameParts[0] || '',
+                name: displayName,
+                preferred_username: userHandle,
+                username: userHandle,
+                given_name: nameParts[0] || displayName,
                 family_name: nameParts.slice(1).join(' ') || '',
-                username: user.username || '',
                 email: user.email,
                 email_verified: Boolean(user.isEmailVerified),
-                phone: user.phone || null,
-                picture: user.avatarUrl || '',
-                avatarUrl: user.avatarUrl || '',
+                phone: userPhone,
+                phone_number: userPhone,
+                phoneNumber: userPhone,
+                phone_number_verified: Boolean(user.isPhoneVerified),
+                picture: userAvatar,
+                avatar: userAvatar,
+                avatarUrl: userAvatar,
+                avatar_url: userAvatar,
                 headline: user.headline || '',
                 age: user.age || null,
                 isOnboarded: Boolean(user.isOnboarded),
                 user: {
                     id: user.id,
                     sub: user.id,
-                    name: user.name || '',
+                    name: displayName,
+                    preferred_username: userHandle,
+                    username: userHandle,
                     email: user.email,
-                    username: user.username || '',
-                    avatarUrl: user.avatarUrl || '',
+                    phone: userPhone,
+                    phoneNumber: userPhone,
+                    phone_number: userPhone,
+                    picture: userAvatar,
+                    avatar: userAvatar,
+                    avatarUrl: userAvatar,
                 },
                 location: (user.latitude && user.longitude) ? {
                     latitude: user.latitude,

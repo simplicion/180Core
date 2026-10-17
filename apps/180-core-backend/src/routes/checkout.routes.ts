@@ -7,6 +7,8 @@ import { protect, optionalAuth } from '../middleware/auth.middleware';
 const router = express.Router();
 
 router.post('/sessions', optionalAuth, CheckoutApiController.createCheckoutSession);
+router.post('/checkout-session', optionalAuth, CheckoutApiController.createCheckoutSession);
+router.post('/checkout-sessions', optionalAuth, CheckoutApiController.createCheckoutSession);
 router.get('/sessions/:id', CheckoutApiController.getCheckoutSession);
 router.get('/methods', CheckoutApiController.getPaymentMethods);
 router.get('/sessions/:id/methods', CheckoutApiController.getPaymentMethods);

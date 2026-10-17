@@ -12,12 +12,15 @@ function CheckoutEntryPoint() {
   const router = useRouter();
 
   const querySessionId = searchParams.get('sessionId') || searchParams.get('session_id') || searchParams.get('cs');
-  const appId = searchParams.get('appId') || searchParams.get('clientId');
+  const appId = searchParams.get('appId') || searchParams.get('clientId') || searchParams.get('client_id');
   const planCode = searchParams.get('planCode') || searchParams.get('plan');
   const initialAmount = searchParams.get('amount');
   const currency = searchParams.get('currency') || 'INR';
-  const title = searchParams.get('title') || (planCode ? `${planCode} Subscription` : 'Secure Checkout');
+  const title = searchParams.get('title') || searchParams.get('name') || (planCode ? `${planCode} Subscription` : 'Secure Checkout');
   const couponCode = searchParams.get('couponCode') || searchParams.get('coupon');
+  const orderId = searchParams.get('order_id') || searchParams.get('orderId');
+  const returnUrl = searchParams.get('redirect_uri') || searchParams.get('return_url') || searchParams.get('returnUrl');
+  const cancelUrl = searchParams.get('cancel_url') || searchParams.get('cancelUrl');
 
   const [activeSessionId, setActiveSessionId] = useState<string | null>(querySessionId || null);
   const [initializing, setInitializing] = useState(false);
@@ -36,9 +39,18 @@ function CheckoutEntryPoint() {
         setError(null);
         try {
           const rawAmount = searchParams.get('amount');
-          let orderAmount: number | null = (rawAmount !== null && rawAmount !== undefined && !isNaN(parseFloat(rawAmount)))
-            ? parseFloat(rawAmount)
-            : null;
+          const smallestUnit =
+            searchParams.get('amountInCents') ||
+            searchParams.get('amount_in_cents') ||
+            searchParams.get('amountInPaise') ||
+            searchParams.get('amount_in_paise');
+
+          let orderAmount: number | null = null;
+          if (rawAmount !== null && rawAmount !== undefined && !isNaN(parseFloat(rawAmount))) {
+            orderAmount = parseFloat(rawAmount);
+          } else if (smallestUnit !== null && smallestUnit !== undefined && !isNaN(parseFloat(smallestUnit))) {
+            orderAmount = parseFloat(smallestUnit) / 100;
+          }
 
           // If amount is not explicitly provided, attempt to resolve from app pricing table config
           if (orderAmount === null) {
@@ -67,11 +79,16 @@ function CheckoutEntryPoint() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               appId,
+              clientId: appId,
               amount: orderAmount,
               currency: currency.toUpperCase(),
               title,
+              returnUrl: returnUrl || undefined,
+              cancelUrl: cancelUrl || undefined,
               couponCode: couponCode || undefined,
               metadata: {
+                orderId: orderId || undefined,
+                order_id: orderId || undefined,
                 planCode: planCode || undefined,
                 source: 'checkout_direct_entry',
               },

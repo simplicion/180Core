@@ -252,7 +252,7 @@ export class CheckoutService {
       });
     }
 
-    const checkoutBase = process.env.PROFILE_FRONTEND_URL || process.env.NEXT_PUBLIC_PROFILE_URL || '';
+    const checkoutBase = (process.env.PROFILE_FRONTEND_URL || process.env.NEXT_PUBLIC_PROFILE_URL || 'https://profile.180core.cloud').replace(/\/+$/, '');
 
     return {
       success: true,

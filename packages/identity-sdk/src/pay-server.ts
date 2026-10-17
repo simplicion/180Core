@@ -52,6 +52,58 @@ export interface AgentPurchaseSdkInput {
   metadata?: Record<string, any>;
 }
 
+export type OneEightyWebhookEventType =
+  | 'payment.captured'
+  | 'payment.succeeded'
+  | 'payment.failed'
+  | 'subscription.created'
+  | 'subscription.updated'
+  | 'subscription.cancelled'
+  | 'identity.verified'
+  | 'order.paid';
+
+export interface OneEightyPaymentCapturedData {
+  transactionId: string;
+  orderId?: string;
+  amount: number;
+  currency: string;
+  customerEmail: string;
+  customerPhone?: string;
+  customerName?: string;
+  paymentMethod?: string;
+  appId: string;
+  metadata?: Record<string, any>;
+  capturedAt: string;
+}
+
+export interface OneEightySubscriptionCreatedData {
+  subscriptionId: string;
+  planCode: string;
+  appId: string;
+  customerEmail: string;
+  status: 'ACTIVE' | 'TRIALING' | 'CANCELLED';
+  amount: number;
+  currency: string;
+  currentPeriodEnd: string;
+}
+
+export interface OneEightyIdentityVerifiedData {
+  userId: string;
+  sub: string;
+  email: string;
+  phone?: string;
+  name?: string;
+  verifiedAt: string;
+}
+
+export interface OneEightyWebhookEvent<T = any> {
+  id: string;
+  event: OneEightyWebhookEventType;
+  type: OneEightyWebhookEventType;
+  data: T;
+  timestamp: number;
+}
+
 export interface WebhookVerificationResult {
   valid: boolean;
   reason:

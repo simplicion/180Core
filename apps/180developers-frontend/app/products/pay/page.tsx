@@ -28,7 +28,7 @@ import { use180Pay } from '@workspace/identity-sdk';
 
 export default function PayProductPage() {
   const { launch180Pay, isOpeningPay } = use180Pay();
-  const [activeCodeTab, setActiveCodeTab] = useState<'checkout' | 'webhook' | 'node' | 'python'>('checkout');
+  const [activeCodeTab, setActiveCodeTab] = useState<'checkout' | 'server-session' | 'flutter' | 'webhook' | 'node' | 'python'>('checkout');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [showDemoModal, setShowDemoModal] = useState(false);
   const [paymentResult, setPaymentResult] = useState<any>(null);
@@ -294,6 +294,51 @@ export default function PayProductPage() {
         </div>
       </section>
 
+      {/* ── Developer Architecture & Currency Standard Guide ───────────────── */}
+      <section className="max-w-5xl mx-auto space-y-4">
+        <div className="p-6 rounded-3xl bg-gradient-to-br from-purple-500/5 via-indigo-500/5 to-pink-500/5 border border-purple-500/20 shadow-sm backdrop-blur-md space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-500/10 pb-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              <h3 className="font-bold text-sm text-zinc-950 dark:text-white">
+                180 Ecosystem Architecture & Currency Standard
+              </h3>
+            </div>
+            <span className="text-[11px] font-mono text-purple-600 dark:text-purple-400 bg-purple-500/10 px-2.5 py-1 rounded-full font-semibold">
+              CRITICAL INTEGRATION RULES
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            {/* Rule 1: Whole Currency Units */}
+            <div className="p-4 rounded-2xl bg-white/70 dark:bg-zinc-900/70 border border-zinc-200 dark:border-white/5 space-y-1.5">
+              <div className="flex items-center gap-1.5 font-bold text-zinc-900 dark:text-white">
+                <DollarSign className="w-3.5 h-3.5 text-emerald-500" />
+                <span>1. Whole Currency Units (Not Smallest Units)</span>
+              </div>
+              <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed text-[11px]">
+                Unlike legacy gateways (Stripe/Razorpay) that require paise or cents (e.g. <code className="text-red-500">49900</code>), 
+                180 Pay universally operates on <span className="font-bold text-zinc-900 dark:text-zinc-100">whole currency units</span>. 
+                Pass <code className="text-emerald-500 font-bold">amount=499</code> for ₹499 INR or <code className="text-emerald-500 font-bold">amount=49.00</code> for $49 USD. 
+                Passing 49900 without unit flags will generate a ₹49,900 checkout order!
+              </p>
+            </div>
+
+            {/* Rule 2: Dual Domain Directory */}
+            <div className="p-4 rounded-2xl bg-white/70 dark:bg-zinc-900/70 border border-zinc-200 dark:border-white/5 space-y-1.5">
+              <div className="flex items-center gap-1.5 font-bold text-zinc-900 dark:text-white">
+                <Server className="w-3.5 h-3.5 text-blue-500" />
+                <span>2. Unified Domain Directory</span>
+              </div>
+              <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed text-[11px]">
+                • <strong className="text-purple-600 dark:text-purple-400">Hosted UIs:</strong> <code className="text-zinc-700 dark:text-zinc-300 font-mono">https://auth.180workspace.com/checkout</code> or <code className="text-zinc-700 dark:text-zinc-300 font-mono">/auth/login</code><br />
+                • <strong className="text-blue-600 dark:text-blue-400">Core REST APIs:</strong> <code className="text-zinc-700 dark:text-zinc-300 font-mono">https://api.180core.cloud/api/v1/pay/checkout-session</code> and <code className="text-zinc-700 dark:text-zinc-300 font-mono">/api/oauth/token</code>
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── Code Implementation Snippets ───────────────────────────────────── */}
       <section className="space-y-6 max-w-5xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-200 dark:border-white/10 pb-4">
@@ -302,22 +347,32 @@ export default function PayProductPage() {
               Integration Code & Webhooks
             </h2>
             <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-0.5">
-              Trigger checkout popups and verify payment webhooks with Node.js or Python
+              Client popups, server-to-server checkout sessions, Flutter apps, and Fastify / Express webhooks
             </p>
           </div>
 
           <div className="flex items-center gap-1.5 p-1 bg-zinc-100 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-white/10 overflow-x-auto">
-            {(['checkout', 'webhook', 'node', 'python'] as const).map((tab) => (
+            {(['checkout', 'server-session', 'flutter', 'webhook', 'node', 'python'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveCodeTab(tab)}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize whitespace-nowrap transition-all cursor-pointer ${
                   activeCodeTab === tab
                     ? 'bg-purple-600 text-white shadow-md'
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white'
                 }`}
               >
-                {tab === 'checkout' ? '1. Frontend Checkout' : tab === 'webhook' ? '2. Webhook Handler' : tab === 'node' ? 'Node.js Express' : 'Python FastAPI'}
+                {tab === 'checkout'
+                  ? '1. Frontend Checkout'
+                  : tab === 'server-session'
+                  ? '2. Server-Side Session'
+                  : tab === 'flutter'
+                  ? '3. Flutter / Dart'
+                  : tab === 'webhook'
+                  ? '4. Fastify & Express Webhook'
+                  : tab === 'node'
+                  ? 'Node.js (Raw)'
+                  : 'Python FastAPI'}
               </button>
             ))}
           </div>
@@ -331,7 +386,17 @@ export default function PayProductPage() {
               <span className="w-3 h-3 rounded-full bg-amber-500/80" />
               <span className="w-3 h-3 rounded-full bg-emerald-500/80" />
               <span className="ml-2 text-xs font-mono text-zinc-500">
-                {activeCodeTab === 'checkout' ? 'checkout.ts' : activeCodeTab === 'webhook' ? 'webhook-server.ts' : activeCodeTab === 'node' ? 'server.ts' : 'payment_handler.py'}
+                {activeCodeTab === 'checkout'
+                  ? 'checkout.ts'
+                  : activeCodeTab === 'server-session'
+                  ? 'create-session.ts (Fastify 5.x / Express)'
+                  : activeCodeTab === 'flutter'
+                  ? '180_integration_service.dart'
+                  : activeCodeTab === 'webhook'
+                  ? 'webhook-server.ts (Fastify & Express)'
+                  : activeCodeTab === 'node'
+                  ? 'server.ts'
+                  : 'payment_handler.py'}
               </span>
             </div>
             <button
@@ -351,7 +416,7 @@ import { OneEightyPay } from '@workspace/identity-sdk';
 export function handlePurchase(order: { id: string; amount: number; currency: string; title: string }) {
   // uxMode: 'bottom_sheet' provides native in-DOM mobile-friendly slide-up sheet (No popup blockers!)
   OneEightyPay.openBottomSheet({
-    amount: order.amount,       // Any dynamic amount (e.g. 19.99, 150.00, or 0 for free trials)
+    amount: order.amount,       // Whole currency units (e.g. 19.99, 499.00, or 0 for trials)
     currency: order.currency,   // Any ISO 4217 code (USD, EUR, INR, GBP, CAD, AUD, etc.)
     title: order.title,         // Your dynamic product/service title
     orderId: order.id,          // Your internal merchant order ID
@@ -371,11 +436,115 @@ export function handlePurchase(order: { id: string; amount: number; currency: st
 // Option B: Vanilla JavaScript / HTML via CDN Script Tag
 // <script src="https://profile.180core.cloud/sdk/v1/180-core-sdk.js" async></script>
 // window.OneEightyPay.openBottomSheet({
-//   amount: cart.total,
-//   currency: cart.currency,
-//   title: cart.productTitle,
-//   orderId: cart.orderId
+//   amount: 499, // Whole currency units (e.g. ₹499 INR)
+//   currency: 'INR',
+//   title: 'Pro Developer Plan',
+//   orderId: 'ord_12345'
 // });`}
+
+            {activeCodeTab === 'server-session' && `// Server-Side Signed Checkout Session Creation (Fastify 5.x & Express)
+// Prevents clients from tampering with amounts in URL query strings!
+// Endpoint: POST https://api.180core.cloud/api/v1/pay/checkout-session
+
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+
+interface CreateOrderBody {
+  orderId: string;
+  amount: number;       // Whole units: 499 for ₹499 INR, 49.00 for $49.00 USD
+  currency: string;     // 'INR', 'USD', 'EUR', etc.
+  title: string;
+  returnUrl?: string;
+}
+
+export async function createCheckoutSession(req: FastifyRequest<{ Body: CreateOrderBody }>, reply: FastifyReply) {
+  const { orderId, amount, currency, title, returnUrl } = req.body;
+
+  // IMPORTANT: 180 Pay expects WHOLE units (e.g. 499 for ₹499), NOT paise or cents!
+  const response = await fetch('https://api.180core.cloud/api/v1/pay/checkout-session', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': \`Bearer \${process.env.ONE_EIGHTY_CLIENT_SECRET}\`,
+    },
+    body: JSON.stringify({
+      client_id: process.env.ONE_EIGHTY_CLIENT_ID,
+      client_secret: process.env.ONE_EIGHTY_CLIENT_SECRET,
+      amount: amount,             // Whole units (499 = ₹499)
+      currency: currency || 'INR',
+      title: title || \`Order #\${orderId}\`,
+      order_id: orderId,
+      return_url: returnUrl || 'http://localhost:3000/checkout/success',
+      cancel_url: 'http://localhost:3000/checkout/cancel',
+    }),
+  });
+
+  const sessionData = await response.json();
+  if (!response.ok || sessionData.error) {
+    throw new Error(sessionData.error_description || sessionData.error || 'Failed to create 180 Pay session');
+  }
+
+  // Returns: { sessionId: 'sess_...', checkoutUrl: 'https://auth.180workspace.com/checkout?sessionId=...' }
+  return reply.send({
+    sessionId: sessionData.sessionId,
+    checkoutUrl: sessionData.checkoutUrl,
+  });
+}`}
+
+            {activeCodeTab === 'flutter' && `// Flutter 3.24+ / Dart 3.5+ Integration for 180 Identity & 180 Pay
+// Dependencies: url_launcher: ^6.3.0
+
+import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+class OneEightyIntegrationService {
+  static const String clientId = 'YOUR_180_CLIENT_ID';
+
+  // ==========================================================================
+  // 1. 180 Identity: Hosted OAuth 2.0 / SSO Login
+  // ==========================================================================
+  static Future<void> launchHostedLogin({required String redirectUri}) async {
+    final uri = Uri.parse(
+      'https://auth.180workspace.com/auth/login?'
+      'client_id=\$clientId&'
+      'redirect_uri=\${Uri.encodeComponent(redirectUri)}&'
+      'response_type=code&'
+      'scope=openid+identity:read+identity:email+identity:phone&'
+      'state=flutter_auth'
+    );
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication, webOnlyWindowName: '_self');
+    }
+  }
+
+  // ==========================================================================
+  // 2. 180 Pay: Hosted 1-Click Sovereign Checkout
+  // CRITICAL: 'amountInRupees' expects WHOLE currency units (e.g. 499 for ₹499),
+  // NEVER smallest units like paise or cents!
+  // ==========================================================================
+  static Future<void> launchCheckout({
+    required String orderId,
+    required int amountInRupees,
+    required String title,
+    required String returnUrl,
+    String? sessionId, // Optional: returned from your server's checkout-session call
+  }) async {
+    final checkoutUri = sessionId != null
+      ? Uri.parse('https://auth.180workspace.com/checkout?sessionId=\$sessionId&order_id=\$orderId')
+      : Uri.parse(
+          'https://auth.180workspace.com/checkout?'
+          'clientId=\$clientId&'
+          'amount=\$amountInRupees&' // Whole currency units (e.g. 499 = ₹499 INR)
+          'currency=INR&'
+          'title=\${Uri.encodeComponent(title)}&'
+          'order_id=\$orderId&'
+          'redirect_uri=\${Uri.encodeComponent(returnUrl)}'
+        );
+
+    if (await canLaunchUrl(checkoutUri)) {
+      await launchUrl(checkoutUri, mode: LaunchMode.externalApplication, webOnlyWindowName: '_blank');
+    }
+  }
+}`}
 
             {activeCodeTab === 'webhook' && `// Cryptographic 2-Way Payment Verification (Express & Fastify)
 // Using @workspace/identity-sdk turnkey helper (Zero math or serialization errors)

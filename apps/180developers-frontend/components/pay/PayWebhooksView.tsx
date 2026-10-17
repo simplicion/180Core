@@ -22,7 +22,7 @@ import { toast } from 'react-hot-toast';
 import { useProject } from '@/context/ProjectContext';
 import { getDocsUrl, DOCS_LINKS } from '@/lib/docs-url';
 
-type CodeTab = 'nextjs' | 'express' | 'python';
+type CodeTab = 'nextjs' | 'express' | 'fastify' | 'python';
 type EventTab = 'payment.captured' | 'subscription.created' | 'subscription.renewed' | 'coupon.redeemed';
 
 export function PayWebhooksView() {
@@ -174,6 +174,69 @@ router.post(
     }
   }
 );`,
+    },
+    fastify: {
+      language: 'typescript',
+      file: 'src/routes/webhooks.ts (Fastify 5.x)',
+      code: `import Fastify from 'fastify';
+import crypto from 'crypto';
+import rawBody from '@fastify/raw-body';
+
+const app = Fastify();
+
+// CRITICAL: Fastify's default JSON parser re-serializes bodies, breaking HMAC verification.
+// Preserving raw unparsed bytes via @fastify/raw-body or custom addContentTypeParser is mandatory.
+await app.register(rawBody, {
+  field: 'rawBody',
+  global: false,
+  encoding: 'utf8',
+  runFirst: true,
+});
+
+const WEBHOOK_SECRET = process.env.ONE_EIGHTY_WEBHOOK_SECRET!;
+
+app.post('/api/v1/billing/webhook/180pay', { config: { rawBody: true } }, async (req, reply) => {
+  try {
+    const rawPayload = (req as any).rawBody || '';
+    const signature = req.headers['x-180-signature'] as string;
+    const timestamp = req.headers['x-180-timestamp'] as string;
+
+    if (!signature || !WEBHOOK_SECRET) {
+      return reply.code(400).send({ error: 'Missing security headers or secret' });
+    }
+
+    // 1. Replay attack check (300s window)
+    if (timestamp) {
+      const currentEpoch = Math.floor(Date.now() / 1000);
+      if (Math.abs(currentEpoch - parseInt(timestamp, 10)) > 300) {
+        return reply.code(401).send({ error: 'Timestamp expired (>300s drift)' });
+      }
+    }
+
+    // 2. Canonical pre-image format: \`\${timestamp}.\${rawPayload}\`
+    const payloadToSign = timestamp ? \`\${timestamp}.\${rawPayload}\` : rawPayload;
+    const expected = crypto
+      .createHmac('sha256', WEBHOOK_SECRET)
+      .update(payloadToSign)
+      .digest('hex');
+
+    // 3. Constant-time length-safe comparison
+    const sigBuf = Buffer.from(signature.trim());
+    const expBuf = Buffer.from(expected.trim());
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+      return reply.code(401).send({ error: 'Cryptographic signature mismatch' });
+    }
+
+    // 4. Safe to parse and fulfill
+    const event = JSON.parse(rawPayload);
+    const { amount, currency, orderId, customerEmail } = event.data || {};
+    req.log.info(\`180 Pay Webhook verified: Order \${orderId} \${currency} \${amount} for \${customerEmail}\`);
+
+    return reply.code(200).send({ received: true });
+  } catch (err: any) {
+    return reply.code(500).send({ error: err.message });
+  }
+});`,
     },
     python: {
       language: 'python',
@@ -551,6 +614,17 @@ async def verify_180_webhook(request: Request):
               }`}
             >
               Express.js
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveCodeTab('fastify')}
+              className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
+                activeCodeTab === 'fastify'
+                  ? 'bg-white dark:bg-zinc-800 text-purple-600 dark:text-purple-400 shadow-sm'
+                  : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+              }`}
+            >
+              Fastify 5.x
             </button>
             <button
               type="button"
