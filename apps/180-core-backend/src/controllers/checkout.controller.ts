@@ -128,6 +128,14 @@ export class CheckoutApiController {
         });
       }
 
+      // If clientId was provided but clientSecret is missing, reject immediately
+      if (clientId && !clientSecret) {
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized: client_secret (or Authorization: Bearer <secret>) is required to create a checkout session.',
+        });
+      }
+
       // Otherwise, create session under first-party / authenticated app context or custom domain host
       const userId = (req as any).user?.id || null;
       const reqHost = (req.headers.host || '').toLowerCase().split(':')[0];
@@ -140,7 +148,7 @@ export class CheckoutApiController {
       }
 
       const requestedAppId = req.body.appId || req.body.clientId;
-      if (!app && requestedAppId) {
+      if (!app && requestedAppId && (userId || (req.headers.origin && String(req.headers.origin).includes('180workspace.com')))) {
         app = await prisma.oAuthApp.findFirst({
           where: {
             OR: [
@@ -152,8 +160,8 @@ export class CheckoutApiController {
         });
       }
 
-      if (!app) {
-        const targetClientId = clientId || process.env.CORE_CLIENT_ID || process.env.NEXT_PUBLIC_180_CLIENT_ID || '';
+      if (!app && (userId || (req.headers.origin && String(req.headers.origin).includes('180workspace.com')))) {
+        const targetClientId = process.env.CORE_CLIENT_ID || process.env.NEXT_PUBLIC_180_CLIENT_ID || '';
         if (targetClientId) {
           app = await prisma.oAuthApp.findFirst({
             where: {
@@ -168,33 +176,10 @@ export class CheckoutApiController {
       }
 
       if (!app) {
-        const anyUser = await prisma.user.findFirst();
-        if (anyUser) {
-          const rawSecret = process.env.CORE_CLIENT_SECRET || require('crypto').randomBytes(32).toString('hex');
-          const secretHash = require('crypto').createHash('sha256').update(rawSecret).digest('hex');
-          const redirectUris = (process.env.CORE_REDIRECT_URIS || '').split(',').map((u: string) => u.trim()).filter(Boolean);
-          const allowedOrigins = (process.env.CORE_ALLOWED_ORIGINS || '').split(',').map((o: string) => o.trim()).filter(Boolean);
-          app = await prisma.oAuthApp.create({
-            data: {
-              clientId: process.env.CORE_CLIENT_ID || `180_core_${require('crypto').randomBytes(8).toString('hex')}`,
-              clientSecretHash: secretHash,
-              clientSecretHint: rawSecret.slice(-4),
-              name: '180 Core',
-              description: 'Sovereign Core Identity, Auth & 180 Pay Infrastructure',
-              logoUrl: process.env.CORE_APP_LOGO_URL || '',
-              redirectUris,
-              allowedOrigins,
-              allowedScopes: ['openid', 'identity:read', 'pay:checkout', 'pay:subscriptions'],
-              isVerified: true,
-              isActive: true,
-              userId: anyUser.id,
-            },
-          });
-        }
-      }
-
-      if (!app) {
-        throw new Error('No active OAuth application found to associate with checkout session');
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized: Valid API credentials (client_id and client_secret) are required to create a checkout session.',
+        });
       }
 
       // Security Validation: Check Allowed Web Origins (CORS)
@@ -425,7 +410,7 @@ export class CheckoutApiController {
         couponCode: checkoutSession.couponCode,
         currency: checkoutSession.currency,
         expiresAt: checkoutSession.expiresAt,
-        checkoutUrl: `${process.env.PROFILE_FRONTEND_URL || 'http://localhost:3009'}/checkout/${checkoutSession.id}`,
+        checkoutUrl: `${process.env.PROFILE_FRONTEND_URL || 'https://auth.180workspace.com'}/checkout/${checkoutSession.id}`,
       };
 
       return res.status(200).json({
@@ -437,7 +422,12 @@ export class CheckoutApiController {
       });
     } catch (err: any) {
       console.error('[CheckoutApiController:createCheckoutSession] Error:', err);
-      return res.status(400).json({ success: false, error: err.message });
+      const isAuthError =
+        err.message?.toLowerCase().includes('secret') ||
+        err.message?.toLowerCase().includes('credentials') ||
+        err.message?.toLowerCase().includes('unauthorized');
+      const statusCode = isAuthError ? 401 : 400;
+      return res.status(statusCode).json({ success: false, error: err.message });
     }
   }
 
