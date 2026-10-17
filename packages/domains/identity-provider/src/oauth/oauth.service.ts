@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 import { getPrivateKey, getPublicKey, getKeyId, getJwks } from '../crypto/rsa-keys.service';
 
 export const JWT_SECRET = process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET || '';
-export const ISSUER = process.env.IDENTITY_ISSUER || process.env.OAUTH_ISSUER || process.env.NEXT_PUBLIC_CORE_BACKEND_URL || '';
+export const ISSUER = process.env.IDENTITY_ISSUER || process.env.OAUTH_ISSUER || process.env.NEXT_PUBLIC_CORE_BACKEND_URL || 'https://profile.180core.cloud';
 
 /**
  * High-entropy random token generator with custom prefix

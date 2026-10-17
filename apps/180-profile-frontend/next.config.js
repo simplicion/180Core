@@ -55,6 +55,18 @@ const nextConfig = {
               source: '/api/oauth/:path*',
               destination: `${backendUrl}/api/oauth/:path*`,
             },
+            {
+              source: '/certs/jwks.json',
+              destination: `${backendUrl}/certs/jwks.json`,
+            },
+            {
+              source: '/.well-known/jwks.json',
+              destination: `${backendUrl}/.well-known/jwks.json`,
+            },
+            {
+              source: '/.well-known/openid-configuration',
+              destination: `${backendUrl}/.well-known/openid-configuration`,
+            },
           ];
         },
       }

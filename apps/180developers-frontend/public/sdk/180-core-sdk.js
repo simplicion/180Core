@@ -564,6 +564,16 @@
       } catch (_) { return null; }
     },
 
+    openBottomSheet: function (options) {
+      return OneEightyAuth.signIn(Object.assign({}, options, { uxMode: 'bottom_sheet' }));
+    },
+
+    openPopup: function (options) {
+      var isMobile = isMobileViewport();
+      var targetMode = isMobile ? 'bottom_sheet' : (options && options.uxMode ? options.uxMode : 'bottom_sheet');
+      return OneEightyAuth.signIn(Object.assign({}, options, { uxMode: targetMode }));
+    },
+
     resolveEnvironmentMode: resolveEnvironmentMode,
     generateReferenceCode: generateReferenceCode
   };
@@ -618,7 +628,8 @@
       return OneEightyPay.checkout(options);
     },
     openPopup: function (options) {
-      return OneEightyPay.checkout(Object.assign({}, options, { uxMode: 'popup' }));
+      var isMobile = isMobileViewport();
+      return OneEightyPay.checkout(Object.assign({}, options, { uxMode: isMobile ? 'bottom_sheet' : 'popup' }));
     },
     openBottomSheet: function (options) {
       return OneEightyPay.checkout(Object.assign({}, options, { uxMode: 'bottom_sheet' }));
@@ -778,6 +789,8 @@
     signOut: OneEightyAuth.signOut,
     getUser: OneEightyAuth.getUser,
     getAccessToken: OneEightyAuth.getAccessToken,
+    openBottomSheet: OneEightyAuth.openBottomSheet,
+    openPopup: OneEightyAuth.openPopup,
     checkout: OneEightyPay.checkout,
     openModal: OneEightyUi.openModal
   };
@@ -1089,6 +1102,44 @@
   global.OneEightyIdentity = OneEightyAuth;
   global.OneEightyAuth = OneEightyAuth;
   global.OneEightyPay = OneEightyPay;
+
+  if (isBrowser) {
+    window.__180_SDK_LOADED = true;
+    window.__180_LOADED = true;
+
+    // Turnkey on180Ready handler for SPAs & Flutter Web
+    window.on180Ready = function (callback) {
+      if (typeof callback === 'function') {
+        try { callback(OneEighty); } catch (e) { console.error('[180 SDK] on180Ready callback error:', e); }
+      }
+      return Promise.resolve(OneEighty);
+    };
+
+    // Drain queued callbacks if user registered them before script evaluated
+    if (Array.isArray(window.__180_QUEUE)) {
+      while (window.__180_QUEUE.length > 0) {
+        var fn = window.__180_QUEUE.shift();
+        if (typeof fn === 'function') {
+          try { fn(OneEighty); } catch (e) { console.error('[180 SDK] queued callback error:', e); }
+        }
+      }
+    }
+
+    if (Array.isArray(window.__180_READY_QUEUE)) {
+      while (window.__180_READY_QUEUE.length > 0) {
+        var fn2 = window.__180_READY_QUEUE.shift();
+        if (typeof fn2 === 'function') {
+          try { fn2(OneEighty); } catch (e) { console.error('[180 SDK] ready queue error:', e); }
+        }
+      }
+    }
+
+    // Fire standard CustomEvent and Event for DOM listeners
+    try {
+      window.dispatchEvent(new CustomEvent('180:ready', { detail: { OneEighty: OneEighty, OneEightyAuth: OneEightyAuth, OneEightyPay: OneEightyPay } }));
+      window.dispatchEvent(new Event('180_READY'));
+    } catch (_) {}
+  }
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = OneEighty;

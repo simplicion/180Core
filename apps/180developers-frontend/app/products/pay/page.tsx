@@ -377,10 +377,31 @@ export function handlePurchase(order: { id: string; amount: number; currency: st
 //   orderId: cart.orderId
 // });`}
 
-            {activeCodeTab === 'webhook' && `// 2. Developer Backend: Cryptographic 2-Way Payment Verification
-// Using @workspace/identity-sdk official helper (Zero math errors)
+            {activeCodeTab === 'webhook' && `// Cryptographic 2-Way Payment Verification (Express & Fastify)
+// Using @workspace/identity-sdk turnkey helper (Zero math or serialization errors)
+
+// --- Option A: Fastify Backend ---
+// npm install @fastify/raw-body
+// import Fastify from 'fastify';
+// import rawBody from '@fastify/raw-body';
+// import { constructWebhookEvent } from '@workspace/identity-sdk';
+//
+// const fastify = Fastify();
+// await fastify.register(rawBody, { field: 'rawBody', global: false, encoding: 'utf8', runFirst: true });
+//
+// fastify.post('/api/v1/billing/webhook/180pay', { config: { rawBody: true } }, async (req, reply) => {
+//   const event = constructWebhookEvent(
+//     req.rawBody,
+//     req.headers['x-180-signature'],
+//     process.env.ONE_EIGHTY_WEBHOOK_SECRET,
+//     req.headers['x-180-timestamp']
+//   );
+//   return { received: true };
+// });
+
+// --- Option B: Express Backend ---
 import express from 'express';
-import { OneEightyPay } from '@workspace/identity-sdk';
+import { Sovereign180Pay } from '@workspace/identity-sdk';
 
 const app = express();
 // CRITICAL: Capture raw body buffer for the webhook route BEFORE express.json()
@@ -395,8 +416,8 @@ app.post('/api/webhooks/180-pay', (req, res) => {
     const signature = req.headers['x-180-signature'];
     const timestamp = req.headers['x-180-timestamp'];
 
-    // constructEvent validates timestamp replay attack & timing-safe HMAC pre-image
-    const event = OneEightyPay.webhooks.constructEvent(
+    // constructEvent validates timestamp replay attack (<300s) & timing-safe HMAC pre-image
+    const event = Sovereign180Pay.constructEvent(
       rawBody,
       signature,
       WEBHOOK_SECRET,
@@ -411,7 +432,8 @@ app.post('/api/webhooks/180-pay', (req, res) => {
     }
 
     res.status(200).json({ received: true });
-  } catch (err) {
+  } catch (err: any) {
+    // Detailed error message explains clock drift (>300s) vs raw byte buffer alteration
     res.status(401).json({ error: err.message });
   }
 });`}

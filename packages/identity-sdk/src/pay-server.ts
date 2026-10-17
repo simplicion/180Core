@@ -52,6 +52,19 @@ export interface AgentPurchaseSdkInput {
   metadata?: Record<string, any>;
 }
 
+export interface WebhookVerificationResult {
+  valid: boolean;
+  reason:
+    | 'VALID'
+    | 'MISSING_SECRET'
+    | 'MISSING_PAYLOAD'
+    | 'MISSING_SIGNATURE'
+    | 'TIMESTAMP_EXPIRED'
+    | 'SIGNATURE_MISMATCH';
+  message: string;
+  clockDriftSeconds?: number;
+}
+
 /**
  * Sovereign 180 Pay Server Utilities & Webhook Verification
  */
@@ -68,13 +81,24 @@ export class Sovereign180Pay {
   }
 
   /**
-   * Cryptographically verifies an incoming webhook from 180 Pay.
-   * Defends against replay attacks, timing leaks, Buffer vs string distortion, and payload tampering.
+   * Performs deep cryptographic inspection of incoming 180 Pay webhooks,
+   * returning precise diagnostics for clock drift vs payload tampering vs raw-body distortion.
    */
-  static verifyWebhookSignature(input: VerifyWebhookInput): boolean {
+  static verifyWebhookDetailed(input: VerifyWebhookInput): WebhookVerificationResult {
     const { rawBody, secret, toleranceSeconds = 300 } = input;
-    if (!rawBody || !secret) {
-      return false;
+    if (!secret) {
+      return {
+        valid: false,
+        reason: 'MISSING_SECRET',
+        message: 'Missing webhook signing secret. Ensure ONE_EIGHTY_WEBHOOK_SECRET is configured.',
+      };
+    }
+    if (!rawBody && rawBody !== '') {
+      return {
+        valid: false,
+        reason: 'MISSING_PAYLOAD',
+        message: 'Missing rawBody payload. Ensure raw incoming byte buffer or text stream is supplied.',
+      };
     }
 
     // Extract raw payload string cleanly without JSON serialization artifacts
@@ -87,7 +111,11 @@ export class Sovereign180Pay {
       try {
         bodyString = JSON.stringify(rawBody);
       } catch (_) {
-        return false;
+        return {
+          valid: false,
+          reason: 'MISSING_PAYLOAD',
+          message: 'Unable to read raw body buffer. Pass unparsed raw string or Buffer.',
+        };
       }
     }
 
@@ -111,7 +139,11 @@ export class Sovereign180Pay {
     }
 
     if (!signature) {
-      return false;
+      return {
+        valid: false,
+        reason: 'MISSING_SIGNATURE',
+        message: 'Missing x-180-signature header in webhook request.',
+      };
     }
 
     // Handle stripe-style t=timestamp,v1=signature compound header
@@ -128,23 +160,56 @@ export class Sovereign180Pay {
     }
 
     // 5-minute replay attack defense window
-    if (timestamp) {
+    if (timestamp !== undefined && timestamp !== null && timestamp !== '') {
       const currentTime = Math.floor(Date.now() / 1000);
       const parsedTimestamp = typeof timestamp === 'number' ? timestamp : parseInt(String(timestamp), 10);
-      if (isNaN(parsedTimestamp) || Math.abs(currentTime - parsedTimestamp) > toleranceSeconds) {
-        return false;
+      const clockDrift = Math.abs(currentTime - parsedTimestamp);
+
+      if (isNaN(parsedTimestamp) || clockDrift > toleranceSeconds) {
+        return {
+          valid: false,
+          reason: 'TIMESTAMP_EXPIRED',
+          clockDriftSeconds: clockDrift,
+          message: `Webhook timestamp expired or local clock is out of sync by ${clockDrift}s (tolerance: ${toleranceSeconds}s). Please sync local server time with NTP.`,
+        };
       }
+
       // Check canonical timestamped pre-image: `${timestamp}.${rawBody}`
       const signPayload = `${parsedTimestamp}.${bodyString}`;
       const expected = crypto.createHmac('sha256', secret).update(signPayload).digest('hex');
       if (this.timingSafeCompare(expected, signature)) {
-        return true;
+        return {
+          valid: true,
+          reason: 'VALID',
+          message: 'Webhook signature successfully verified via HMAC-SHA256 timestamped pre-image.',
+        };
       }
     }
 
     // Fallback: Check raw body pre-image (for systems or test suites not sending timestamp)
     const expectedDirect = crypto.createHmac('sha256', secret).update(bodyString).digest('hex');
-    return this.timingSafeCompare(expectedDirect, signature);
+    if (this.timingSafeCompare(expectedDirect, signature)) {
+      return {
+        valid: true,
+        reason: 'VALID',
+        message: 'Webhook signature successfully verified via direct rawBody pre-image.',
+      };
+    }
+
+    return {
+      valid: false,
+      reason: 'SIGNATURE_MISMATCH',
+      message:
+        'Cryptographic HMAC signature mismatch. Verify you are passing unaltered raw byte stream (Buffer or unparsed string) rather than JSON.stringify(req.body). In Fastify use @fastify/raw-body, in Express use express.raw({ type: "application/json" }).',
+    };
+  }
+
+  /**
+   * Cryptographically verifies an incoming webhook from 180 Pay.
+   * Defends against replay attacks, timing leaks, Buffer vs string distortion, and payload tampering.
+   */
+  static verifyWebhookSignature(input: VerifyWebhookInput): boolean {
+    return this.verifyWebhookDetailed(input).valid;
   }
 
   /**
@@ -154,18 +219,18 @@ export class Sovereign180Pay {
     rawBody: string | Buffer,
     signature: string,
     secret: string,
-    timestamp?: string | number
+    timestamp?: string | number,
+    toleranceSeconds: number = 300
   ): T {
-    const isValid = this.verifyWebhookSignature({
+    const check = this.verifyWebhookDetailed({
       rawBody,
       signature,
       timestamp,
       secret,
+      toleranceSeconds,
     });
-    if (!isValid) {
-      throw new Error(
-        '[180 Pay Webhook] Cryptographic signature mismatch or expired timestamp replay defense.'
-      );
+    if (!check.valid) {
+      throw new Error(`[180 Pay Webhook Error] ${check.message} (Code: ${check.reason})`);
     }
     const bodyString = Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : String(rawBody);
     return JSON.parse(bodyString);
@@ -229,6 +294,27 @@ export class Sovereign180PayClient {
           ...input,
           secret: input.secret || this.clientSecret,
         });
+      },
+      verifyDetailed: (input: Omit<VerifyWebhookInput, 'secret'> & { secret?: string }) => {
+        return Sovereign180Pay.verifyWebhookDetailed({
+          ...input,
+          secret: input.secret || this.clientSecret,
+        });
+      },
+      constructEvent: <T = any>(
+        rawBody: string | Buffer,
+        signature: string,
+        timestamp?: string | number,
+        secret?: string,
+        toleranceSeconds?: number
+      ): T => {
+        return Sovereign180Pay.constructEvent<T>(
+          rawBody,
+          signature,
+          secret || this.clientSecret,
+          timestamp,
+          toleranceSeconds
+        );
       },
     };
   }

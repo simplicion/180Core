@@ -98,7 +98,10 @@ export class JwksVerifier {
   /**
    * Verify RS256 JWT Token using public key matching the token's kid
    */
-  async verifyToken(token: string, expectedAudience?: string): Promise<VerifiedTokenResult> {
+  async verifyToken(
+    token: string,
+    options?: string | { audience?: string; issuer?: string }
+  ): Promise<VerifiedTokenResult> {
     try {
       const decoded = jwt.decode(token, { complete: true });
       if (!decoded || typeof decoded === 'string') {
@@ -124,10 +127,16 @@ export class JwksVerifier {
         return { valid: false, error: `Public key with kid '${kid}' not found in JWKS` };
       }
 
-      const payload = jwt.verify(token, publicKeyPem, {
+      const expectedAudience = typeof options === 'string' ? options : options?.audience;
+      const expectedIssuer = typeof options === 'object' ? options?.issuer : undefined;
+
+      const verifyOptions: jwt.VerifyOptions = {
         algorithms: ['RS256'],
-        audience: expectedAudience,
-      });
+      };
+      if (expectedAudience) verifyOptions.audience = expectedAudience;
+      if (expectedIssuer) verifyOptions.issuer = expectedIssuer;
+
+      const payload = jwt.verify(token, publicKeyPem, verifyOptions);
 
       return { valid: true, payload };
     } catch (err: any) {

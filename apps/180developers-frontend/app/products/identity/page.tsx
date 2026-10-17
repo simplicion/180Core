@@ -302,33 +302,29 @@ export function LoginButton() {
 // <script src="https://profile.180core.cloud/sdk/v1/180-core-sdk.js" async></script>
 // window.OneEightyAuth.openBottomSheet({ clientId: 'YOUR_CLIENT_ID', onSuccess: (res) => ... });`}
 
-            {activeCodeTab === 'node' && `// Node.js Express Asymmetric RS256 JWT Token Verification
+            {activeCodeTab === 'node' && `// Node.js (Express & Fastify) Asymmetric RS256 JWT Token Verification
 // Option A: Using 'jose' (Modern Standard - handles caching & key rotation)
-import express from 'express';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
-const app = express();
+// JWKS resides on https://api.180core.cloud/certs/jwks.json (or https://profile.180core.cloud/certs/jwks.json)
 const JWKS = createRemoteJWKSet(new URL('https://api.180core.cloud/certs/jwks.json'));
 
-app.get('/api/protected', async (req, res) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Missing token' });
+export async function verify180BearerToken(token: string) {
+  // CRITICAL: The canonical token issuer claim is 'https://profile.180core.cloud'
+  const { payload } = await jwtVerify(token, JWKS, {
+    algorithms: ['RS256'],
+    issuer: 'https://profile.180core.cloud',
+    audience: process.env.ONE_EIGHTY_CLIENT_ID,
+  });
+  return payload; // { sub: 'usr_...', email: '...', name: '...' }
+}
 
-  try {
-    const { payload } = await jwtVerify(token, JWKS, {
-      algorithms: ['RS256'],
-      issuer: 'https://api.180core.cloud',
-    });
-    res.json({ message: 'Authorized user', user: payload });
-  } catch (err: any) {
-    res.status(401).json({ error: 'Invalid 180 RS256 token: ' + err.message });
-  }
-});
-
-// Option B: Using @workspace/identity-sdk helper
-// import { OneEightyIdentity } from '@workspace/identity-sdk';
-// const verified = await OneEightyIdentity.verifyIdToken(token);`}
+// Option B: Turnkey verification with @workspace/identity-sdk
+// import { verifyIdToken, exchangeAuthCode, getUserInfo } from '@workspace/identity-sdk';
+// const user = await verifyIdToken(idToken, { audience: process.env.ONE_EIGHTY_CLIENT_ID });
+// 
+// IMPORTANT: To query /api/oauth/userinfo, pass the OAuth access_token (NOT the RS256 id_token):
+// const profile = await getUserInfo(accessToken);`}
 
             {activeCodeTab === 'python' && `# Python FastAPI Token Verification with PyJWT & Remote JWKS
 from fastapi import FastAPI, Depends, HTTPException, Security
@@ -344,11 +340,12 @@ def verify_180_token(credentials: HTTPAuthorizationCredentials = Security(securi
     token = credentials.credentials
     try:
         signing_key = jwks_client.get_signing_key_from_jwt(token)
+        # CRITICAL: Token issuer claim is 'https://profile.180core.cloud'
         data = jwt.decode(
             token,
             signing_key.key,
             algorithms=["RS256"],
-            issuer="https://api.180core.cloud"
+            issuer="https://profile.180core.cloud"
         )
         return data
     except Exception as e:
@@ -358,18 +355,52 @@ def verify_180_token(credentials: HTTPAuthorizationCredentials = Security(securi
 def get_user_profile(user: dict = Depends(verify_180_token)):
     return {"status": "authorized", "user": user}`}
 
-            {activeCodeTab === 'flutter' && `// Flutter Mobile PKCE Authentication
+            {activeCodeTab === 'flutter' && `// Flutter Integration: Web & Mobile (Android/iOS)
+
+// ============================================================================
+// 1. Flutter Web: In-DOM Bottom Sheet Bridge (No Popup Blocking, Zero Async Race)
+// Add to web/index.html:
+// <script src="https://profile.180core.cloud/sdk/v1/180-core-sdk.js" async></script>
+// <script>
+//   window.on180Ready = window.on180Ready || function(cb) {
+//     (window.__180_QUEUE = window.__180_QUEUE || []).push(cb);
+//   };
+// </script>
+// ============================================================================
+import 'dart:js' as js;
+
+void open180IdentityWeb({required Function(String code) onSuccess}) {
+  js.context.callMethod('on180Ready', [
+    js.allowInterop((sdk) {
+      js.context['OneEightyAuth'].callMethod('openBottomSheet', [
+        js.JsObject.jsify({
+          'clientId': 'YOUR_CLIENT_ID',
+          'uxMode': 'bottom_sheet',
+          'scope': 'openid identity:read identity:email',
+          'onSuccess': js.allowInterop((data) {
+            onSuccess(data['code'] ?? data['accessToken']);
+          }),
+          'onError': js.allowInterop((err) {
+            print('180 Auth Error: \$err');
+          }),
+        })
+      ]);
+    })
+  ]);
+}
+
+// ============================================================================
+// 2. Flutter Mobile (Android / iOS): PKCE with RFC 8252 Loopback Support
+// Supports Android Emulator (10.0.2.2) and dynamic local ports automatically!
+// ============================================================================
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 
-Future<void> signInWith180() async {
-  final codeVerifier = generateRandomString(64);
-  final codeChallenge = sha256Base64Url(codeVerifier);
-
+Future<void> signInWith180Mobile() async {
   final authUrl = 'https://profile.180core.cloud/oauth/authorize'
       '?client_id=YOUR_CLIENT_ID'
       '&redirect_uri=myapp://oauth-callback'
       '&response_type=code'
-      '&code_challenge=$codeChallenge'
+      '&code_challenge=S256_CHALLENGE'
       '&code_challenge_method=S256'
       '&scope=openid identity:profile';
 
@@ -379,7 +410,7 @@ Future<void> signInWith180() async {
   );
 
   final code = Uri.parse(result).queryParameters['code'];
-  // Exchange auth code + code_verifier with https://api.180core.cloud/api/oauth/token!
+  // Exchange code at: https://api.180core.cloud/api/oauth/token
 }`}
           </pre>
         </div>

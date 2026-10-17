@@ -8,6 +8,7 @@ import { JwksVerifier } from './jwks-verifier';
 import { TokenExchangeClient } from './token-exchange';
 import { UserInfoClient } from './userinfo-client';
 import { generatePkcePair } from './pkce';
+import { Sovereign180Pay } from './pay-server';
 
 
 // ============================================================================
@@ -1580,95 +1581,14 @@ export interface VerifyWebhookOptions {
 }
 
 export function verifyWebhookSignature(options: VerifyWebhookOptions): boolean {
-  try {
-    const { secret, toleranceSeconds = 300 } = options;
-    if (!secret) return false;
-
-    const rawPayload = options.rawBody !== undefined ? options.rawBody : options.payload;
-    if (rawPayload === undefined || rawPayload === null) return false;
-
-    let payloadString = '';
-    if (Buffer.isBuffer(rawPayload)) {
-      payloadString = rawPayload.toString('utf8');
-    } else if (typeof rawPayload === 'string') {
-      payloadString = rawPayload;
-    } else {
-      try {
-        payloadString = JSON.stringify(rawPayload);
-      } catch (_) {
-        return false;
-      }
-    }
-
-    let signature = options.signature;
-    let timestamp = options.timestamp;
-
-    if (options.headers) {
-      if (!signature) {
-        signature =
-          options.headers['x-180-signature'] ||
-          options.headers['X-180-Signature'] ||
-          options.headers['x_180_signature'];
-      }
-      if (!timestamp) {
-        timestamp =
-          options.headers['x-180-timestamp'] ||
-          options.headers['X-180-Timestamp'] ||
-          options.headers['x_180_timestamp'];
-      }
-    }
-
-    if (!signature || typeof signature !== 'string') return false;
-
-    // Handle stripe-style t=timestamp,v1=signature compound header
-    if (signature.includes('t=') && signature.includes('v1=')) {
-      const parts = signature.split(',');
-      const tPart = parts.find((p: string) => p.trim().startsWith('t='));
-      const v1Part = parts.find((p: string) => p.trim().startsWith('v1='));
-      if (tPart && !timestamp) {
-        timestamp = tPart.replace('t=', '').trim();
-      }
-      if (v1Part) {
-        signature = v1Part.replace('v1=', '').trim();
-      }
-    }
-
-    const crypto = require('crypto');
-    const safeTimingCompare = (a: string, b: string): boolean => {
-      if (!a || !b) return false;
-      const bufA = Buffer.from(a.trim());
-      const bufB = Buffer.from(b.trim());
-      if (bufA.length !== bufB.length) return false;
-      return crypto.timingSafeEqual(bufA, bufB);
-    };
-
-    if (timestamp) {
-      const parsedTimestamp = typeof timestamp === 'number' ? timestamp : parseInt(String(timestamp), 10);
-      const now = Math.floor(Date.now() / 1000);
-      if (isNaN(parsedTimestamp) || Math.abs(now - parsedTimestamp) > toleranceSeconds) {
-        return false;
-      }
-
-      const expectedWithTimestamp = crypto
-        .createHmac('sha256', secret)
-        .update(`${parsedTimestamp}.${payloadString}`)
-        .digest('hex');
-
-      if (safeTimingCompare(expectedWithTimestamp, signature)) {
-        return true;
-      }
-    }
-
-    // Direct payload verification fallback
-    const expectedDirect = crypto
-      .createHmac('sha256', secret)
-      .update(payloadString)
-      .digest('hex');
-
-    return safeTimingCompare(expectedDirect, signature);
-  } catch (_) {
-    return false;
-  }
+  return Sovereign180Pay.verifyWebhookSignature({
+    rawBody: options.rawBody !== undefined ? options.rawBody : options.payload,
+    signature: options.signature,
+    timestamp: options.timestamp,
+    headers: options.headers,
+    secret: options.secret,
+    toleranceSeconds: options.toleranceSeconds,
+  });
 }
 
 // ============================================================================
@@ -2122,6 +2042,50 @@ export * from './hooks/useGeoPricing';
 export * from './components/GeoBanner';
 export * from './components/PricingTable';
 export * from './web-components/register';
+
+// ============================================================================
+// 10. Universal Turnkey Convenience Helpers for Backend Integrations
+// ============================================================================
+
+export const verifyWebhookDetailed = Sovereign180Pay.verifyWebhookDetailed.bind(Sovereign180Pay);
+export const constructWebhookEvent = Sovereign180Pay.constructEvent.bind(Sovereign180Pay);
+
+export async function verifyIdToken(
+  token: string,
+  options?: { jwksUrl?: string; issuer?: string; audience?: string } | string
+) {
+  const jwksUrl =
+    typeof options === 'object' && options?.jwksUrl
+      ? options.jwksUrl
+      : 'https://api.180core.cloud/certs/jwks.json';
+  const verifier = new JwksVerifier(jwksUrl);
+  return verifier.verifyToken(token, options);
+}
+
+export async function exchangeAuthCode(params: {
+  code: string;
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+  codeVerifier?: string;
+  tokenEndpoint?: string;
+}) {
+  return TokenExchangeClient.exchangeCode({
+    tokenEndpoint: params.tokenEndpoint || 'https://api.180core.cloud/api/oauth/token',
+    clientId: params.clientId,
+    clientSecret: params.clientSecret,
+    code: params.code,
+    redirectUri: params.redirectUri,
+    codeVerifier: params.codeVerifier,
+  });
+}
+
+export async function getUserInfo(
+  accessToken: string,
+  userInfoEndpoint: string = 'https://api.180core.cloud/api/oauth/userinfo'
+) {
+  return UserInfoClient.fetchProfile(userInfoEndpoint, accessToken);
+}
 
 export default OneEightyIdentity;
 

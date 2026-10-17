@@ -153,7 +153,14 @@ export class OAuthController {
                         const regPath = parsedRegistered.pathname.replace(/\/+$/, '') || '/';
                         const targetPath = parsedTarget.pathname.replace(/\/+$/, '') || '/';
                         if (regPath !== targetPath) return false;
-                        if (parsedRegistered.protocol !== parsedTarget.protocol) return false;
+                        const isLoopbackHost = (h: string) =>
+                            h === 'localhost' || h === '127.0.0.1' || h === '10.0.2.2' || h === '0.0.0.0' || h === '::1';
+
+                        if (isLoopbackHost(parsedRegistered.hostname) && isLoopbackHost(parsedTarget.hostname)) {
+                            // RFC 8252 Section 7.3: Loopback interface redirects for native and local development allow dynamic port allocation.
+                            return true;
+                        }
+
                         if (parsedRegistered.hostname === parsedTarget.hostname) {
                             const regPort = parsedRegistered.port || (parsedRegistered.protocol === 'https:' ? '443' : '80');
                             const targetPort = parsedTarget.port || (parsedTarget.protocol === 'https:' ? '443' : '80');
@@ -220,7 +227,14 @@ export class OAuthController {
                     if (cleanOrig === '*') return true;
                     try {
                         const normalizedAllowed = new URL(cleanOrig.startsWith('http') ? cleanOrig : `https://${cleanOrig}`).origin.toLowerCase();
-                        return normalizedAllowed === normalizedReqOrigin;
+                        if (normalizedAllowed === normalizedReqOrigin) return true;
+                        const allowedHost = new URL(normalizedAllowed).hostname;
+                        const reqHost = new URL(normalizedReqOrigin).hostname;
+                        const isLoopback = (h: string) => h === 'localhost' || h === '127.0.0.1' || h === '10.0.2.2' || h === '0.0.0.0' || h === '::1';
+                        if (isLoopback(allowedHost) && isLoopback(reqHost)) {
+                            return true;
+                        }
+                        return false;
                     } catch (e) {
                         return cleanOrig === normalizedReqOrigin;
                     }
@@ -1005,6 +1019,17 @@ export class OAuthController {
             }
 
             if (!user) {
+                const rawAuth = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+                if (rawAuth.startsWith('eyJ')) {
+                    return res.status(401).json({
+                        error: 'invalid_token',
+                        error_description: 'An ID Token (JWT) was passed to /api/oauth/userinfo. In accordance with RFC 6749 and OIDC Core, /api/oauth/userinfo expects an opaque OAuth access_token. Alternatively, verify the RS256 ID Token statelessly using our JWKS endpoint (https://api.180core.cloud/certs/jwks.json).',
+                        details: {
+                            type: 'ID_TOKEN_PASSED_TO_USERINFO',
+                            hint: 'Pass `Authorization: Bearer <access_token>` from /api/oauth/token, or verify the id_token statelessly with jose / @workspace/identity-sdk.'
+                        }
+                    });
+                }
                 return res.status(401).json({ error: 'invalid_token', error_description: 'Token expired or invalid' });
             }
 
