@@ -27,7 +27,12 @@ import { getDocsUrl, DOCS_LINKS } from '@/lib/docs-url';
 import { use180Identity } from '@workspace/identity-sdk';
 
 export default function IdentityProductPage() {
-  const { launch180Identity, isOpeningIdentity } = use180Identity();
+  const CORE_CLIENT_ID =
+    process.env.NEXT_PUBLIC_180_CLIENT_ID ||
+    process.env.NEXT_PUBLIC_CORE_CLIENT_ID ||
+    '180_client_2d51a605038c38ffb6fa037688988a83';
+
+  const { launch180Identity, isOpeningIdentity } = use180Identity(CORE_CLIENT_ID);
   const [activeCodeTab, setActiveCodeTab] = useState<'nextauth' | 'react' | 'node' | 'python' | 'flutter'>('nextauth');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [showDemoModal, setShowDemoModal] = useState(false);
@@ -42,7 +47,7 @@ export default function IdentityProductPage() {
 
   const handleTestAuth = () => {
     launch180Identity({
-      clientId: '180-developer-portal',
+      clientId: CORE_CLIENT_ID,
       onSuccess: (res) => {
         setAuthPayload(res);
         setShowDemoModal(true);

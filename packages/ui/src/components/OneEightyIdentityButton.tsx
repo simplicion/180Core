@@ -105,7 +105,7 @@ const injectIdentityButtonStyles = () => {
 };
 
 export const OneEightyIdentityButton: React.FC<OneEightyIdentityButtonProps> = ({
-  clientId = (typeof process !== 'undefined' && (process.env?.NEXT_PUBLIC_CORE_CLIENT_ID || process.env?.NEXT_PUBLIC_180_CLIENT_ID)) || '180-profile',
+  clientId = (typeof process !== 'undefined' && (process.env?.NEXT_PUBLIC_CORE_CLIENT_ID || process.env?.NEXT_PUBLIC_180_CLIENT_ID || process.env?.NEXT_PUBLIC_IDENTITY_CLIENT_ID)) || '180_client_2d51a605038c38ffb6fa037688988a83',
   redirectUri,
   scope = 'openid identity:read identity:email',
   state,

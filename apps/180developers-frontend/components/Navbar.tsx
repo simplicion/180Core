@@ -36,12 +36,19 @@ export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
 
-  const { launch180Identity, isOpeningIdentity } = use180Identity();
+  const CORE_CLIENT_ID =
+    process.env.NEXT_PUBLIC_180_CLIENT_ID ||
+    process.env.NEXT_PUBLIC_CORE_CLIENT_ID ||
+    process.env.NEXT_PUBLIC_IDENTITY_CLIENT_ID ||
+    '180_client_2d51a605038c38ffb6fa037688988a83';
+
+  const { launch180Identity, isOpeningIdentity } = use180Identity(CORE_CLIENT_ID);
 
   const getProfileUrl = () => {
     if (typeof window === 'undefined') return 'http://localhost:3009';
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    return isLocal ? 'http://localhost:3009' : 'https://profile.180workspace.com';
+    const isCore = window.location.hostname.endsWith('180core.cloud');
+    return isLocal ? 'http://localhost:3009' : (isCore ? 'https://profile.180core.cloud' : 'https://profile.180workspace.com');
   };
 
   const checkAuth = () => {
@@ -101,7 +108,12 @@ export default function Navbar() {
       if (e.data && (e.data.type === '180_IDENTITY_SUCCESS' || e.data.type === '180_AUTH_SUCCESS')) {
         if (e.data.token) {
           localStorage.setItem('platform_auth_token', e.data.token);
-          document.cookie = `platform_auth_token=${e.data.token}; path=/; max-age=604800; SameSite=Lax`;
+          const isProd = window.location.protocol === 'https:';
+          const isCore = window.location.hostname.endsWith('180core.cloud');
+          const is180 = window.location.hostname.endsWith('180workspace.com');
+          const domainAttr = isCore ? '; domain=.180core.cloud' : (is180 ? '; domain=.180workspace.com' : '');
+          const secureAttr = isProd ? '; Secure' : '';
+          document.cookie = `platform_auth_token=${e.data.token}; path=/; max-age=604800; SameSite=Lax${secureAttr}${domainAttr}`;
         }
         if (e.data.user) {
           localStorage.setItem('user', JSON.stringify(e.data.user));
@@ -345,7 +357,7 @@ export default function Navbar() {
             </div>
           ) : (
             <Button
-              onClick={() => launch180Identity(() => checkAuth())}
+              onClick={() => launch180Identity({ clientId: CORE_CLIENT_ID, onSuccess: () => checkAuth() })}
               disabled={isOpeningIdentity}
               size="sm"
               className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md shadow-blue-600/20 active:scale-95 transition-all flex items-center gap-2 cursor-pointer min-h-[38px]"
@@ -468,7 +480,7 @@ export default function Navbar() {
               <Button
                 onClick={() => {
                   setMobileMenuOpen(false);
-                  launch180Identity(() => checkAuth());
+                  launch180Identity({ clientId: CORE_CLIENT_ID, onSuccess: () => checkAuth() });
                 }}
                 disabled={isOpeningIdentity}
                 className="w-full py-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer"

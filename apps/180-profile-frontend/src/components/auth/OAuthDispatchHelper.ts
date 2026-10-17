@@ -12,9 +12,15 @@ export interface OAuthParams {
 }
 
 export function extractOAuthParams(searchParams: URLSearchParams): OAuthParams {
+  const defaultClientId =
+    process.env.NEXT_PUBLIC_180_CLIENT_ID ||
+    process.env.NEXT_PUBLIC_CORE_CLIENT_ID ||
+    process.env.NEXT_PUBLIC_IDENTITY_CLIENT_ID ||
+    '180_client_2d51a605038c38ffb6fa037688988a83';
+
   return {
-    clientId: searchParams.get('client_id') || process.env.NEXT_PUBLIC_180_CLIENT_ID || process.env.NEXT_PUBLIC_CORE_CLIENT_ID || '',
-    redirectUri: searchParams.get('redirect_uri') || '',
+    clientId: searchParams.get('client_id') || defaultClientId,
+    redirectUri: searchParams.get('redirect_uri') || (typeof window !== 'undefined' ? `${window.location.origin}/oauth/callback` : ''),
     state: searchParams.get('state') || '',
     scope: searchParams.get('scope') || 'openid identity:read identity:email',
     codeChallenge: searchParams.get('code_challenge') || '',
@@ -38,7 +44,7 @@ export function buildOAuthQueryString(params: OAuthParams): string {
 
 export function resolveAppName(clientId: string): string {
   if (clientId === '180-workspace-platform' || clientId === '180-workspace') return '180 Workspace';
-  const coreClientId = process.env.NEXT_PUBLIC_180_CLIENT_ID || process.env.NEXT_PUBLIC_CORE_CLIENT_ID || '';
+  const coreClientId = process.env.NEXT_PUBLIC_180_CLIENT_ID || process.env.NEXT_PUBLIC_CORE_CLIENT_ID || '180_client_2d51a605038c38ffb6fa037688988a83';
   if (
     (coreClientId && clientId === coreClientId) ||
     clientId === '180-core' ||
@@ -70,6 +76,12 @@ export async function dispatchOAuthSuccess(
   let authCode = '';
   let idToken = '';
 
+  const effectiveClientId =
+    params.clientId ||
+    process.env.NEXT_PUBLIC_180_CLIENT_ID ||
+    process.env.NEXT_PUBLIC_CORE_CLIENT_ID ||
+    '180_client_2d51a605038c38ffb6fa037688988a83';
+
   try {
     const consentRes = await fetch(getCoreApiUrl('/api/oauth/authorize/consent'), {
       method: 'POST',
@@ -79,7 +91,7 @@ export async function dispatchOAuthSuccess(
       },
       credentials: 'include',
       body: JSON.stringify({
-        client_id: params.clientId,
+        client_id: effectiveClientId,
         redirect_uri: params.redirectUri,
         scope: params.scope,
         state: params.state,
@@ -105,7 +117,7 @@ export async function dispatchOAuthSuccess(
         details: errorData.details,
       };
 
-      // Only broadcast fatal errors to parent if not a 401 session expiry
+      // Only broadcast fatal errors to opener/channels, not to window.parent so modal stays alive to display error
       const isAuthExpiry = consentRes.status === 401 || errorData.error === 'unauthorized';
       if (typeof window !== 'undefined' && !isAuthExpiry) {
         const mobileChannel = (window as any).OneEightyMobileChannel;
@@ -120,9 +132,6 @@ export async function dispatchOAuthSuccess(
         } catch (_) {}
         if (window.opener && !window.opener.closed) {
           window.opener.postMessage(errorPayload, '*');
-        }
-        if (window.parent && window.parent !== window) {
-          window.parent.postMessage(errorPayload, '*');
         }
       }
 

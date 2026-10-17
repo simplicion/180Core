@@ -128,8 +128,14 @@ function DeveloperDashboardContent() {
   const [filterType, setFilterType] = useState<'all' | 'confidential' | 'public'>('all');
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
 
+  const CORE_CLIENT_ID =
+    process.env.NEXT_PUBLIC_180_CLIENT_ID ||
+    process.env.NEXT_PUBLIC_CORE_CLIENT_ID ||
+    process.env.NEXT_PUBLIC_IDENTITY_CLIENT_ID ||
+    '180_client_2d51a605038c38ffb6fa037688988a83';
+
   // 180 Identity & 180 Pay SDK Hooks
-  const { launch180Identity, isOpeningIdentity } = use180Identity();
+  const { launch180Identity, isOpeningIdentity } = use180Identity(CORE_CLIENT_ID);
   const { launch180Pay, isOpeningPay } = use180Pay();
 
   // Developer Billing & Plan Limit State
@@ -218,8 +224,9 @@ function DeveloperDashboardContent() {
         if (receivedToken) {
           localStorage.setItem('platform_auth_token', receivedToken);
           const isProd = window.location.protocol === 'https:';
+          const isCore = window.location.hostname.endsWith('180core.cloud');
           const is180 = window.location.hostname.endsWith('180workspace.com');
-          const domainAttr = is180 ? '; domain=.180workspace.com' : '';
+          const domainAttr = isCore ? '; domain=.180core.cloud' : (is180 ? '; domain=.180workspace.com' : '');
           const secureAttr = isProd ? '; Secure' : '';
           document.cookie = `platform_auth_token=${receivedToken}; path=/; max-age=604800; SameSite=Lax${secureAttr}${domainAttr}`;
         }
@@ -257,7 +264,7 @@ function DeveloperDashboardContent() {
       localStorage.getItem('auth_token') ||
       localStorage.getItem('token');
     if (!token) {
-      launch180Identity(() => checkAuthAndFetchApps());
+      launch180Identity({ clientId: CORE_CLIENT_ID, onSuccess: () => checkAuthAndFetchApps() });
       return;
     }
 
@@ -1001,7 +1008,8 @@ function DeveloperDashboardContent() {
 
             {/* Single 180 Identity Button */}
             <OneEightyIdentityButton
-              onClick={() => launch180Identity(() => checkAuthAndFetchApps())}
+              clientId={CORE_CLIENT_ID}
+              onClick={() => launch180Identity({ clientId: CORE_CLIENT_ID, onSuccess: () => checkAuthAndFetchApps() })}
               disabled={isOpeningIdentity}
               isProcessing={isOpeningIdentity}
               text="Sign In with 180 Identity"

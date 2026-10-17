@@ -8,7 +8,7 @@ import { hashSecret } from './oauth.service';
  * Zero hardcoded fallback credentials.
  */
 export function getPlatformClientId(): string {
-    return process.env.CORE_CLIENT_ID || process.env.NEXT_PUBLIC_180_CLIENT_ID || '';
+    return process.env.CORE_CLIENT_ID || process.env.NEXT_PUBLIC_180_CLIENT_ID || process.env.NEXT_PUBLIC_CORE_CLIENT_ID || '180_client_2d51a605038c38ffb6fa037688988a83';
 }
 
 /**
@@ -49,9 +49,9 @@ export const LEGACY_FIRST_PARTY_ALIASES: Record<string, string> = new Proxy({}, 
  * Resolves a client ID (which may be a legacy alias) to the environment's canonical client ID.
  */
 export function resolveCanonicalClientId(clientId: string | undefined | null): string {
-    if (!clientId) return '';
-    const clean = String(clientId).trim();
     const platformId = getPlatformClientId();
+    if (!clientId) return platformId;
+    const clean = String(clientId).trim();
     if (platformId && KNOWN_LEGACY_ALIASES.includes(clean.toLowerCase())) {
         return platformId;
     }

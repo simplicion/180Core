@@ -11,7 +11,7 @@ import {
     getJwks,
     ISSUER
 } from './oauth.service';
-import { FIRST_PARTY_APPS, isFirstPartyApp, resolveCanonicalClientId } from './seed-first-party';
+import { FIRST_PARTY_APPS, isFirstPartyApp, resolveCanonicalClientId, getPlatformClientId } from './seed-first-party';
 import { UsernameService } from '../user/username.service';
 
 /**
@@ -68,11 +68,12 @@ export class OAuthController {
         try {
             const { client_id, redirect_uri, scope, state, response_type, display, ux_mode } = req.query;
 
-            if (!client_id) {
+            const effectiveRawClientId = client_id || getPlatformClientId();
+            if (!effectiveRawClientId) {
                 return res.status(400).json({ error: 'invalid_request', error_description: 'Missing client_id parameter' });
             }
 
-            const effectiveClientId = resolveCanonicalClientId(String(client_id));
+            const effectiveClientId = resolveCanonicalClientId(String(effectiveRawClientId));
 
             let app: any = null;
             try {
@@ -334,7 +335,7 @@ export class OAuthController {
      */
     static async getAppPublicConfig(req: any, res: any) {
         try {
-            const clientId = req.params?.clientId || req.query?.client_id;
+            const clientId = req.params?.clientId || req.query?.client_id || getPlatformClientId();
             if (!clientId) {
                 return res.status(400).json({ error: 'invalid_request', error_description: 'Missing clientId parameter' });
             }
@@ -414,11 +415,12 @@ export class OAuthController {
 
             const { client_id, redirect_uri, scope, state, action, code_challenge, code_challenge_method, nonce, ux_mode } = req.body;
 
-            if (!client_id) {
+            const effectiveRawClientId = client_id || getPlatformClientId();
+            if (!effectiveRawClientId) {
                 return res.status(400).json({ error: 'invalid_request', error_description: 'Missing client_id' });
             }
 
-            const effectiveClientId = resolveCanonicalClientId(String(client_id));
+            const effectiveClientId = resolveCanonicalClientId(String(effectiveRawClientId));
 
             let app: any = null;
             try {
