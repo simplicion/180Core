@@ -43,7 +43,7 @@ const allowedOrigins = [
   'https://180workspace.com',
   'https://profile.180workspace.com',
   'https://developers.180workspace.com',
-  'https://auth.180workspace.com',
+  'https://auth.180core.cloud',
   'https://180core.cloud',
   'https://profile.180core.cloud',
   'https://developer.180core.cloud',
@@ -109,13 +109,105 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(generalApiLimiter);
 
+// ─── OAuth & 180 Pay Parameter Normalization Middleware (snake_case & camelCase interoperability) ────
+app.use((req, res, next) => {
+  // Query parameter normalization
+  if (req.query) {
+    // OAuth params
+    if (req.query.clientId && !req.query.client_id) req.query.client_id = req.query.clientId;
+    if (req.query.client_id && !req.query.clientId) req.query.clientId = req.query.client_id;
+    if (req.query.redirectUri && !req.query.redirect_uri) req.query.redirect_uri = req.query.redirectUri;
+    if (req.query.redirect_uri && !req.query.redirectUri) req.query.redirectUri = req.query.redirect_uri;
+    if (req.query.responseType && !req.query.response_type) req.query.response_type = req.query.responseType;
+    if (req.query.response_type && !req.query.responseType) req.query.responseType = req.query.response_type;
+    if (req.query.codeChallenge && !req.query.code_challenge) req.query.code_challenge = req.query.codeChallenge;
+    if (req.query.code_challenge && !req.query.codeChallenge) req.query.codeChallenge = req.query.code_challenge;
+    if (req.query.codeChallengeMethod && !req.query.code_challenge_method) req.query.code_challenge_method = req.query.codeChallengeMethod;
+    if (req.query.code_challenge_method && !req.query.codeChallengeMethod) req.query.codeChallengeMethod = req.query.code_challenge_method;
+    if (req.query.codeVerifier && !req.query.code_verifier) req.query.code_verifier = req.query.codeVerifier;
+    if (req.query.code_verifier && !req.query.codeVerifier) req.query.codeVerifier = req.query.code_verifier;
+    if (req.query.grantType && !req.query.grant_type) req.query.grant_type = req.query.grantType;
+    if (req.query.grant_type && !req.query.grantType) req.query.grantType = req.query.grant_type;
+
+    // 180 Pay params
+    if (req.query.returnUrl && !req.query.return_url) req.query.return_url = req.query.returnUrl;
+    if (req.query.return_url && !req.query.returnUrl) req.query.returnUrl = req.query.return_url;
+    if (req.query.cancelUrl && !req.query.cancel_url) req.query.cancel_url = req.query.cancelUrl;
+    if (req.query.cancel_url && !req.query.cancelUrl) req.query.cancelUrl = req.query.cancel_url;
+    if (req.query.orderId && !req.query.order_id) req.query.order_id = req.query.orderId;
+    if (req.query.order_id && !req.query.orderId) req.query.orderId = req.query.order_id;
+    if (req.query.sessionId && !req.query.session_id) req.query.session_id = req.query.sessionId;
+    if (req.query.session_id && !req.query.sessionId) req.query.sessionId = req.query.session_id;
+    if (req.query.couponCode && !req.query.coupon_code) req.query.coupon_code = req.query.couponCode;
+    if (req.query.coupon_code && !req.query.couponCode) req.query.couponCode = req.query.coupon_code;
+    if (req.query.coupon && !req.query.couponCode) req.query.couponCode = req.query.coupon;
+    if (req.query.coupon && !req.query.coupon_code) req.query.coupon_code = req.query.coupon;
+    if (req.query.appId && !req.query.app_id) req.query.app_id = req.query.appId;
+    if (req.query.app_id && !req.query.appId) req.query.appId = req.query.app_id;
+  }
+  // Body parameter normalization
+  if (req.body && typeof req.body === 'object') {
+    // OAuth params
+    if (req.body.clientId && !req.body.client_id) req.body.client_id = req.body.clientId;
+    if (req.body.client_id && !req.body.clientId) req.body.clientId = req.body.client_id;
+    if (req.body.redirectUri && !req.body.redirect_uri) req.body.redirect_uri = req.body.redirectUri;
+    if (req.body.redirect_uri && !req.body.redirectUri) req.body.redirectUri = req.body.redirect_uri;
+    if (req.body.responseType && !req.body.response_type) req.body.response_type = req.body.responseType;
+    if (req.body.response_type && !req.body.responseType) req.body.responseType = req.body.response_type;
+    if (req.body.codeChallenge && !req.body.code_challenge) req.body.code_challenge = req.body.codeChallenge;
+    if (req.body.code_challenge && !req.body.codeChallenge) req.body.codeChallenge = req.body.code_challenge;
+    if (req.body.codeChallengeMethod && !req.body.code_challenge_method) req.body.code_challenge_method = req.body.codeChallengeMethod;
+    if (req.body.code_challenge_method && !req.body.codeChallengeMethod) req.body.codeChallengeMethod = req.body.code_challenge_method;
+    if (req.body.codeVerifier && !req.body.code_verifier) req.body.code_verifier = req.body.codeVerifier;
+    if (req.body.code_verifier && !req.body.codeVerifier) req.body.codeVerifier = req.body.code_verifier;
+    if (req.body.grantType && !req.body.grant_type) req.body.grant_type = req.body.grantType;
+    if (req.body.grant_type && !req.body.grantType) req.body.grantType = req.body.grant_type;
+    if (req.body.clientSecret && !req.body.client_secret) req.body.client_secret = req.body.clientSecret;
+    if (req.body.client_secret && !req.body.clientSecret) req.body.clientSecret = req.body.client_secret;
+    if (req.body.refreshToken && !req.body.refresh_token) req.body.refresh_token = req.body.refreshToken;
+    if (req.body.refresh_token && !req.body.refreshToken) req.body.refreshToken = req.body.refresh_token;
+
+    // 180 Pay params
+    if (req.body.returnUrl && !req.body.return_url) req.body.return_url = req.body.returnUrl;
+    if (req.body.return_url && !req.body.returnUrl) req.body.returnUrl = req.body.return_url;
+    if (req.body.cancelUrl && !req.body.cancel_url) req.body.cancel_url = req.body.cancelUrl;
+    if (req.body.cancel_url && !req.body.cancelUrl) req.body.cancelUrl = req.body.cancel_url;
+    if (req.body.orderId && !req.body.order_id) req.body.order_id = req.body.orderId;
+    if (req.body.order_id && !req.body.orderId) req.body.orderId = req.body.order_id;
+    if (req.body.sessionId && !req.body.session_id) req.body.session_id = req.body.sessionId;
+    if (req.body.session_id && !req.body.sessionId) req.body.sessionId = req.body.session_id;
+    if (req.body.couponCode && !req.body.coupon_code) req.body.coupon_code = req.body.couponCode;
+    if (req.body.coupon_code && !req.body.couponCode) req.body.couponCode = req.body.coupon_code;
+    if (req.body.coupon && !req.body.couponCode) req.body.couponCode = req.body.coupon;
+    if (req.body.coupon && !req.body.coupon_code) req.body.coupon_code = req.body.coupon;
+    if (req.body.appId && !req.body.app_id) req.body.app_id = req.body.appId;
+    if (req.body.app_id && !req.body.appId) req.body.appId = req.body.app_id;
+    if (req.body.paymentId && !req.body.payment_id) req.body.payment_id = req.body.paymentId;
+    if (req.body.payment_id && !req.body.paymentId) req.body.paymentId = req.body.payment_id;
+
+    // Gateway-specific aliases (Razorpay, etc.)
+    if (req.body.razorpay_order_id && !req.body.orderId) {
+      req.body.orderId = req.body.razorpay_order_id;
+      req.body.order_id = req.body.razorpay_order_id;
+    }
+    if (req.body.razorpay_payment_id && !req.body.paymentId) {
+      req.body.paymentId = req.body.razorpay_payment_id;
+      req.body.payment_id = req.body.razorpay_payment_id;
+    }
+    if (req.body.razorpay_signature && !req.body.signature) {
+      req.body.signature = req.body.razorpay_signature;
+    }
+  }
+  next();
+});
+
 // Root & Healthcheck (Production-Grade JSON API Gateway - Zero HTML or internal port leakage)
 app.get('/', (req, res) => {
   res.status(200).json({
     name: '180 Core REST & OIDC API Gateway',
     status: 'operational',
     version: 'v1',
-    documentation: 'https://developers.180workspace.com',
+    documentation: 'https://developer.180core.cloud',
     endpoints: {
       openid_configuration: '/.well-known/openid-configuration',
       jwks: '/certs/jwks.json',
@@ -134,6 +226,17 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// ─── OAuth Authorization Endpoint Redirect (RFC 6749) ──────────────────────
+// Redirects inbound /oauth/authorize browser requests to the hosted SSO screen on 180 Profile
+const handleOAuthAuthorizeRedirect = (req: any, res: any) => {
+  const profileUrl = process.env.PROFILE_FRONTEND_URL || 'https://profile.180core.cloud';
+  const query = new URLSearchParams(req.query as any).toString();
+  return res.redirect(`${profileUrl}/auth/login${query ? `?${query}` : ''}`);
+};
+app.get('/oauth/authorize', handleOAuthAuthorizeRedirect);
+app.get('/api/oauth/authorize', handleOAuthAuthorizeRedirect);
+app.get('/api/v1/auth/authorize', handleOAuthAuthorizeRedirect);
 
 // ─── Universal Root-Level OIDC & JWKS Discovery Aliases ─────────────────────
 // Enables jose, jwks-rsa, Python PyJWKClient, and standard OIDC discovery across all canonical paths

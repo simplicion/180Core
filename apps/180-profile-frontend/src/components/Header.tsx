@@ -21,6 +21,7 @@ import { OneEightyCoreLogo } from './OneEightyCoreLogo';
 import toast from 'react-hot-toast';
 import { UserProfile } from '../types';
 import { purgeAuthSession } from '@/lib/auth';
+import { resolveUserAvatar, getFallbackAvatar } from '@/lib/avatar';
 
 interface HeaderProps {
   balance: number | null;
@@ -143,17 +144,18 @@ export function Header({ balance, user }: HeaderProps) {
                   aria-expanded={userDropdownOpen}
                 >
                   <div className="w-9 h-9 min-h-[36px] min-w-[36px] rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 p-[1.5px] shadow-sm overflow-hidden shrink-0 group-hover:scale-105 transition-transform">
-                    {user.avatarUrl ? (
-                      <img
-                        src={user.avatarUrl}
-                        alt={user.name || 'User'}
-                        className="w-full h-full rounded-full object-cover bg-white"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-white rounded-full flex items-center justify-center text-blue-700 font-bold text-xs group-hover:bg-blue-50">
-                        {user.name ? user.name.slice(0, 1).toUpperCase() : 'U'}
-                      </div>
-                    )}
+                    <img
+                      src={resolveUserAvatar(user)}
+                      alt={user.name || 'User'}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full rounded-full object-cover bg-white"
+                      onError={(e) => {
+                        const fallback = getFallbackAvatar(user.name || user.username || user.email || 'User');
+                        if (e.currentTarget.src !== fallback) {
+                          e.currentTarget.src = fallback;
+                        }
+                      }}
+                    />
                   </div>
                   <ChevronDown className={`w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 transition-transform duration-200 hidden sm:block ${userDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
@@ -164,13 +166,18 @@ export function Header({ balance, user }: HeaderProps) {
                     {/* User info card */}
                     <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
                       <div className="w-10 h-10 min-w-[40px] rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 p-[1.5px] overflow-hidden shrink-0">
-                        {user.avatarUrl ? (
-                          <img src={user.avatarUrl} alt="" className="w-full h-full rounded-full object-cover bg-white" />
-                        ) : (
-                          <div className="w-full h-full bg-white rounded-full flex items-center justify-center text-blue-700 font-bold text-xs">
-                            {user.name ? user.name.slice(0, 1).toUpperCase() : 'U'}
-                          </div>
-                        )}
+                        <img
+                          src={resolveUserAvatar(user)}
+                          alt={user.name || ''}
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full rounded-full object-cover bg-white"
+                          onError={(e) => {
+                            const fallback = getFallbackAvatar(user.name || user.username || user.email || 'User');
+                            if (e.currentTarget.src !== fallback) {
+                              e.currentTarget.src = fallback;
+                            }
+                          }}
+                        />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="font-bold text-xs text-slate-900 truncate">{user.name || 'User'}</div>

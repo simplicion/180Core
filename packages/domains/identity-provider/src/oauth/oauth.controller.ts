@@ -66,7 +66,13 @@ export class OAuthController {
      */
     static async validateAuthorize(req: any, res: any) {
         try {
-            const { client_id, redirect_uri, scope, state, response_type, display, ux_mode } = req.query;
+            const client_id = req.query.client_id || req.query.clientId || req.body?.client_id || req.body?.clientId;
+            const redirect_uri = req.query.redirect_uri || req.query.redirectUri || req.body?.redirect_uri || req.body?.redirectUri;
+            const scope = req.query.scope || req.body?.scope;
+            const state = req.query.state || req.body?.state;
+            const response_type = req.query.response_type || req.query.responseType || req.body?.response_type || req.body?.responseType || 'code';
+            const display = req.query.display || req.body?.display;
+            const ux_mode = req.query.ux_mode || req.query.uxMode || req.body?.ux_mode || req.body?.uxMode;
 
             const effectiveRawClientId = client_id || getPlatformClientId();
             if (!effectiveRawClientId) {
@@ -433,7 +439,15 @@ export class OAuthController {
                 return res.status(401).json({ error: 'unauthorized', error_description: 'User must be authenticated to grant consent' });
             }
 
-            const { client_id, redirect_uri, scope, state, action, code_challenge, code_challenge_method, nonce, ux_mode } = req.body;
+            const client_id = req.body?.client_id || req.body?.clientId;
+            const redirect_uri = req.body?.redirect_uri || req.body?.redirectUri;
+            const scope = req.body?.scope;
+            const state = req.body?.state;
+            const action = req.body?.action;
+            const code_challenge = req.body?.code_challenge || req.body?.codeChallenge;
+            const code_challenge_method = req.body?.code_challenge_method || req.body?.codeChallengeMethod;
+            const nonce = req.body?.nonce;
+            const ux_mode = req.body?.ux_mode || req.body?.uxMode;
 
             const effectiveRawClientId = client_id || getPlatformClientId();
             if (!effectiveRawClientId) {
@@ -684,7 +698,13 @@ export class OAuthController {
      */
     static async exchangeToken(req: any, res: any) {
         try {
-            const { grant_type, code, redirect_uri, client_id, client_secret, code_verifier, refresh_token } = req.body;
+            const grant_type = req.body?.grant_type || req.body?.grantType || 'authorization_code';
+            const code = req.body?.code;
+            const redirect_uri = req.body?.redirect_uri || req.body?.redirectUri;
+            const client_id = req.body?.client_id || req.body?.clientId;
+            const client_secret = req.body?.client_secret || req.body?.clientSecret;
+            const code_verifier = req.body?.code_verifier || req.body?.codeVerifier;
+            const refresh_token = req.body?.refresh_token || req.body?.refreshToken;
 
             // Handle Authorization Code Grant
             if (grant_type === 'authorization_code') {
@@ -1054,7 +1074,7 @@ export class OAuthController {
             const displayName = user.name || user.username || '';
             const userHandle = user.username || user.name || '';
             const userPhone = user.phone || null;
-            const userAvatar = user.avatarUrl || '';
+            const userAvatar = user.avatarUrl || user.avatar || (displayName ? `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=2563eb&color=ffffff&bold=true&size=128` : '');
 
             return res.json({
                 sub: user.id,
@@ -1108,14 +1128,16 @@ export class OAuthController {
      * 5. OpenID Connect Discovery (.well-known/openid-configuration)
      */
     static getOpenIdConfiguration(req: any, res: any) {
-        const issuer = ISSUER;
+        const apiBase = (process.env.API_BASE_URL || process.env.NEXT_PUBLIC_CORE_BACKEND_URL || 'https://api.180core.cloud').replace(/\/+$/, '');
+        const profileBase = (process.env.PROFILE_FRONTEND_URL || process.env.NEXT_PUBLIC_PROFILE_URL || 'https://profile.180core.cloud').replace(/\/+$/, '');
+        const issuer = ISSUER || apiBase;
         return res.json({
             issuer,
-            authorization_endpoint: `${issuer}/oauth/authorize`,
-            token_endpoint: `${issuer}/oauth/token`,
-            userinfo_endpoint: `${issuer}/oauth/userinfo`,
-            jwks_uri: `${issuer}/.well-known/jwks.json`,
-            revocation_endpoint: `${issuer}/oauth/revoke`,
+            authorization_endpoint: `${profileBase}/auth/login`,
+            token_endpoint: `${apiBase}/api/oauth/token`,
+            userinfo_endpoint: `${apiBase}/api/oauth/userinfo`,
+            jwks_uri: `${apiBase}/certs/jwks.json`,
+            revocation_endpoint: `${apiBase}/api/oauth/revoke`,
             response_types_supported: ['code', 'token', 'id_token', 'code id_token'],
             subject_types_supported: ['public'],
             id_token_signing_alg_values_supported: ['RS256', 'HS256'],

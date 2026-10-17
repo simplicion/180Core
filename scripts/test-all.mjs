@@ -14,7 +14,8 @@ const testSuites = [
   { name: 'Phase 11: Developer SDK Server Helpers', cmd: 'npx tsx packages/identity-sdk/src/__tests__/test_phase11_sdk.ts' },
   { name: 'Phase 12: Client Components & Web Components', cmd: 'npx tsx packages/identity-sdk/src/__tests__/test_phase12_components.ts' },
   { name: 'Phase 19: E2E Master Integration Flow', cmd: 'npx tsx apps/180-core-backend/src/tests/test_phase19_e2e_master.ts' },
-  { name: 'Phase 24: Production-Grade Master Verification', cmd: 'npx tsx apps/180-core-backend/src/tests/test_phase24_production_master.ts' }
+  { name: 'Phase 24: Production-Grade Master Verification', cmd: 'npx tsx apps/180-core-backend/src/tests/test_phase24_production_master.ts' },
+  { name: 'OAuth Resilience, Normalization & Domains Verification', cmd: 'npx tsx apps/180-core-backend/src/tests/test_oauth_resilience_and_domains.ts' }
 ];
 
 console.log('================================================================');

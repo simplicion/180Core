@@ -586,14 +586,34 @@
       var payServer = options.payServerUrl || (env === 'production' ? 'https://profile.180core.cloud' : DEFAULT_PAY_SERVER);
       var sessionId = options.sessionId || 'cs_' + generateRandomString(24);
 
+      var returnUrl = options.returnUrl || options.return_url;
+      var cancelUrl = options.cancelUrl || options.cancel_url;
+      var customerEmail = options.customerEmail || options.customer_email || options.email;
+      var customerPhone = options.customerPhone || options.customer_phone || options.phone;
+      var coupon = options.couponCode || options.coupon_code || options.coupon;
+      var appId = options.appId || options.app_id;
+
       var query = [
         (options.amount !== undefined && options.amount !== null) ? 'amount=' + encodeURIComponent(options.amount) : '',
         options.currency ? 'currency=' + encodeURIComponent(String(options.currency).toUpperCase()) : 'currency=USD',
         options.title ? 'title=' + encodeURIComponent(options.title) : '',
         options.orderId ? 'order_id=' + encodeURIComponent(options.orderId) : '',
+        options.orderId ? 'orderId=' + encodeURIComponent(options.orderId) : '',
         options.planCode ? 'plan=' + encodeURIComponent(options.planCode) : '',
         options.description ? 'description=' + encodeURIComponent(options.description) : '',
+        coupon ? 'coupon=' + encodeURIComponent(coupon) : '',
+        coupon ? 'couponCode=' + encodeURIComponent(coupon) : '',
+        returnUrl ? 'returnUrl=' + encodeURIComponent(returnUrl) : '',
+        returnUrl ? 'return_url=' + encodeURIComponent(returnUrl) : '',
+        cancelUrl ? 'cancelUrl=' + encodeURIComponent(cancelUrl) : '',
+        cancelUrl ? 'cancel_url=' + encodeURIComponent(cancelUrl) : '',
+        customerEmail ? 'customerEmail=' + encodeURIComponent(customerEmail) : '',
+        customerEmail ? 'customer_email=' + encodeURIComponent(customerEmail) : '',
+        customerPhone ? 'customerPhone=' + encodeURIComponent(customerPhone) : '',
+        appId ? 'appId=' + encodeURIComponent(appId) : '',
+        appId ? 'app_id=' + encodeURIComponent(appId) : '',
         options.clientId ? 'client_id=' + encodeURIComponent(options.clientId) : (_config.clientId ? 'client_id=' + encodeURIComponent(_config.clientId) : ''),
+        options.clientId ? 'clientId=' + encodeURIComponent(options.clientId) : (_config.clientId ? 'clientId=' + encodeURIComponent(_config.clientId) : ''),
         options.appName ? 'appName=' + encodeURIComponent(options.appName) : '',
         options.metadata ? 'metadata=' + encodeURIComponent(typeof options.metadata === 'string' ? options.metadata : JSON.stringify(options.metadata)) : '',
         'app=pay',

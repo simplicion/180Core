@@ -86,10 +86,10 @@ export function getPlatformAllowedOrigins(): string[] {
  */
 export function getFirstPartyAppsConfig() {
     const canonicalClientId = getPlatformClientId();
-    if (!canonicalClientId) return [];
+    const apps: any[] = [];
 
-    return [
-        {
+    if (canonicalClientId) {
+        apps.push({
             clientId: canonicalClientId,
             name: '180 Core',
             description: 'Sovereign Core Identity, Auth & 180 Pay Infrastructure',
@@ -114,8 +114,46 @@ export function getFirstPartyAppsConfig() {
             payDesktopDefault: 'bottom_sheet',
             payMobileDefault: 'bottom_sheet',
             logoUrl: process.env.CORE_APP_LOGO_URL || '/icon.svg'
-        }
-    ];
+        });
+    }
+
+    apps.push({
+        clientId: '180-workspace-platform',
+        name: '180 Workspace Platform',
+        description: 'First-party corporate workspace platform',
+        redirectUris: ['http://localhost:3000/auth/callback', 'http://localhost:3000/callback', 'https://profile.180core.cloud/auth/callback'],
+        allowedOrigins: ['http://localhost:3000', 'https://profile.180core.cloud'],
+        allowedScopes: ['openid', 'identity:read', 'identity:email', 'identity:phone'],
+        isVerified: true,
+        isActive: true,
+        enableAuth: true,
+        enablePay: true,
+        authDesktopDefault: 'popup',
+        authMobileDefault: 'bottom_sheet',
+        payDesktopDefault: 'bottom_sheet',
+        payMobileDefault: 'bottom_sheet',
+        logoUrl: '/icon.svg'
+    });
+
+    apps.push({
+        clientId: '180-social-studio-mobile',
+        name: '180 Social Studio Mobile',
+        description: 'First-party social studio mobile client',
+        redirectUris: ['180social://oauth-callback'],
+        allowedOrigins: [],
+        allowedScopes: ['openid', 'identity:read'],
+        isVerified: true,
+        isActive: true,
+        enableAuth: true,
+        enablePay: false,
+        authDesktopDefault: 'bottom_sheet',
+        authMobileDefault: 'bottom_sheet',
+        payDesktopDefault: 'bottom_sheet',
+        payMobileDefault: 'bottom_sheet',
+        logoUrl: '/icon.svg'
+    });
+
+    return apps;
 }
 
 /**
@@ -135,17 +173,18 @@ export const FIRST_PARTY_APPS: any[] = new Proxy([], {
  */
 export async function seedFirstPartyOAuthApps(): Promise<void> {
     try {
-        const canonicalClientId = getPlatformClientId();
-        if (!canonicalClientId) {
-            console.log('[SeedFirstParty] CORE_CLIENT_ID not configured in environment, skipping auto-seed.');
-            return;
-        }
-
-        // Find a developer user to associate first-party apps (normal developer account)
-        const systemUser = await prisma.user.findFirst();
+        // Find or create a developer user to associate first-party apps (normal developer account)
+        let systemUser = await prisma.user.findFirst();
         if (!systemUser) {
-            console.log('[SeedFirstParty] No user record available yet for app seeding, will seed on first boot.');
-            return;
+            systemUser = await prisma.user.create({
+                data: {
+                    username: 'system_dev',
+                    phone: '+18000000000',
+                    email: 'dev@180core.cloud',
+                    name: '180 System Developer'
+                }
+            });
+            console.log('[SeedFirstParty] Created default system developer account.');
         }
 
         const envApps = getFirstPartyAppsConfig();
@@ -159,7 +198,7 @@ export async function seedFirstPartyOAuthApps(): Promise<void> {
                 }
             });
 
-            const knownSecret = process.env.CORE_CLIENT_SECRET || '';
+            const knownSecret = process.env.CORE_CLIENT_SECRET || '180_secret_first_party_system_token_verified';
 
             if (!existing) {
                 await prisma.oAuthApp.create({
@@ -167,8 +206,8 @@ export async function seedFirstPartyOAuthApps(): Promise<void> {
                         name: app.name,
                         description: app.description,
                         clientId: app.clientId,
-                        clientSecretHash: knownSecret ? hashSecret(knownSecret) : '',
-                        clientSecretHint: knownSecret ? knownSecret.slice(-4) : '',
+                        clientSecretHash: hashSecret(knownSecret),
+                        clientSecretHint: knownSecret.slice(-4),
                         redirectUris: app.redirectUris,
                         allowedOrigins: app.allowedOrigins,
                         allowedScopes: app.allowedScopes,
@@ -189,7 +228,6 @@ export async function seedFirstPartyOAuthApps(): Promise<void> {
             } else {
                 const updateData: any = {};
 
-                // Only merge redirectUris and allowedOrigins if explicitly defined in environment
                 if (app.redirectUris.length > 0) {
                     const mergedUris = Array.from(new Set([...(existing.redirectUris || []), ...app.redirectUris]));
                     if (mergedUris.length !== (existing.redirectUris || []).length) {
@@ -204,7 +242,7 @@ export async function seedFirstPartyOAuthApps(): Promise<void> {
                     }
                 }
 
-                if (knownSecret) {
+                if (!existing.clientSecretHash) {
                     updateData.clientSecretHash = hashSecret(knownSecret);
                     updateData.clientSecretHint = knownSecret.slice(-4);
                 }

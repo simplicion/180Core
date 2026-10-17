@@ -28,6 +28,7 @@ import { GoogleSSOButton } from '@/components/auth/GoogleSSOButton';
 import { OAuthErrorCard, OAuthErrorDetails } from '@/components/auth/OAuthErrorCard';
 import { ForgotPasswordModal } from '@/components/auth/ForgotPasswordModal';
 import { getCoreApiUrl } from '@/lib/api';
+import { resolveUserAvatar, getFallbackAvatar } from '@/lib/avatar';
 
 type AuthScreenMode = 'login' | 'signup' | 'otp' | 'password' | 'onboarding';
 
@@ -111,6 +112,10 @@ function LoginFormContent() {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed && (parsed.id || parsed.email)) {
+          const avatar = resolveUserAvatar(parsed);
+          if (avatar && !parsed.avatarUrl) {
+            parsed.avatarUrl = avatar;
+          }
           setCachedUser(parsed);
         }
       }
@@ -129,6 +134,12 @@ function LoginFormContent() {
         .then((data) => {
           if (data && (data.user || data.id || data.email)) {
             const validUser = data.user || data;
+            const avatar = resolveUserAvatar(validUser) || resolveUserAvatar(data);
+            if (avatar) {
+              validUser.avatarUrl = avatar;
+              validUser.avatar = avatar;
+              validUser.picture = avatar;
+            }
             setCachedUser(validUser);
             localStorage.setItem('user', JSON.stringify(validUser));
           } else {
@@ -845,16 +856,19 @@ function LoginFormContent() {
           <div className="p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200/90 flex items-center justify-between shadow-xs">
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 rounded-full p-[2px] bg-gradient-to-tr from-blue-600 to-indigo-600 shadow-xs shrink-0">
-                <div className="w-full h-full bg-white rounded-full flex items-center justify-center font-bold text-sm text-blue-600 overflow-hidden">
-                  {cachedUser.avatarUrl ? (
-                    <img
-                      src={cachedUser.avatarUrl}
-                      alt={cachedUser.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    cachedUser.name?.[0]?.toUpperCase() || 'U'
-                  )}
+                <div className="w-full h-full bg-white rounded-full flex items-center justify-center font-bold text-sm text-blue-600 overflow-hidden relative">
+                  <img
+                    src={resolveUserAvatar(cachedUser)}
+                    alt={cachedUser.name || 'User Profile'}
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover rounded-full"
+                    onError={(e) => {
+                      const fallback = getFallbackAvatar(cachedUser.name || cachedUser.username || cachedUser.email || 'User');
+                      if (e.currentTarget.src !== fallback) {
+                        e.currentTarget.src = fallback;
+                      }
+                    }}
+                  />
                 </div>
               </div>
               <div className="text-left min-w-0">

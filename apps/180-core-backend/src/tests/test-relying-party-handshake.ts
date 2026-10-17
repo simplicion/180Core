@@ -2,13 +2,14 @@
 
 import assert from 'assert';
 import crypto from 'crypto';
-import { corePrisma as prisma } from '@workspace/db-180core';
+import { developersPrisma as prisma } from '@workspace/db-180core';
 import {
     RsaKeysService,
     getJwks,
     generateRandomToken,
     hashSecret,
     signIdToken,
+    seedFirstPartyOAuthApps,
 } from '@workspace/identity-provider';
 import {
     OidcConsumer,
@@ -48,6 +49,7 @@ async function runRelyingPartyHandshakeSuite() {
     // ─── 2. Seed / Fetch Live Relying Party Credentials ──────────────────────
     let workspaceApp: any = null;
     await test('Verify registered confidential client credentials for 180-workspace-platform', async () => {
+        await seedFirstPartyOAuthApps();
         workspaceApp = await prisma.oAuthApp.findUnique({
             where: { clientId: '180-workspace-platform' },
         });

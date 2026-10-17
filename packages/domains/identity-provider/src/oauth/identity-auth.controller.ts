@@ -34,14 +34,18 @@ function signTempToken(payload: any): string {
 }
 
 function sanitizeUser(user: any) {
+    const displayName = user.name || user.username || '';
+    const avatar = user.avatarUrl || user.avatar || user.picture || (displayName ? `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=2563eb&color=ffffff&bold=true&size=128` : '');
     return {
         id: user.id,
         name: user.name || '',
         username: user.username || '',
         email: user.email || null,
         phone: user.phone || null,
-        avatar: user.avatarUrl || user.avatar || '',
-        avatarUrl: user.avatarUrl || user.avatar || '',
+        avatar: avatar,
+        avatarUrl: avatar,
+        picture: avatar,
+        avatar_url: avatar,
         headline: user.headline || user.tagline || '',
         tagline: user.tagline || user.headline || '',
         bio: user.bio || '',

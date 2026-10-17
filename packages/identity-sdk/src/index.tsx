@@ -69,11 +69,16 @@ export interface CheckoutResponse {
 
 export interface CheckoutOptions {
   clientId?: string;
+  appId?: string;
   sessionId?: string;
   amount?: number;
   currency?: string;
   title?: string;
   description?: string;
+  returnUrl?: string;
+  cancelUrl?: string;
+  customerEmail?: string;
+  customerPhone?: string;
   couponCode?: string;
   appName?: string;
   orderId?: string;
@@ -1305,15 +1310,34 @@ export const OneEightyPay = {
       }
     }
 
+    const returnUrl = options.returnUrl || (options as any).return_url;
+    const cancelUrl = options.cancelUrl || (options as any).cancel_url;
+    const customerEmail = options.customerEmail || (options as any).customer_email || (options as any).email;
+    const customerPhone = options.customerPhone || (options as any).customer_phone || (options as any).phone;
+    const coupon = options.couponCode || (options as any).coupon_code || (options as any).coupon;
+    const appId = options.appId || (options as any).app_id;
+
     const query = [
       (options.amount !== undefined && options.amount !== null) ? `amount=${encodeURIComponent(options.amount)}` : '',
       options.currency ? `currency=${encodeURIComponent(options.currency.toUpperCase())}` : 'currency=USD',
       options.title ? `title=${encodeURIComponent(options.title)}` : '',
       options.description ? `description=${encodeURIComponent(options.description)}` : '',
-      options.couponCode ? `coupon=${encodeURIComponent(options.couponCode)}` : '',
+      coupon ? `coupon=${encodeURIComponent(coupon)}` : '',
+      coupon ? `couponCode=${encodeURIComponent(coupon)}` : '',
+      returnUrl ? `returnUrl=${encodeURIComponent(returnUrl)}` : '',
+      returnUrl ? `return_url=${encodeURIComponent(returnUrl)}` : '',
+      cancelUrl ? `cancelUrl=${encodeURIComponent(cancelUrl)}` : '',
+      cancelUrl ? `cancel_url=${encodeURIComponent(cancelUrl)}` : '',
+      customerEmail ? `customerEmail=${encodeURIComponent(customerEmail)}` : '',
+      customerEmail ? `customer_email=${encodeURIComponent(customerEmail)}` : '',
+      customerPhone ? `customerPhone=${encodeURIComponent(customerPhone)}` : '',
       options.clientId ? `client_id=${encodeURIComponent(options.clientId)}` : '',
+      options.clientId ? `clientId=${encodeURIComponent(options.clientId)}` : '',
+      appId ? `appId=${encodeURIComponent(appId)}` : '',
+      appId ? `app_id=${encodeURIComponent(appId)}` : '',
       options.appName ? `appName=${encodeURIComponent(options.appName)}` : '',
       options.orderId ? `order_id=${encodeURIComponent(options.orderId)}` : '',
+      options.orderId ? `orderId=${encodeURIComponent(options.orderId)}` : '',
       options.metadata ? `metadata=${encodeURIComponent(typeof options.metadata === 'string' ? options.metadata : JSON.stringify(options.metadata))}` : '',
       'app=pay',
       `ux_mode=${encodeURIComponent(effectiveMode)}`,
@@ -1988,7 +2012,7 @@ export async function init180Sdk(options?: {
   if (existing) return existing;
 
   const cdnUrl =
-    options?.cdnUrl || 'https://auth.180workspace.com/sdk/v1/180-core-sdk.js';
+    options?.cdnUrl || 'https://profile.180core.cloud/sdk/v1/180-core-sdk.js';
 
   if (!document.querySelector('script[src*="180-core-sdk.js"]')) {
     const s = document.createElement('script');

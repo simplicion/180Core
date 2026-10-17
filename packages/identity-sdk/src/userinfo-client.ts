@@ -10,6 +10,9 @@ export interface OneEightyUserProfile {
   city?: string;
   country?: string;
   avatar?: string;
+  avatarUrl?: string;
+  picture?: string;
+  photoUrl?: string;
   bio?: string;
   companyId?: string | null;
   company?: any;

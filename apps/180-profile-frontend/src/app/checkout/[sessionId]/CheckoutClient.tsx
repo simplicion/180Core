@@ -36,7 +36,122 @@ import { currencyService } from '@/lib/currency-service';
 declare global {
   interface Window {
     Razorpay: any;
+    OneEightyMobileChannel?: any;
+    OneEightyPaymentChannel?: any;
+    flutter_inappwebview?: any;
   }
+}
+
+function formatReturnUrl(baseUrl: string, details: {
+  sessionId?: string;
+  status?: string;
+  transactionId?: string;
+  orderId?: string;
+  amount?: number | string;
+  currency?: string;
+}): string {
+  if (!baseUrl) return '';
+  try {
+    const isCustomScheme = baseUrl.includes('://') && !baseUrl.startsWith('http://') && !baseUrl.startsWith('https://');
+    if (isCustomScheme) {
+      const separator = baseUrl.includes('?') ? '&' : '?';
+      const params = new URLSearchParams();
+      if (details.sessionId) {
+        params.set('session_id', details.sessionId);
+        params.set('sessionId', details.sessionId);
+      }
+      if (details.status) params.set('status', details.status);
+      if (details.transactionId) {
+        params.set('transaction_id', details.transactionId);
+        params.set('transactionId', details.transactionId);
+      }
+      if (details.orderId) {
+        params.set('order_id', details.orderId);
+        params.set('orderId', details.orderId);
+      }
+      if (details.amount !== undefined) params.set('amount', String(details.amount));
+      if (details.currency) params.set('currency', String(details.currency));
+      return `${baseUrl}${separator}${params.toString()}`;
+    }
+    const url = new URL(baseUrl, typeof window !== 'undefined' ? window.location.origin : 'https://profile.180core.cloud');
+    if (details.sessionId) {
+      url.searchParams.set('session_id', details.sessionId);
+      url.searchParams.set('sessionId', details.sessionId);
+    }
+    if (details.status) url.searchParams.set('status', details.status);
+    if (details.transactionId) {
+      url.searchParams.set('transaction_id', details.transactionId);
+      url.searchParams.set('transactionId', details.transactionId);
+    }
+    if (details.orderId) {
+      url.searchParams.set('order_id', details.orderId);
+      url.searchParams.set('orderId', details.orderId);
+    }
+    if (details.amount !== undefined) url.searchParams.set('amount', String(details.amount));
+    if (details.currency) url.searchParams.set('currency', String(details.currency));
+    return url.toString();
+  } catch (_) {
+    return baseUrl;
+  }
+}
+
+function formatCancelUrl(baseUrl: string, details: {
+  sessionId?: string;
+  status?: string;
+  reason?: string;
+}): string {
+  if (!baseUrl) return '';
+  try {
+    const isCustomScheme = baseUrl.includes('://') && !baseUrl.startsWith('http://') && !baseUrl.startsWith('https://');
+    if (isCustomScheme) {
+      const separator = baseUrl.includes('?') ? '&' : '?';
+      const params = new URLSearchParams();
+      if (details.sessionId) params.set('session_id', details.sessionId);
+      params.set('status', details.status || 'cancelled');
+      if (details.reason) params.set('reason', details.reason);
+      return `${baseUrl}${separator}${params.toString()}`;
+    }
+    const url = new URL(baseUrl, typeof window !== 'undefined' ? window.location.origin : 'https://profile.180core.cloud');
+    if (details.sessionId) url.searchParams.set('session_id', details.sessionId);
+    url.searchParams.set('status', details.status || 'cancelled');
+    if (details.reason) url.searchParams.set('reason', details.reason);
+    return url.toString();
+  } catch (_) {
+    return baseUrl;
+  }
+}
+
+function dispatchMobilePaymentEvent(payload: any) {
+  if (typeof window === 'undefined') return;
+  const jsonString = typeof payload === 'string' ? payload : JSON.stringify(payload);
+
+  // 1. Flutter InAppWebView JavaScript Handler
+  try {
+    if ((window as any).flutter_inappwebview?.callHandler) {
+      (window as any).flutter_inappwebview.callHandler('OneEightyPaymentChannel', jsonString);
+      (window as any).flutter_inappwebview.callHandler('OneEightyMobileChannel', jsonString);
+    }
+  } catch (_) {}
+
+  // 2. Android JavascriptInterface / Flutter JavascriptChannel
+  try {
+    if ((window as any).OneEightyMobileChannel?.postMessage) {
+      (window as any).OneEightyMobileChannel.postMessage(jsonString);
+    }
+    if ((window as any).OneEightyPaymentChannel?.postMessage) {
+      (window as any).OneEightyPaymentChannel.postMessage(jsonString);
+    }
+  } catch (_) {}
+
+  // 3. iOS WebKit message handlers
+  try {
+    if ((window as any).webkit?.messageHandlers?.OneEightyMobileChannel?.postMessage) {
+      (window as any).webkit.messageHandlers.OneEightyMobileChannel.postMessage(jsonString);
+    }
+    if ((window as any).webkit?.messageHandlers?.OneEightyPaymentChannel?.postMessage) {
+      (window as any).webkit.messageHandlers.OneEightyPaymentChannel.postMessage(jsonString);
+    }
+  } catch (_) {}
 }
 
 export interface CheckoutClientProps {
@@ -374,6 +489,9 @@ export function CheckoutClient({
         sessionId,
       };
 
+      dispatchMobilePaymentEvent(closePayload);
+      dispatchMobilePaymentEvent(closePayloadPay);
+
       if (window.parent && window.parent !== window) {
         try { window.parent.postMessage(closePayload, '*'); } catch (_) {}
         try { window.parent.postMessage(JSON.stringify(closePayload), '*'); } catch (_) {}
@@ -386,6 +504,12 @@ export function CheckoutClient({
         try { window.opener.postMessage(JSON.stringify(closePayload), '*'); } catch (_) {}
         try { window.opener.postMessage(closePayloadPay, '*'); } catch (_) {}
         try { window.close(); } catch (_) {}
+      }
+
+      if (session?.cancelUrl) {
+        const targetCancel = formatCancelUrl(session.cancelUrl, { sessionId, status: 'cancelled' });
+        window.location.href = targetCancel;
+        return;
       }
 
       if ((!window.parent || window.parent === window) && (!window.opener || window.opener.closed)) {
@@ -772,6 +896,15 @@ export function CheckoutClient({
           urlParams?.get('appName') ||
           urlParams?.get('app') ||
           'Merchant Checkout';
+        const queryReturnUrl =
+          urlParams?.get('returnUrl') ||
+          urlParams?.get('return_url') ||
+          urlParams?.get('redirect_uri') ||
+          '';
+        const queryCancelUrl =
+          urlParams?.get('cancelUrl') ||
+          urlParams?.get('cancel_url') ||
+          '';
 
         sessionInfo = {
           id: sessionId,
@@ -780,6 +913,8 @@ export function CheckoutClient({
           title: queryTitle,
           description: queryDesc,
           status: 'PENDING',
+          returnUrl: queryReturnUrl,
+          cancelUrl: queryCancelUrl,
           expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
           metadata: {
             isTopUp: sessionId.startsWith('sess_topup_'),
@@ -922,22 +1057,38 @@ export function CheckoutClient({
           amount: session?.amount !== undefined ? session.amount : (initialAmount !== undefined ? initialAmount : 0),
           currency: (session?.currency || 'USD').toUpperCase(),
         };
+        const successPayloadPay = {
+          type: '180_PAY_SUCCESS',
+          ...successPayload,
+        };
         if (typeof window !== 'undefined') {
+          dispatchMobilePaymentEvent(successPayload);
+          dispatchMobilePaymentEvent(successPayloadPay);
           if (window.opener) {
             window.opener.postMessage(successPayload, '*');
+            window.opener.postMessage(successPayloadPay, '*');
           }
           if (window.parent && window.parent !== window) {
             window.parent.postMessage(successPayload, '*');
+            window.parent.postMessage(successPayloadPay, '*');
           }
         }
         setTimeout(() => {
           if (session?.returnUrl) {
-            window.location.href = session.returnUrl;
+            window.location.href = formatReturnUrl(session.returnUrl, {
+              sessionId,
+              status: 'success',
+              transactionId: demoTxId,
+              orderId: (session.metadata as any)?.orderId,
+              amount: successPayload.amount,
+              currency: successPayload.currency,
+            });
           } else if (typeof window !== 'undefined') {
             if (window.opener) {
               window.close();
             } else if (window.parent && window.parent !== window) {
               window.parent.postMessage({ type: '180_PAYMENT_CLOSE', sessionId }, '*');
+              window.parent.postMessage({ type: '180_PAY_CLOSE', sessionId }, '*');
             }
           }
         }, 1200);
@@ -976,26 +1127,43 @@ export function CheckoutClient({
         amount: session?.amount,
         currency: session?.currency,
       };
+      const liveSuccessPayloadPay = {
+        type: '180_PAY_SUCCESS',
+        ...liveSuccessPayload,
+      };
 
-      // Notify opener window if opened in a popup or parent window if in bottom sheet
+      // Notify mobile bridge, opener window if in popup, and parent if in bottom sheet
       if (typeof window !== 'undefined') {
+        dispatchMobilePaymentEvent(liveSuccessPayload);
+        dispatchMobilePaymentEvent(liveSuccessPayloadPay);
         if (window.opener) {
           window.opener.postMessage(liveSuccessPayload, '*');
+          window.opener.postMessage(liveSuccessPayloadPay, '*');
         }
         if (window.parent && window.parent !== window) {
           window.parent.postMessage(liveSuccessPayload, '*');
+          window.parent.postMessage(liveSuccessPayloadPay, '*');
         }
       }
 
       // Auto redirect or close after 2 seconds
       setTimeout(() => {
-        if (data.data?.returnUrl || session?.returnUrl) {
-          window.location.href = data.data?.returnUrl || session.returnUrl;
+        const destUrl = data.data?.returnUrl || session?.returnUrl;
+        if (destUrl) {
+          window.location.href = formatReturnUrl(destUrl, {
+            sessionId,
+            status: 'success',
+            transactionId: data.data?.transactionId,
+            orderId: (session?.metadata as any)?.orderId,
+            amount: session?.amount,
+            currency: session?.currency,
+          });
         } else if (typeof window !== 'undefined') {
           if (window.opener) {
             window.close();
           } else if (window.parent && window.parent !== window) {
             window.parent.postMessage({ type: '180_PAYMENT_CLOSE', sessionId }, '*');
+            window.parent.postMessage({ type: '180_PAY_CLOSE', sessionId }, '*');
           }
         }
       }, 2000);
@@ -1261,19 +1429,35 @@ export function CheckoutClient({
               creditedUserBalance: verifyData.creditedUserBalance,
               newBalance: verifyData.creditedUserBalance,
             };
+            const liveSuccessPayloadPay = {
+              type: '180_PAY_SUCCESS',
+              ...liveSuccessPayload,
+            };
 
             if (typeof window !== 'undefined') {
+              dispatchMobilePaymentEvent(liveSuccessPayload);
+              dispatchMobilePaymentEvent(liveSuccessPayloadPay);
               if (window.opener) {
                 window.opener.postMessage(liveSuccessPayload, '*');
+                window.opener.postMessage(liveSuccessPayloadPay, '*');
               }
               if (window.parent && window.parent !== window) {
                 window.parent.postMessage(liveSuccessPayload, '*');
+                window.parent.postMessage(liveSuccessPayloadPay, '*');
               }
             }
 
             setTimeout(() => {
-              if (verifyData.returnUrl || session?.returnUrl) {
-                window.location.href = verifyData.returnUrl || session.returnUrl;
+              const destUrl = verifyData.returnUrl || session?.returnUrl;
+              if (destUrl) {
+                window.location.href = formatReturnUrl(destUrl, {
+                  sessionId,
+                  status: 'success',
+                  transactionId: response.razorpay_payment_id,
+                  orderId: (session?.metadata as any)?.orderId,
+                  amount: activeFinalAmount,
+                  currency: activeCurrency,
+                });
               } else if (onClose) {
                 onClose();
               } else if (typeof window !== 'undefined') {
@@ -1281,6 +1465,7 @@ export function CheckoutClient({
                   window.close();
                 } else if (window.parent && window.parent !== window) {
                   window.parent.postMessage({ type: '180_PAYMENT_CLOSE', sessionId }, '*');
+                  window.parent.postMessage({ type: '180_PAY_CLOSE', sessionId }, '*');
                 }
               }
             }, 1500);

@@ -18,13 +18,25 @@ export function extractOAuthParams(searchParams: URLSearchParams): OAuthParams {
     process.env.NEXT_PUBLIC_IDENTITY_CLIENT_ID ||
     '180_client_2d51a605038c38ffb6fa037688988a83';
 
+  // Support both snake_case and camelCase parameters gracefully (RFC 6749 & JS ergonomics)
+  const clientId =
+    searchParams.get('client_id') ||
+    searchParams.get('clientId') ||
+    defaultClientId;
+
+  // RFC 6749: Never default redirectUri to self /oauth/callback (causes 404 loops)
+  const redirectUri =
+    searchParams.get('redirect_uri') ||
+    searchParams.get('redirectUri') ||
+    '';
+
   return {
-    clientId: searchParams.get('client_id') || defaultClientId,
-    redirectUri: searchParams.get('redirect_uri') || (typeof window !== 'undefined' ? `${window.location.origin}/oauth/callback` : ''),
+    clientId,
+    redirectUri,
     state: searchParams.get('state') || '',
     scope: searchParams.get('scope') || 'openid identity:read identity:email',
-    codeChallenge: searchParams.get('code_challenge') || '',
-    codeChallengeMethod: searchParams.get('code_challenge_method') || 'S256',
+    codeChallenge: searchParams.get('code_challenge') || searchParams.get('codeChallenge') || '',
+    codeChallengeMethod: searchParams.get('code_challenge_method') || searchParams.get('codeChallengeMethod') || 'S256',
     nonce: searchParams.get('nonce') || '',
   };
 }
@@ -151,8 +163,10 @@ export async function dispatchOAuthSuccess(
     name: userData.name || '',
     username: userData.username || '',
     phone: userData.phone || null,
-    avatar: userData.avatarUrl || userData.avatar || '',
-    avatarUrl: userData.avatarUrl || userData.avatar || '',
+    avatar: userData.avatarUrl || userData.avatar || userData.picture || userData.photoUrl || userData.avatar_url || userData.image || '',
+    avatarUrl: userData.avatarUrl || userData.avatar || userData.picture || userData.photoUrl || userData.avatar_url || userData.image || '',
+    picture: userData.avatarUrl || userData.avatar || userData.picture || userData.photoUrl || userData.avatar_url || userData.image || '',
+    avatar_url: userData.avatarUrl || userData.avatar || userData.picture || userData.photoUrl || userData.avatar_url || userData.image || '',
     headline: userData.headline || userData.tagline || '',
     tagline: userData.tagline || userData.headline || '',
     bio: userData.bio || '',
@@ -230,6 +244,24 @@ export async function dispatchOAuthSuccess(
     } else if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
       window.parent.postMessage({ type: '180_IDENTITY_CLOSE' }, '*');
     } else if (params.redirectUri && authCode) {
+      // Guard against erroneous self-referential callback (e.g. legacy clients passing server origin /oauth/callback)
+      let isSelfCallback = false;
+      try {
+        const parsed = new URL(params.redirectUri);
+        if (
+          typeof window !== 'undefined' &&
+          parsed.origin === window.location.origin &&
+          (parsed.pathname.includes('/oauth/callback') || parsed.pathname === '/oauth/callback')
+        ) {
+          isSelfCallback = true;
+        }
+      } catch (_) {}
+
+      if (isSelfCallback) {
+        window.location.href = '/';
+        return;
+      }
+
       let redirectDestination = params.redirectUri;
       try {
         const url = new URL(params.redirectUri);

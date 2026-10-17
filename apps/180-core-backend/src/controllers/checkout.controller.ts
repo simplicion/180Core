@@ -141,14 +141,18 @@ export class CheckoutApiController {
       const reqHost = (req.headers.host || '').toLowerCase().split(':')[0];
       
       let app = null;
-      if (reqHost && !reqHost.includes('180workspace.com') && !reqHost.includes('localhost') && !reqHost.includes('127.0.0.1')) {
+      if (reqHost && !reqHost.includes('180workspace.com') && !reqHost.includes('180core.cloud') && !reqHost.includes('localhost') && !reqHost.includes('127.0.0.1')) {
         app = await prisma.oAuthApp.findFirst({
           where: { customPayDomain: reqHost, isActive: true },
         });
       }
 
       const requestedAppId = req.body.appId || req.body.clientId;
-      if (!app && requestedAppId && (userId || (req.headers.origin && String(req.headers.origin).includes('180workspace.com')))) {
+      const isInternalOrigin = req.headers.origin && (
+        String(req.headers.origin).includes('180workspace.com') ||
+        String(req.headers.origin).includes('180core.cloud')
+      );
+      if (!app && requestedAppId && (userId || isInternalOrigin)) {
         app = await prisma.oAuthApp.findFirst({
           where: {
             OR: [
@@ -160,7 +164,7 @@ export class CheckoutApiController {
         });
       }
 
-      if (!app && (userId || (req.headers.origin && String(req.headers.origin).includes('180workspace.com')))) {
+      if (!app && (userId || isInternalOrigin)) {
         const targetClientId = process.env.CORE_CLIENT_ID || process.env.NEXT_PUBLIC_180_CLIENT_ID || '';
         if (targetClientId) {
           app = await prisma.oAuthApp.findFirst({
@@ -213,9 +217,9 @@ export class CheckoutApiController {
         }
       }
 
-      // Security Validation: Check returnUrl against OAuth 2.0 Redirect URIs
-      if (returnUrl && app.redirectUris && app.redirectUris.length > 0) {
-        const targetUrl = String(returnUrl).trim();
+      // Security Validation: Check effectiveReturnUrl against OAuth 2.0 Redirect URIs
+      if (effectiveReturnUrl && app.redirectUris && app.redirectUris.length > 0) {
+        const targetUrl = String(effectiveReturnUrl).trim();
         const isReturnUrlAllowed = app.redirectUris.some((ru: string) => {
           const registered = ru.trim();
           if (registered === '*') return true;
@@ -226,7 +230,7 @@ export class CheckoutApiController {
             return regParsed.origin.toLowerCase() === targetParsed.origin.toLowerCase() &&
                    regParsed.pathname === targetParsed.pathname;
           } catch (_) {
-            // Support custom app URI schemes like socialstudio://oauth-callback
+            // Support custom app URI schemes like socialstudio://oauth-callback or ayuhand://payment/callback
             if (registered.includes('://') && targetUrl.includes('://')) {
               const regScheme = registered.split('://')[0].toLowerCase();
               const targetScheme = targetUrl.split('://')[0].toLowerCase();
@@ -240,12 +244,12 @@ export class CheckoutApiController {
           return res.status(400).json({
             success: false,
             error: 'invalid_redirect_uri',
-            message: `The returnUrl '${returnUrl}' is not in the allowed redirect URIs for application '${app.name}'.`,
+            message: `The returnUrl '${effectiveReturnUrl}' is not in the allowed redirect URIs for application '${app.name}'.`,
             details: {
               type: 'REDIRECT_URI_MISMATCH',
-              returnUrl,
+              returnUrl: effectiveReturnUrl,
               registeredUris: app.redirectUris,
-              hint: `Add '${returnUrl}' to OAuth 2.0 Redirect URIs in Project Settings.`,
+              hint: `Add '${effectiveReturnUrl}' to OAuth 2.0 Redirect URIs in Project Settings.`,
             },
           });
         }
@@ -382,8 +386,8 @@ export class CheckoutApiController {
             status: 'PENDING',
             title: title || '180 Pay Sovereign Checkout',
             description: description || '',
-            returnUrl: returnUrl || '',
-            cancelUrl: cancelUrl || '',
+            returnUrl: effectiveReturnUrl || '',
+            cancelUrl: effectiveCancelUrl || '',
             metadata: mergedMeta,
             expiresAt,
             userId,
@@ -410,7 +414,7 @@ export class CheckoutApiController {
         couponCode: checkoutSession.couponCode,
         currency: checkoutSession.currency,
         expiresAt: checkoutSession.expiresAt,
-        checkoutUrl: `${process.env.PROFILE_FRONTEND_URL || 'https://auth.180workspace.com'}/checkout/${checkoutSession.id}`,
+        checkoutUrl: `${process.env.PROFILE_FRONTEND_URL || 'https://profile.180core.cloud'}/checkout/${checkoutSession.id}`,
       };
 
       return res.status(200).json({
@@ -720,7 +724,10 @@ export class CheckoutApiController {
   static async verifyDirectPayment(req: Request, res: Response) {
     try {
       const id = String(req.params.id);
-      const { orderId, paymentId, signature } = req.body;
+      const orderId = req.body.orderId || req.body.order_id || req.body.razorpay_order_id;
+      const paymentId = req.body.paymentId || req.body.payment_id || req.body.razorpay_payment_id;
+      const signature = req.body.signature || req.body.razorpay_signature;
+
       if (!orderId || !paymentId || !signature) {
         return res.status(400).json({
           success: false,

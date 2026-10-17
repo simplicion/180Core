@@ -8,6 +8,12 @@ export function middleware(request: NextRequest) {
   const pathname = url.pathname;
   const appParam = url.searchParams.get('app');
 
+  // Canonical permanent redirect for deprecated 180workspace.com domains
+  if (hostname.includes('180workspace.com')) {
+    const canonicalUrl = new URL(`https://profile.180core.cloud${pathname}${url.search}`);
+    return NextResponse.redirect(canonicalUrl, 308);
+  }
+
   // Bypass internal Next.js assets, API routes, and static files
   if (
     pathname.startsWith('/_next') ||
@@ -17,7 +23,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // ─── 1. 180 AUTH (auth.180workspace.com / 180auth.* / ?app=auth) ───────────
+  // ─── 1. 180 AUTH (profile.180core.cloud / auth.180core.cloud / ?app=auth) ───────────
   const isAuthDomain =
     hostname.startsWith('auth.') ||
     hostname.startsWith('180auth.') ||
@@ -40,6 +46,20 @@ export function middleware(request: NextRequest) {
       url.pathname = '/auth/register';
       return NextResponse.rewrite(url);
     }
+    if (pathname === '/oauth/authorize') {
+      url.pathname = '/auth/login';
+      return NextResponse.rewrite(url);
+    }
+    if (pathname === '/oauth/callback') {
+      return NextResponse.next();
+    }
+    if (
+      pathname.startsWith('/.well-known') ||
+      pathname.startsWith('/certs') ||
+      pathname === '/health'
+    ) {
+      return NextResponse.next();
+    }
     // If accessing any /auth/* path on auth domain, pass through directly
     if (pathname.startsWith('/auth')) {
       return NextResponse.next();
@@ -53,7 +73,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.rewrite(url);
   }
 
-  // ─── 2. 180 PAY (pay.180workspace.com / 180pay.* / ?app=pay) ───────────────
+  // ─── 2. 180 PAY (pay.180core.cloud / 180pay.* / ?app=pay) ───────────────
   const isPayDomain =
     hostname.startsWith('pay.') ||
     hostname.startsWith('180pay.') ||
@@ -69,17 +89,23 @@ export function middleware(request: NextRequest) {
       url.searchParams.set('sessionId', 'sess_sandbox_demo');
       return NextResponse.rewrite(url);
     }
-    // If path is already /checkout/*, allow pass-through
-    if (pathname.startsWith('/checkout')) {
+    // If path is already /checkout/*, /pay/*, /link/*, /portal/*, /embed/*, allow pass-through
+    if (
+      pathname.startsWith('/checkout') ||
+      pathname.startsWith('/pay') ||
+      pathname.startsWith('/link') ||
+      pathname.startsWith('/portal') ||
+      pathname.startsWith('/embed')
+    ) {
       return NextResponse.next();
     }
-    // If visiting https://pay.180workspace.com/:sessionId directly
+    // If visiting https://pay.180core.cloud/:sessionId directly
     const cleanPath = pathname.replace(/^\//, '');
     url.pathname = `/checkout/${cleanPath}`;
     return NextResponse.rewrite(url);
   }
 
-  // ─── 3. 180 PROFILE (profile.180workspace.com / 180profile.* / Default) ────
+  // ─── 3. 180 PROFILE (profile.180core.cloud / 180profile.* / Default) ────
   // Pass-through for universal profile dashboard (/), wallet (/wallet), security (/security), settings (/settings)
   return NextResponse.next();
 }

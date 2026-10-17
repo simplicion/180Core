@@ -19,6 +19,7 @@ import {
 import toast from 'react-hot-toast';
 import { OneEightyCoreLogo } from './OneEightyCoreLogo';
 import { UserProfile } from '../types';
+import { resolveUserAvatar, getFallbackAvatar } from '@/lib/avatar';
 
 interface DesktopSidebarProps {
   user: UserProfile | null;
@@ -74,13 +75,18 @@ export function DesktopSidebar({ user, balance }: DesktopSidebarProps) {
         <div className="p-4 mx-3 mt-3 rounded-2xl bg-slate-50 dark:bg-zinc-900/60 border border-slate-200/70 dark:border-white/10 shadow-2xs">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-zinc-200 dark:bg-zinc-800 border border-zinc-300 dark:border-white/10 p-0.5 shadow-xs shrink-0 overflow-hidden">
-              {user.avatarUrl ? (
-                <img src={user.avatarUrl} alt={user.name || 'User'} className="w-full h-full rounded-2xl object-cover bg-white dark:bg-zinc-900" />
-              ) : (
-                <div className="w-full h-full bg-zinc-900 dark:bg-white rounded-2xl flex items-center justify-center text-white dark:text-zinc-950 font-extrabold text-sm">
-                  {user.name ? user.name.slice(0, 1).toUpperCase() : 'U'}
-                </div>
-              )}
+              <img
+                src={resolveUserAvatar(user)}
+                alt={user.name || 'User'}
+                referrerPolicy="no-referrer"
+                className="w-full h-full rounded-2xl object-cover bg-white dark:bg-zinc-900"
+                onError={(e) => {
+                  const fallback = getFallbackAvatar(user.name || user.username || user.email || 'User');
+                  if (e.currentTarget.src !== fallback) {
+                    e.currentTarget.src = fallback;
+                  }
+                }}
+              />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1">

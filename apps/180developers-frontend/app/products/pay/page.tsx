@@ -331,7 +331,7 @@ export default function PayProductPage() {
                 <span>2. Unified Domain Directory</span>
               </div>
               <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed text-[11px]">
-                • <strong className="text-purple-600 dark:text-purple-400">Hosted UIs:</strong> <code className="text-zinc-700 dark:text-zinc-300 font-mono">https://auth.180workspace.com/checkout</code> or <code className="text-zinc-700 dark:text-zinc-300 font-mono">/auth/login</code><br />
+                • <strong className="text-purple-600 dark:text-purple-400">Hosted UIs:</strong> <code className="text-zinc-700 dark:text-zinc-300 font-mono">https://profile.180core.cloud/checkout</code> or <code className="text-zinc-700 dark:text-zinc-300 font-mono">/auth/login</code><br />
                 • <strong className="text-blue-600 dark:text-blue-400">Core REST APIs:</strong> <code className="text-zinc-700 dark:text-zinc-300 font-mono">https://api.180core.cloud/api/v1/pay/checkout-session</code> and <code className="text-zinc-700 dark:text-zinc-300 font-mono">/api/oauth/token</code>
               </p>
             </div>
@@ -483,7 +483,7 @@ export async function createCheckoutSession(req: FastifyRequest<{ Body: CreateOr
     throw new Error(sessionData.error_description || sessionData.error || 'Failed to create 180 Pay session');
   }
 
-  // Returns: { sessionId: 'sess_...', checkoutUrl: 'https://auth.180workspace.com/checkout?sessionId=...' }
+  // Returns: { sessionId: 'sess_...', checkoutUrl: 'https://profile.180core.cloud/checkout?sessionId=...' }
   return reply.send({
     sessionId: sessionData.sessionId,
     checkoutUrl: sessionData.checkoutUrl,
@@ -504,7 +504,7 @@ class OneEightyIntegrationService {
   // ==========================================================================
   static Future<void> launchHostedLogin({required String redirectUri}) async {
     final uri = Uri.parse(
-      'https://auth.180workspace.com/auth/login?'
+      'https://profile.180core.cloud/auth/login?'
       'client_id=\$clientId&'
       'redirect_uri=\${Uri.encodeComponent(redirectUri)}&'
       'response_type=code&'
@@ -529,9 +529,9 @@ class OneEightyIntegrationService {
     String? sessionId, // Optional: returned from your server's checkout-session call
   }) async {
     final checkoutUri = sessionId != null
-      ? Uri.parse('https://auth.180workspace.com/checkout?sessionId=\$sessionId&order_id=\$orderId')
+      ? Uri.parse('https://profile.180core.cloud/checkout?sessionId=\$sessionId&order_id=\$orderId')
       : Uri.parse(
-          'https://auth.180workspace.com/checkout?'
+          'https://profile.180core.cloud/checkout?'
           'clientId=\$clientId&'
           'amount=\$amountInRupees&' // Whole currency units (e.g. 499 = ₹499 INR)
           'currency=INR&'
