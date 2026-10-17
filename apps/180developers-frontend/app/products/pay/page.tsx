@@ -33,6 +33,12 @@ export default function PayProductPage() {
   const [showDemoModal, setShowDemoModal] = useState(false);
   const [paymentResult, setPaymentResult] = useState<any>(null);
 
+  // Dynamic universal checkout state — fully agnostic to amount, currency, and merchant
+  const [testAmount, setTestAmount] = useState<string>('49.00');
+  const [testCurrency, setTestCurrency] = useState<string>('USD');
+  const [testTitle, setTestTitle] = useState<string>('Pro Developer Subscription');
+  const [testOrderId, setTestOrderId] = useState<string>(() => 'ord_dev_' + Math.random().toString(36).substring(2, 8));
+
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
     setCopiedKey(key);
@@ -41,16 +47,33 @@ export default function PayProductPage() {
   };
 
   const handleTestCheckout = () => {
+    const rawVal = testAmount.trim();
+    const parsedAmount = rawVal === '' ? 0 : parseFloat(rawVal);
+    const amountVal = isNaN(parsedAmount) ? 0 : parsedAmount;
+    const curVal = (testCurrency || 'USD').toUpperCase();
+    const dynamicOrderId = testOrderId || ('ord_dev_' + Math.random().toString(36).substring(2, 8));
+
     launch180Pay({
       sessionId: 'sess_demo_' + Math.random().toString(36).substring(2, 10),
-      amount: 499.0,
-      currency: 'INR',
-      title: '180 Developer Pro License',
-      description: 'Instant 1-Click Checkout Demo',
+      amount: amountVal,
+      currency: curVal,
+      title: testTitle || 'Dynamic Merchant Order',
+      orderId: dynamicOrderId,
+      description: 'Production-grade Universal Checkout Demo',
+      metadata: {
+        merchantOrderId: dynamicOrderId,
+        testMode: 'sandbox',
+      },
       onSuccess: (res) => {
-        setPaymentResult(res);
+        setPaymentResult({
+          ...res,
+          amount: amountVal,
+          currency: curVal,
+          orderId: dynamicOrderId,
+          title: testTitle || 'Dynamic Merchant Order',
+        });
         setShowDemoModal(true);
-        toast.success(`Payment confirmed! Transaction: ${res.transactionId || 'tx_demo'}`);
+        toast.success(`Payment confirmed! Order: ${dynamicOrderId}`);
       },
     });
   };
@@ -77,55 +100,137 @@ export default function PayProductPage() {
 
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full backdrop-blur-md bg-purple-500/10 border border-purple-500/20 text-purple-700 dark:text-purple-300 text-xs font-semibold">
           <CreditCard className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-          <span>180 Wallet & 1-Click Checkout Gateway</span>
+          <span>Universal 1-Click Sovereign Payment Gateway</span>
         </div>
 
         <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-zinc-950 dark:text-white leading-[1.1]">
           Universal Payments.{' '}
           <br />
           <span className="bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 dark:from-purple-400 dark:via-pink-300 dark:to-indigo-300 bg-clip-text text-transparent">
-            1-Click Popup Checkout & 2-Way Webhooks.
+            Any Currency. Any Sovereign Amount.
           </span>
         </h1>
 
         <p className="text-base sm:text-lg text-zinc-600 dark:text-zinc-400 max-w-2xl mx-auto leading-relaxed">
-          Accept payments instantly from customers using their 180 Profile prepaid wallet balance or UPI/Cards. 
-          Zero customer drop-off with cryptographically signed 2-way verification webhooks.
+          Production-grade gateway for developers worldwide. Accept dynamic orders in any currency (USD, EUR, GBP, INR, etc.) 
+          with instant 1-click sovereign wallet deduction and cryptographically signed 2-way verification webhooks.
         </p>
 
-        {/* Hero Actions */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
-          <Button
-            onClick={handleTestCheckout}
-            disabled={isOpeningPay}
-            size="lg"
-            className="w-full sm:w-auto rounded-2xl px-8 py-4 bg-purple-600 hover:bg-purple-500 text-white font-bold text-sm shadow-lg shadow-purple-600/25 flex items-center justify-center gap-2.5 cursor-pointer"
-          >
-            {isOpeningPay ? (
-              <span>Opening 180 Pay Popup...</span>
-            ) : (
-              <>
-                <CreditCard className="w-4 h-4" />
-                <span>Try 1-Click Checkout Demo (₹499)</span>
-                <ExternalLink className="w-3.5 h-3.5 opacity-70" />
-              </>
-            )}
-          </Button>
+        {/* ── Interactive Live Checkout Testbench (Universal Amount & Currency) ── */}
+        <div className="max-w-2xl mx-auto p-5 rounded-3xl bg-white/80 dark:bg-zinc-900/80 border border-zinc-200 dark:border-white/10 shadow-xl backdrop-blur-xl text-left space-y-4">
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-white/5 pb-3">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              <span className="text-xs font-bold uppercase tracking-wider text-zinc-900 dark:text-zinc-100">
+                Interactive Universal Sandbox Tester
+              </span>
+            </div>
+            <span className="text-[11px] font-mono text-zinc-400">Dynamic Gateway Sandbox</span>
+          </div>
 
-          <a
-            href={getDocsUrl(DOCS_LINKS.PAY_QUICKSTART)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full sm:w-auto rounded-2xl px-8 py-4 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-800 dark:text-zinc-200 font-semibold text-sm border border-zinc-200 dark:border-white/10 shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
-          >
-            <Code2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-            <span>Read 180 Pay Documentation</span>
-            <ExternalLink className="w-3.5 h-3.5 text-zinc-400" />
-          </a>
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+            <div className="sm:col-span-4 space-y-1">
+              <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Currency (ISO)</label>
+              <select
+                value={testCurrency}
+                onChange={(e) => setTestCurrency(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-xs font-semibold text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="USD">USD ($)</option>
+                <option value="EUR">EUR (€)</option>
+                <option value="GBP">GBP (£)</option>
+                <option value="INR">INR (₹)</option>
+                <option value="CAD">CAD ($)</option>
+                <option value="AUD">AUD ($)</option>
+                <option value="JPY">JPY (¥)</option>
+                <option value="SGD">SGD ($)</option>
+              </select>
+            </div>
+
+            <div className="sm:col-span-4 space-y-1">
+              <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Amount (Any Value)</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={testAmount}
+                  onChange={(e) => setTestAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-xs font-mono font-semibold text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+            </div>
+
+            <div className="sm:col-span-4 space-y-1">
+              <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Preset Samples</label>
+              <div className="flex items-center gap-1.5 pt-0.5">
+                {[
+                  { label: 'Free $0', amt: '0.00' },
+                  { label: '$9.99', amt: '9.99' },
+                  { label: '$49', amt: '49.00' },
+                  { label: '$199', amt: '199.00' },
+                ].map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => setTestAmount(preset.amt)}
+                    className="flex-1 py-1 px-1.5 rounded-lg text-[10px] font-medium bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 transition-colors"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Order / Product Title</label>
+            <input
+              type="text"
+              value={testTitle}
+              onChange={(e) => setTestTitle(e.target.value)}
+              placeholder="e.g. Acme Subscription, Coffee Roastery Bundle, etc."
+              className="w-full px-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-xs text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+
+          {/* Hero Actions */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+            <Button
+              onClick={handleTestCheckout}
+              disabled={isOpeningPay}
+              size="lg"
+              className="w-full sm:flex-1 rounded-2xl py-3.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs sm:text-sm shadow-lg shadow-purple-600/25 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {isOpeningPay ? (
+                <span>Opening 180 Pay Gateway...</span>
+              ) : (
+                <>
+                  <CreditCard className="w-4 h-4" />
+                  <span>
+                    Test Checkout ({testCurrency} {testAmount || '0.00'})
+                  </span>
+                  <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+                </>
+              )}
+            </Button>
+
+            <a
+              href={getDocsUrl(DOCS_LINKS.PAY_QUICKSTART)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full sm:w-auto rounded-2xl px-5 py-3.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-semibold text-xs border border-zinc-200 dark:border-white/10 flex items-center justify-center gap-2 transition-all cursor-pointer"
+            >
+              <Code2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              <span>API Reference</span>
+              <ExternalLink className="w-3.5 h-3.5 text-zinc-400" />
+            </a>
+          </div>
         </div>
 
         {/* Feature Pill Highlights Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-8 text-left">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 text-left">
           <div className="p-5 rounded-2xl bg-white dark:bg-zinc-900/60 border border-zinc-200 dark:border-white/10 shadow-sm space-y-1 backdrop-blur-md">
             <div className="text-2xl font-bold tracking-tight text-purple-600 dark:text-purple-400">1-Click</div>
             <div className="text-xs text-zinc-500 dark:text-zinc-400">Popup Wallet Checkout</div>
@@ -239,28 +344,38 @@ export default function PayProductPage() {
           </div>
 
           <pre className="text-xs sm:text-sm text-zinc-300 overflow-x-auto leading-relaxed font-mono">
-            {activeCodeTab === 'checkout' && `// 1. Frontend: 1-Click Sovereign Checkout (NPM or CDN Script Tag)
-// Option A: In Next.js / React with @workspace/identity-sdk
+            {activeCodeTab === 'checkout' && `// 1. Frontend: Universal 1-Click Sovereign Checkout (NPM or CDN Script Tag)
+// Fully dynamic — pass any sovereign amount, any ISO currency, and any merchant order ID
 import { OneEightyPay } from '@workspace/identity-sdk';
 
-export function handlePurchase(productId: string) {
+export function handlePurchase(order: { id: string; amount: number; currency: string; title: string }) {
   // uxMode: 'bottom_sheet' provides native in-DOM mobile-friendly slide-up sheet (No popup blockers!)
   OneEightyPay.openBottomSheet({
-    amount: 499.00,
-    currency: 'INR',
-    title: 'Pro Plan Monthly License',
+    amount: order.amount,       // Any dynamic amount (e.g. 19.99, 150.00, or 0 for free trials)
+    currency: order.currency,   // Any ISO 4217 code (USD, EUR, INR, GBP, CAD, AUD, etc.)
+    title: order.title,         // Your dynamic product/service title
+    orderId: order.id,          // Your internal merchant order ID
     description: 'Instant sovereign checkout via 180 Pay',
-    onSuccess: (res) => {
-      console.log('Payment successful! Transaction:', res.transactionId || res.orderId);
-      window.location.href = '/checkout/success?order=' + res.orderId;
+    metadata: {
+      merchantOrderId: order.id,
+      catalogItem: order.title,
     },
-    onCancel: () => console.log('Checkout dismissed')
+    onSuccess: (res) => {
+      console.log('Payment successful! Transaction:', res.transactionId, 'Order:', res.orderId);
+      window.location.href = \`/checkout/success?orderId=\${res.orderId || order.id}\`;
+    },
+    onCancel: () => console.log('Checkout dismissed by customer')
   });
 }
 
-// Option B: In Vanilla HTML / JavaScript via CDN Script Tag
+// Option B: Vanilla JavaScript / HTML via CDN Script Tag
 // <script src="https://profile.180core.cloud/sdk/v1/180-core-sdk.js" async></script>
-// window.OneEightyPay.openBottomSheet({ amount: 499, currency: 'INR', title: 'Pro Plan' });`}
+// window.OneEightyPay.openBottomSheet({
+//   amount: cart.total,
+//   currency: cart.currency,
+//   title: cart.productTitle,
+//   orderId: cart.orderId
+// });`}
 
             {activeCodeTab === 'webhook' && `// 2. Developer Backend: Cryptographic 2-Way Payment Verification
 // Using @workspace/identity-sdk official helper (Zero math errors)
@@ -289,9 +404,10 @@ app.post('/api/webhooks/180-pay', (req, res) => {
     );
 
     if (event.event === 'payment.captured' || event.type === 'payment.succeeded') {
-      console.log('Payment Confirmed for:', event.data?.customerEmail);
-      console.log('Amount Credited:', event.data?.amount, event.data?.currency);
-      // Fulfill order in your database!
+      const { amount, currency, orderId, customerEmail, transactionId } = event.data || {};
+      console.log(\`Payment Confirmed: \${currency} \${amount} for order \${orderId}\`);
+      console.log('Customer:', customerEmail, 'TxID:', transactionId);
+      // Fulfill order in your database dynamically!
     }
 
     res.status(200).json({ received: true });
@@ -300,7 +416,7 @@ app.post('/api/webhooks/180-pay', (req, res) => {
   }
 });`}
 
-            {activeCodeTab === 'node' && `// Node.js Express Complete Server: Native HMAC Verification & Session Creation
+            {activeCodeTab === 'node' && `// Node.js Express Complete Server: Native HMAC Verification & Dynamic Order Fulfillment
 const express = require('express');
 const crypto = require('crypto');
 const app = express();
@@ -342,7 +458,8 @@ app.post('/api/webhooks/180-pay', (req, res) => {
     }
 
     const event = JSON.parse(rawBody);
-    console.log('Order fulfilled for:', event.data?.customerEmail);
+    const { amount, currency, orderId, customerEmail } = event.data || {};
+    console.log(\`Order \${orderId} fulfilled: \${currency} \${amount} for \${customerEmail}\`);
     return res.status(200).json({ received: true });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -387,6 +504,8 @@ async def handle_180_webhook(
         raise HTTPException(status_code=401, detail="Invalid HMAC signature")
 
     payload_data = json.loads(raw_body)
+    data = payload_data.get("data", {})
+    print(f"Order {data.get('orderId')} confirmed: {data.get('currency')} {data.get('amount')}")
     return {"received": True}`}
           </pre>
         </div>
@@ -405,21 +524,23 @@ async def handle_180_webhook(
         {paymentResult && (
           <div className="space-y-4 text-zinc-900 dark:text-white">
             <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-              Payment was authorized from the user's 180 wallet. Webhook dispatched with <code className="text-emerald-500 font-mono">X-180-Signature</code>.
+              Payment was authorized from the user's sovereign wallet. Webhook dispatched with <code className="text-emerald-500 font-mono">X-180-Signature</code>.
             </p>
 
             <div className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 space-y-2 text-xs font-mono">
               <div>
-                <span className="text-zinc-500">Session ID:</span>{' '}
-                <span className="text-purple-600 dark:text-purple-400 truncate">{paymentResult.sessionId}</span>
+                <span className="text-zinc-500">Order ID:</span>{' '}
+                <span className="text-purple-600 dark:text-purple-400 truncate">{paymentResult.orderId || paymentResult.sessionId}</span>
               </div>
               <div>
                 <span className="text-zinc-500">Transaction ID:</span>{' '}
                 <span className="text-emerald-600 dark:text-emerald-400 truncate">{paymentResult.transactionId || 'tx_demo_captured'}</span>
               </div>
               <div>
-                <span className="text-zinc-500">Amount:</span>{' '}
-                <span className="font-bold text-zinc-900 dark:text-white">₹499.00 INR</span>
+                <span className="text-zinc-500">Captured Amount:</span>{' '}
+                <span className="font-bold text-zinc-900 dark:text-white">
+                  {paymentResult.currency} {Number(paymentResult.amount).toFixed(2)}
+                </span>
               </div>
             </div>
 

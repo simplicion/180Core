@@ -577,12 +577,15 @@
       var sessionId = options.sessionId || 'cs_' + generateRandomString(24);
 
       var query = [
-        options.amount ? 'amount=' + encodeURIComponent(options.amount) : '',
-        options.currency ? 'currency=' + encodeURIComponent(options.currency) : 'currency=USD',
+        (options.amount !== undefined && options.amount !== null) ? 'amount=' + encodeURIComponent(options.amount) : '',
+        options.currency ? 'currency=' + encodeURIComponent(String(options.currency).toUpperCase()) : 'currency=USD',
         options.title ? 'title=' + encodeURIComponent(options.title) : '',
+        options.orderId ? 'order_id=' + encodeURIComponent(options.orderId) : '',
         options.planCode ? 'plan=' + encodeURIComponent(options.planCode) : '',
         options.description ? 'description=' + encodeURIComponent(options.description) : '',
-        'appName=' + encodeURIComponent('180 Workspace'),
+        options.clientId ? 'client_id=' + encodeURIComponent(options.clientId) : (_config.clientId ? 'client_id=' + encodeURIComponent(_config.clientId) : ''),
+        options.appName ? 'appName=' + encodeURIComponent(options.appName) : '',
+        options.metadata ? 'metadata=' + encodeURIComponent(typeof options.metadata === 'string' ? options.metadata : JSON.stringify(options.metadata)) : '',
         'app=pay',
         'ux_mode=' + encodeURIComponent(options.uxMode || 'bottom_sheet'),
         'env=' + encodeURIComponent(env)

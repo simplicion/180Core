@@ -750,34 +750,28 @@ export function CheckoutClient({
       // Robust fallback for Sandbox / Demo / Standalone sessions
       if (!sessionInfo && isSandboxSession) {
         const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-        const queryAmount = urlParams?.get('amount')
-          ? parseFloat(urlParams.get('amount')!)
-          : sessionId.startsWith('sess_topup_')
-            ? 1000.0
-            : sessionId.includes('_pro_')
-              ? 5.0
-              : sessionId.includes('_starter_')
-                ? 2.0
-                : 499.0;
+        const rawQueryAmount = urlParams?.get('amount');
+        const parsedQueryAmount = rawQueryAmount !== null && rawQueryAmount !== undefined && !isNaN(parseFloat(rawQueryAmount))
+          ? parseFloat(rawQueryAmount)
+          : null;
+        const queryAmount = parsedQueryAmount !== null
+          ? parsedQueryAmount
+          : (initialAmount !== undefined ? initialAmount : 0);
         const queryTitle =
           urlParams?.get('title') ||
           (sessionId.startsWith('sess_topup_')
             ? 'Top-Up Prepaid Wallet'
-            : sessionId.startsWith('sess_dev_')
-              ? (sessionId.includes('_pro_') ? '180 Core — Pro Plan' : '180 Core — Starter Plan')
-              : '180 Core Plan');
+            : 'Order Checkout');
         const queryDesc =
           urlParams?.get('description') ||
           (sessionId.startsWith('sess_topup_')
             ? 'Universal 180 Pay Ledger Top-up'
-            : sessionId.startsWith('sess_dev_')
-              ? (sessionId.includes('_pro_') ? '10 Projects Access with 180 Identity & 180 Pay' : '5 Projects Access with 180 Identity & 180 Pay')
-              : 'Secure Online Checkout');
-        const queryCurrency = urlParams?.get('currency') || (sessionId.startsWith('sess_topup_') ? 'INR' : 'USD');
+            : 'Secure Online Checkout');
+        const queryCurrency = (urlParams?.get('currency') || (sessionId.startsWith('sess_topup_') ? 'INR' : 'USD')).toUpperCase();
         const queryApp =
           urlParams?.get('appName') ||
           urlParams?.get('app') ||
-          '180 Core';
+          'Merchant Checkout';
 
         sessionInfo = {
           id: sessionId,
@@ -925,8 +919,8 @@ export function CheckoutClient({
           type: '180_PAYMENT_SUCCESS',
           sessionId,
           transactionId: demoTxId,
-          amount: session?.amount || 499.0,
-          currency: session?.currency || 'INR',
+          amount: session?.amount !== undefined ? session.amount : (initialAmount !== undefined ? initialAmount : 0),
+          currency: (session?.currency || 'USD').toUpperCase(),
         };
         if (typeof window !== 'undefined') {
           if (window.opener) {

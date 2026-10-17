@@ -35,27 +35,31 @@ function CheckoutEntryPoint() {
         setInitializing(true);
         setError(null);
         try {
-          let orderAmount = initialAmount ? parseFloat(initialAmount) : 0;
+          const rawAmount = searchParams.get('amount');
+          let orderAmount: number | null = (rawAmount !== null && rawAmount !== undefined && !isNaN(parseFloat(rawAmount)))
+            ? parseFloat(rawAmount)
+            : null;
 
           // If amount is not explicitly provided, attempt to resolve from app pricing table config
-          if (!orderAmount || orderAmount <= 0) {
+          if (orderAmount === null) {
             try {
               const pricingRes = await fetch(getCoreApiUrl(`/api/v1/pricing-tables/${encodeURIComponent(appId)}`));
               if (pricingRes.ok) {
                 const pricingData = await pricingRes.json();
                 const cards = pricingData.config?.planCards || pricingData.data?.planCards || [];
                 const matchedCard = cards.find((c: any) => c.planCode === planCode) || cards[0];
-                if (matchedCard && matchedCard.amount) {
+                if (matchedCard && matchedCard.amount !== undefined) {
                   orderAmount = matchedCard.amount;
                 }
               }
             } catch {
-              // Proceed with fallback default
+              // Proceed
             }
           }
 
-          if (!orderAmount || orderAmount <= 0) {
-            orderAmount = 499; // Standard nominal fallback
+          if (orderAmount === null || isNaN(orderAmount) || orderAmount < 0) {
+            setError('Please specify a valid checkout amount or plan.');
+            return;
           }
 
           const res = await fetch(getCoreApiUrl('/api/v1/checkout/sessions'), {
@@ -150,7 +154,7 @@ function CheckoutEntryPoint() {
           <span>Quick SDK Integration:</span>
         </div>
         <pre className="text-[11px] font-mono text-slate-600 bg-white p-2.5 rounded-xl border border-slate-200 overflow-x-auto">
-          OneEighty.pay.checkout(&#123;{'\n'}  clientId: '180_client_your_id',{'\n'}  amount: 499,{'\n'}  planCode: 'pro_monthly'{'\n'}&#125;);
+          OneEighty.pay.checkout(&#123;{'\n'}  clientId: '180_client_your_id',{'\n'}  amount: order.amount,{'\n'}  currency: order.currency,{'\n'}  title: order.title{'\n'}&#125;);
         </pre>
       </div>
 

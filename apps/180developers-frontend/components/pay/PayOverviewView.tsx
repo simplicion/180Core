@@ -184,10 +184,12 @@ export function PayOverviewView({ onOpenUxDrawer }: { onOpenUxDrawer?: () => voi
 
   const onTestPopup = () => {
     try {
+      const cur = ((project as any)?.currency || 'USD').toUpperCase();
+      const amt = (project as any)?.defaultAmount !== undefined ? (project as any).defaultAmount : 49.0;
       OneEightyPay.openPopup({
-        amount: 499,
-        currency: 'INR',
-        title: `${project?.name || 'Developer Project'} Premium Checkout`,
+        amount: amt,
+        currency: cur,
+        title: `${project?.name || 'Developer Project'} Checkout`,
         description: 'Sandbox verification session (Popup)',
         onSuccess: (res: any) => toast.success(`Payment test passed! TxID: ${res?.transactionId || res?.sessionId || 'SUCCESS'}`),
         onCancel: () => toast('Pay checkout closed', { icon: 'ℹ️' }),
@@ -199,10 +201,12 @@ export function PayOverviewView({ onOpenUxDrawer }: { onOpenUxDrawer?: () => voi
 
   const onTestBottomSheet = () => {
     try {
+      const cur = ((project as any)?.currency || 'USD').toUpperCase();
+      const amt = (project as any)?.defaultAmount !== undefined ? (project as any).defaultAmount : 49.0;
       OneEightyPay.openBottomSheet({
-        amount: 499,
-        currency: 'INR',
-        title: `${project?.name || 'Developer Project'} Premium Checkout`,
+        amount: amt,
+        currency: cur,
+        title: `${project?.name || 'Developer Project'} Checkout`,
         description: 'Sandbox verification session (Bottom Sheet)',
         onSuccess: (res: any) => toast.success(`Payment test passed! TxID: ${res?.transactionId || res?.sessionId || 'SUCCESS'}`),
         onCancel: () => toast('Pay checkout closed', { icon: 'ℹ️' }),

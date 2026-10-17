@@ -74,6 +74,8 @@ export interface CheckoutOptions {
   title?: string;
   description?: string;
   couponCode?: string;
+  appName?: string;
+  orderId?: string;
   metadata?: Record<string, any>;
   checkoutServerUrl?: string;
   payServerUrl?: string;
@@ -1303,13 +1305,15 @@ export const OneEightyPay = {
     }
 
     const query = [
-      options.amount ? `amount=${encodeURIComponent(options.amount)}` : '',
-      options.currency ? `currency=${encodeURIComponent(options.currency)}` : '',
+      (options.amount !== undefined && options.amount !== null) ? `amount=${encodeURIComponent(options.amount)}` : '',
+      options.currency ? `currency=${encodeURIComponent(options.currency.toUpperCase())}` : 'currency=USD',
       options.title ? `title=${encodeURIComponent(options.title)}` : '',
       options.description ? `description=${encodeURIComponent(options.description)}` : '',
       options.couponCode ? `coupon=${encodeURIComponent(options.couponCode)}` : '',
       options.clientId ? `client_id=${encodeURIComponent(options.clientId)}` : '',
-      `appName=${encodeURIComponent('180 Workspace')}`,
+      options.appName ? `appName=${encodeURIComponent(options.appName)}` : '',
+      options.orderId ? `order_id=${encodeURIComponent(options.orderId)}` : '',
+      options.metadata ? `metadata=${encodeURIComponent(typeof options.metadata === 'string' ? options.metadata : JSON.stringify(options.metadata))}` : '',
       'app=pay',
       `ux_mode=${encodeURIComponent(effectiveMode)}`,
       `env=${encodeURIComponent(env)}`,
