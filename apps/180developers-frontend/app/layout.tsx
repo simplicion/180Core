@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { Toaster } from 'react-hot-toast';
 import DeveloperSupportWrapper from '../components/DeveloperSupportWrapper';
 import PortalShell from '../components/layout/PortalShell';
+import { PlatformCurrencyProvider } from '@workspace/ui';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -103,8 +104,10 @@ export default function RootLayout({
             duration: 4000,
           }}
         />
-        <PortalShell>{children}</PortalShell>
-        <DeveloperSupportWrapper />
+        <PlatformCurrencyProvider>
+          <PortalShell>{children}</PortalShell>
+          <DeveloperSupportWrapper />
+        </PlatformCurrencyProvider>
       </body>
     </html>
   );

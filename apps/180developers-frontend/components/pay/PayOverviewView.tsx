@@ -27,6 +27,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { OneEightyPay } from '@workspace/identity-sdk';
+import { usePlatformCurrency } from '@workspace/ui';
 import toast from 'react-hot-toast';
 import { useProject } from '@/context/ProjectContext';
 
@@ -144,6 +145,9 @@ export function PayOverviewView({ onOpenUxDrawer }: { onOpenUxDrawer?: () => voi
     fetchPaymentAnalytics,
     payoutBalance,
   } = useProject();
+
+  const { formatAmount, activeCurrency, activeMeta, openCurrencyModal } = usePlatformCurrency();
+  const baseCurrency = (paymentAnalytics?.currency || 'USD').toUpperCase();
 
   const [payUxModes, setPayUxModes] = useState<string[]>(
     project?.payUxModes || ['bottom_sheet', 'popup']
@@ -297,6 +301,16 @@ export function PayOverviewView({ onOpenUxDrawer }: { onOpenUxDrawer?: () => voi
           <div className="flex items-center gap-2 self-start sm:self-auto">
             <button
               type="button"
+              onClick={openCurrencyModal}
+              className="px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-zinc-900 text-xs font-semibold text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer flex items-center gap-1.5"
+              title="Change display currency"
+            >
+              <span className="text-sm">{activeMeta.flag}</span>
+              <span>{activeCurrency} ({activeMeta.symbol})</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => {
                 const el = document.getElementById('transactions');
                 if (el) {
@@ -331,7 +345,7 @@ export function PayOverviewView({ onOpenUxDrawer }: { onOpenUxDrawer?: () => voi
               <Activity className="w-3.5 h-3.5 text-blue-500" />
             </div>
             <div className="text-lg font-bold text-zinc-950 dark:text-white">
-              {paymentAnalytics?.currency || 'INR'} {(paymentAnalytics?.grossVolume || 0).toLocaleString()}
+              {formatAmount(paymentAnalytics?.grossVolume || 0, baseCurrency)}
             </div>
             <p className="text-[10px] text-zinc-400">Captured lifetime revenue</p>
           </div>
@@ -342,7 +356,7 @@ export function PayOverviewView({ onOpenUxDrawer }: { onOpenUxDrawer?: () => voi
               <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
             </div>
             <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
-              {paymentAnalytics?.currency || 'INR'} {(paymentAnalytics?.thisMonthVolume || 0).toLocaleString()}
+              {formatAmount(paymentAnalytics?.thisMonthVolume || 0, baseCurrency)}
             </div>
             <p className="text-[10px] text-zinc-400">Current calendar cycle</p>
           </div>
@@ -353,7 +367,7 @@ export function PayOverviewView({ onOpenUxDrawer }: { onOpenUxDrawer?: () => voi
               <Clock className="w-3.5 h-3.5 text-amber-500" />
             </div>
             <div className="text-lg font-bold text-amber-600 dark:text-amber-400">
-              {paymentAnalytics?.currency || 'INR'} {(paymentAnalytics?.pendingSettlements || 0).toLocaleString()}
+              {formatAmount(paymentAnalytics?.pendingSettlements || 0, baseCurrency)}
             </div>
             <p className="text-[10px] text-zinc-400">In T+1 clearing cycle</p>
           </div>
@@ -364,7 +378,7 @@ export function PayOverviewView({ onOpenUxDrawer }: { onOpenUxDrawer?: () => voi
               <Landmark className="w-3.5 h-3.5 text-purple-500" />
             </div>
             <div className="text-lg font-bold text-purple-600 dark:text-purple-400">
-              {paymentAnalytics?.currency || 'INR'} {(payoutBalance || paymentAnalytics?.withdrawableBalance || 0).toLocaleString()}
+              {formatAmount(payoutBalance || paymentAnalytics?.withdrawableBalance || 0, baseCurrency)}
             </div>
             <p className="text-[10px] text-zinc-400">Available for payout</p>
           </div>
@@ -396,7 +410,7 @@ export function PayOverviewView({ onOpenUxDrawer }: { onOpenUxDrawer?: () => voi
                 <span>Purchase Intents</span>
               </div>
               <div className="text-base font-bold text-zinc-900 dark:text-white font-mono">
-                ₹{totalIntentsVolume.toLocaleString()}
+                {formatAmount(totalIntentsVolume, baseCurrency)}
               </div>
               <p className="text-[10px] text-zinc-400 font-sans">
                 {totalIntentsCount} sheets initiated
@@ -409,7 +423,7 @@ export function PayOverviewView({ onOpenUxDrawer }: { onOpenUxDrawer?: () => voi
                 <span>Gateway Invocations</span>
               </div>
               <div className="text-base font-bold text-amber-600 dark:text-amber-400 font-mono">
-                ₹{(gatewayAttemptsVolume + capturedVolume).toLocaleString()}
+                {formatAmount(gatewayAttemptsVolume + capturedVolume, baseCurrency)}
               </div>
               <p className="text-[10px] text-zinc-400 font-sans">
                 {gatewayAttemptsCount + capturedCount} opened gateway
@@ -422,7 +436,7 @@ export function PayOverviewView({ onOpenUxDrawer }: { onOpenUxDrawer?: () => voi
                 <span>Captured Revenue</span>
               </div>
               <div className="text-base font-bold text-emerald-600 dark:text-emerald-400 font-mono">
-                ₹{capturedVolume.toLocaleString()}
+                {formatAmount(capturedVolume, baseCurrency)}
               </div>
               <p className="text-[10px] text-zinc-400 font-sans">
                 {capturedCount} settled payments

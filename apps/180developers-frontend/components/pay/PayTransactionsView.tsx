@@ -28,11 +28,13 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { useProject } from '@/context/ProjectContext';
+import { usePlatformCurrency } from '@workspace/ui';
 
 type FilterStatus = 'ALL' | 'CAPTURED' | 'GATEWAY_DROPPED' | 'INTENT_ONLY' | 'FAILED';
 
 export function PayTransactionsView() {
   const { paymentAnalytics, loadingAnalytics, fetchPaymentAnalytics, copiedKey, copyToClipboard } = useProject();
+  const { formatAmount } = usePlatformCurrency();
 
   const [txSearchQuery, setTxSearchQuery] = useState('');
   const deferredTxSearchQuery = useDeferredValue(txSearchQuery);
@@ -277,7 +279,7 @@ export function PayTransactionsView() {
                 <div className="text-right">
                   <span className="text-[10px] text-zinc-400 uppercase tracking-wider block font-medium">Total Amount</span>
                   <div className="text-lg font-black text-zinc-950 dark:text-white font-mono">
-                    {selectedTx.currency || 'INR'} {(selectedTx.amount || 0).toLocaleString()}
+                    {formatAmount(selectedTx.amount || 0, selectedTx.currency || 'USD')}
                   </div>
                 </div>
               </div>
@@ -286,13 +288,13 @@ export function PayTransactionsView() {
                 <div className="p-2.5 rounded-xl bg-white dark:bg-zinc-800/50 border border-zinc-200/60 dark:border-white/5">
                   <span className="text-[10px] text-zinc-400 block">Original Price</span>
                   <span className="font-bold text-zinc-900 dark:text-white font-mono">
-                    ₹{(selectedTx.originalAmount || selectedTx.amount || 0).toLocaleString()}
+                    {formatAmount(selectedTx.originalAmount || selectedTx.amount || 0, selectedTx.currency || 'USD')}
                   </span>
                 </div>
                 <div className="p-2.5 rounded-xl bg-white dark:bg-zinc-800/50 border border-zinc-200/60 dark:border-white/5">
                   <span className="text-[10px] text-zinc-400 block">Discount Applied</span>
                   <span className="font-bold text-zinc-900 dark:text-white font-mono">
-                    {selectedTx.discountAmount ? `-₹${selectedTx.discountAmount}` : '₹0.00'}
+                    {selectedTx.discountAmount ? `-${formatAmount(selectedTx.discountAmount, selectedTx.currency || 'USD')}` : formatAmount(0, selectedTx.currency || 'USD')}
                   </span>
                 </div>
                 <div className="p-2.5 rounded-xl bg-white dark:bg-zinc-800/50 border border-zinc-200/60 dark:border-white/5">
@@ -646,8 +648,8 @@ export function PayTransactionsView() {
                             </button>
                           </div>
                         </td>
-                        <td className="px-4 py-3 font-bold text-zinc-950 dark:text-white">
-                          {tx.currency || 'INR'} {(tx.amount || 0).toLocaleString()}
+                        <td className="px-4 py-3 font-bold text-zinc-950 dark:text-white font-mono">
+                          {formatAmount(tx.amount || 0, tx.currency || 'USD')}
                         </td>
                         <td className="px-4 py-3 font-sans">
                           <div className="text-zinc-900 dark:text-white font-medium text-xs">

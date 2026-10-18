@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Settings, Loader2 } from 'lucide-react';
+import { Settings, Loader2, ChevronDown } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { usePlatformCurrency } from '@workspace/ui';
 import { AppShellLayout } from '@/components/common/AppShellLayout';
 import { PaySidebar } from '@/components/pay/PaySidebar';
 import { PayBottomNav } from '@/components/pay/PayBottomNav';
@@ -12,6 +13,7 @@ import { useProject } from '@/context/ProjectContext';
 
 export default function PayOverviewPage() {
   const { enablePay, setEnablePay, saveSettings, saving } = useProject();
+  const { activeCurrency, activeMeta, openCurrencyModal } = usePlatformCurrency();
   const [isUxDrawerOpen, setIsUxDrawerOpen] = useState(false);
   const [isTogglingPay, setIsTogglingPay] = useState(false);
 
@@ -38,6 +40,20 @@ export default function PayOverviewPage() {
         badgeColor="purple"
         action={
           <div className="flex items-center gap-2.5">
+            {/* Global Currency Selector (from 180 Checkout) */}
+            <button
+              type="button"
+              onClick={openCurrencyModal}
+              className="px-3 py-1.5 rounded-2xl bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-white/10 text-zinc-700 dark:text-zinc-200 shadow-2xs transition-all cursor-pointer flex items-center gap-2 group active:scale-95"
+              title="Change Display Currency (Auto-detected from your location, defaults to USD)"
+            >
+              <span className="text-base leading-none">{activeMeta.flag}</span>
+              <span className="text-xs font-bold font-mono text-zinc-900 dark:text-white">
+                {activeCurrency} ({activeMeta.symbol})
+              </span>
+              <ChevronDown className="w-3.5 h-3.5 text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-200 transition-transform" />
+            </button>
+
             {/* Enable / Disable 180 Pay Toggle Button */}
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 shadow-2xs">
               <div className="flex items-center gap-1.5">

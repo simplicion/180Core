@@ -79,3 +79,9 @@ export * from './components/AICreditDrawer';
 export * from './components/PlatformDrawer';
 export * from './components/OneEightyCoreLogo';
 export * from './components/FloatingSupportWidget';
+
+// Shared Location & Currency Services & Modals
+export * from './lib/location-service';
+export * from './lib/currency-service';
+export * from './components/CurrencySelectorModal';
+export * from './context/PlatformCurrencyContext';

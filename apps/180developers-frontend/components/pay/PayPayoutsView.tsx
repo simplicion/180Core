@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useProject } from '@/context/ProjectContext';
+import { usePlatformCurrency } from '@workspace/ui';
 import { BankDetailsDrawer } from './BankDetailsDrawer';
 
 export function PayPayoutsView() {
@@ -72,14 +73,11 @@ export function PayPayoutsView() {
     }
   }, [bankDetails]);
 
+  const { formatAmount, activeMeta } = usePlatformCurrency();
   // Currency Formatter
-  const currencySymbol = paymentAnalytics?.currency === 'USD' ? '$' : '₹';
+  const currencySymbol = activeMeta.symbol;
   const formatCurrency = (val: number) => {
-    const num = Number(val) || 0;
-    return `${currencySymbol}${num.toLocaleString(paymentAnalytics?.currency === 'USD' ? 'en-US' : 'en-IN', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
+    return formatAmount(val, paymentAnalytics?.currency || 'USD');
   };
 
   // 1. Gross Volume Received from Customer Payments
