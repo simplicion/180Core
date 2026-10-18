@@ -936,29 +936,33 @@ export class IdentityAuthController {
         try {
             const rawInput = req.body.emailOrPhone || req.body.credential || req.body.email || req.body.phone;
             if (!rawInput) {
-                return res.status(400).json({ success: false, error: 'missing_field', message: 'Email address is required' });
+                return res.status(400).json({ success: false, error: 'missing_field', message: 'Email address, username, or phone number is required' });
             }
 
             const cleanInput = String(rawInput).trim();
-            const isEmail = cleanInput.includes('@');
+            const phoneMeta = Msg91OtpService.normalizePhone(cleanInput);
 
-            if (!isEmail) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'phone_verification_unavailable',
-                    message: 'Mobile verification is currently unavailable. Please enter your registered email address to receive a reset code.'
-                });
-            }
-
+            // Flexible sovereign identity resolution: Email, Username, or Phone number
             const user = await prisma.user.findFirst({
-                where: { email: { equals: cleanInput, mode: 'insensitive' } }
+                where: {
+                    OR: [
+                        { email: { equals: cleanInput, mode: 'insensitive' } },
+                        { username: { equals: cleanInput, mode: 'insensitive' } },
+                        ...(phoneMeta?.e164 ? [
+                            { phone: phoneMeta.e164 },
+                            { phone: phoneMeta.national },
+                            { phone: phoneMeta.msg91Mobile },
+                            { phone: `+${phoneMeta.national}` }
+                        ] : [{ phone: cleanInput }])
+                    ]
+                }
             });
 
             if (!user) {
                 return res.status(404).json({
                     success: false,
                     error: 'user_not_found',
-                    message: 'No account found with this email address.'
+                    message: 'No account found matching this email address, username, or phone number.'
                 });
             }
 
@@ -970,19 +974,46 @@ export class IdentityAuthController {
                 data: { otpCode, otpExpiresAt }
             });
 
-            // Dispatch via Email SMTP or MSG91 WhatsApp
-            if (isEmail) {
+            let channel: 'email' | 'whatsapp' = 'email';
+            let target = user.email || '';
+
+            // Priority 1: If user has an email, dispatch via Email SMTP
+            if (user.email) {
+                channel = 'email';
+                target = user.email;
                 try {
-                    await EmailOtpService.sendPasswordResetOtp(cleanInput, otpCode);
+                    const emailResult = await EmailOtpService.sendPasswordResetOtp(user.email, otpCode);
+                    if (!emailResult.success) {
+                        console.warn('[IdentityAuthController] Email OTP send failed:', emailResult.message);
+                        if (user.phone) {
+                            await Msg91OtpService.sendWhatsAppOtp(user.phone, otpCode);
+                            channel = 'whatsapp';
+                            target = user.phone;
+                        }
+                    }
                 } catch (emailErr: any) {
-                    console.warn('[IdentityAuthController] Email OTP dispatch note:', emailErr.message);
+                    console.warn('[IdentityAuthController] Email OTP dispatch error:', emailErr.message);
+                    if (user.phone) {
+                        await Msg91OtpService.sendWhatsAppOtp(user.phone, otpCode);
+                        channel = 'whatsapp';
+                        target = user.phone;
+                    }
                 }
             } else if (user.phone) {
+                // Priority 2: Dispatch via WhatsApp
+                channel = 'whatsapp';
+                target = user.phone;
                 try {
                     await Msg91OtpService.sendWhatsAppOtp(user.phone, otpCode);
                 } catch (smsErr: any) {
                     console.warn('[IdentityAuthController] Msg91 dispatch note:', smsErr.message);
                 }
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    error: 'no_contact_method',
+                    message: 'No verified email or mobile phone is linked to this account for password recovery.'
+                });
             }
 
             const tempToken = signTempToken({
@@ -991,14 +1022,19 @@ export class IdentityAuthController {
                 purpose: 'forgot_password'
             });
 
+            // Mask target for user privacy
+            const maskedTarget = channel === 'email'
+                ? target.replace(/^(.)(.*)(@.*)$/, (_, a, b, c) => `${a}***${c}`)
+                : target.slice(-4).padStart(target.length, '*');
+
             return res.json({
                 success: true,
-                channel: isEmail ? 'email' : 'whatsapp',
+                channel,
                 tempToken,
                 identifier: cleanInput,
-                message: isEmail
-                    ? `Verification code sent to ${cleanInput}`
-                    : `Verification code sent to your registered phone`,
+                message: channel === 'email'
+                    ? `Verification code sent to ${maskedTarget}`
+                    : `Verification code dispatched to WhatsApp (${maskedTarget})`,
                 devOtp: process.env.NODE_ENV !== 'production' ? otpCode : undefined
             });
         } catch (err: any) {
@@ -1024,17 +1060,26 @@ export class IdentityAuthController {
                 return res.status(400).json({
                     success: false,
                     error: 'missing_fields',
-                    message: 'Email or phone and verification code are required'
+                    message: 'Email, username, or phone and verification code are required'
                 });
             }
 
             const cleanInput = String(emailOrPhone).trim();
-            const isEmail = cleanInput.includes('@');
+            const phoneMeta = Msg91OtpService.normalizePhone(cleanInput);
 
             const user = await prisma.user.findFirst({
-                where: isEmail
-                    ? { email: { equals: cleanInput, mode: 'insensitive' } }
-                    : { phone: cleanInput }
+                where: {
+                    OR: [
+                        { email: { equals: cleanInput, mode: 'insensitive' } },
+                        { username: { equals: cleanInput, mode: 'insensitive' } },
+                        ...(phoneMeta?.e164 ? [
+                            { phone: phoneMeta.e164 },
+                            { phone: phoneMeta.national },
+                            { phone: phoneMeta.msg91Mobile },
+                            { phone: `+${phoneMeta.national}` }
+                        ] : [{ phone: cleanInput }])
+                    ]
+                }
             });
 
             if (!user) {
@@ -1044,7 +1089,7 @@ export class IdentityAuthController {
             let isValidOtp = false;
             if (user.otpCode === String(otp).trim() && user.otpExpiresAt && user.otpExpiresAt > new Date()) {
                 isValidOtp = true;
-            } else if (!isEmail && user.phone) {
+            } else if (user.phone) {
                 const whatsappVerify = await Msg91OtpService.verifyWhatsAppOtp(user.phone, String(otp).trim());
                 isValidOtp = whatsappVerify.valid;
             }
@@ -1105,12 +1150,21 @@ export class IdentityAuthController {
             }
 
             const cleanInput = String(emailOrPhone).trim();
-            const isEmail = cleanInput.includes('@');
+            const phoneMeta = Msg91OtpService.normalizePhone(cleanInput);
 
             const user = await prisma.user.findFirst({
-                where: isEmail
-                    ? { email: { equals: cleanInput, mode: 'insensitive' } }
-                    : { phone: cleanInput }
+                where: {
+                    OR: [
+                        { email: { equals: cleanInput, mode: 'insensitive' } },
+                        { username: { equals: cleanInput, mode: 'insensitive' } },
+                        ...(phoneMeta?.e164 ? [
+                            { phone: phoneMeta.e164 },
+                            { phone: phoneMeta.national },
+                            { phone: phoneMeta.msg91Mobile },
+                            { phone: `+${phoneMeta.national}` }
+                        ] : [{ phone: cleanInput }])
+                    ]
+                }
             });
 
             if (!user) {

@@ -25,11 +25,7 @@ function ForgotPasswordContent() {
     e.preventDefault();
     const cleanInput = emailOrPhone.trim();
     if (!cleanInput) {
-      toast.error('Please enter your email address');
-      return;
-    }
-    if (!cleanInput.includes('@')) {
-      toast.error('Please enter a valid email address');
+      toast.error('Please enter your email, username, or phone number');
       return;
     }
 
@@ -56,7 +52,7 @@ function ForgotPasswordContent() {
         throw new Error(data.message || 'Failed to dispatch reset code');
       }
 
-      toast.success(data.message || 'Verification code dispatched to your email!', { id: toastId });
+      toast.success(data.message || 'Verification code dispatched!', { id: toastId });
 
       // Navigate to dedicated OTP verification screen
       const resetParams = new URLSearchParams(searchParams.toString());
@@ -82,20 +78,20 @@ function ForgotPasswordContent() {
           </div>
           <h2 className="text-lg font-bold text-slate-900 tracking-tight">Forgot Password</h2>
           <p className="text-xs text-slate-500">
-            Enter your registered email address to receive a 6-digit verification code
+            Enter your registered email, username, or phone to receive a verification code
           </p>
         </div>
 
         <form onSubmit={handleForgotSubmit} className="space-y-3.5">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Email, Username or Phone</label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                 <Mail className="w-4 h-4" />
               </div>
               <input
-                type="email"
-                placeholder="name@company.com"
+                type="text"
+                placeholder="name@company.com or username"
                 value={emailOrPhone}
                 onChange={(e) => setEmailOrPhone(e.target.value)}
                 className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-10 pr-3.5 py-2.5 min-h-[42px] text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
@@ -104,7 +100,7 @@ function ForgotPasswordContent() {
               />
             </div>
             <p className="text-[11px] text-slate-400 mt-1">
-              We will dispatch a secure 6-digit reset code to this email.
+              We will dispatch a secure 6-digit verification code to your registered email or phone.
             </p>
           </div>
 

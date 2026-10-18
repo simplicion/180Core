@@ -258,6 +258,7 @@ export async function seedFirstPartyOAuthApps(): Promise<void> {
         }
 
         // Consolidate legacy alias duplicate app rows if any exist in DB
+        const canonicalClientId = getPlatformClientId();
         for (const legacyAlias of KNOWN_LEGACY_ALIASES) {
             if (legacyAlias.toLowerCase() === canonicalClientId.toLowerCase()) continue;
             try {
