@@ -7,6 +7,9 @@ const rawUrl =
   'https://api.180core.cloud';
 const backendUrl = rawUrl.includes(':4004') ? 'http://localhost:4003' : rawUrl.replace(/\/+$/, '');
 
+export const dynamic = 'force-static';
+export const revalidate = 3600;
+
 export async function GET() {
   try {
     const res = await fetch(`${backendUrl}/.well-known/openid-configuration`, {
