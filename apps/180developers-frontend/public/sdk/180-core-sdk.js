@@ -6,8 +6,8 @@
  * Supported Platforms: Universal Web (React, Next.js, Vue, Angular, HTML/Vanilla, WordPress, Shopify)
  *                      Mobile WebViews (Flutter, React Native, Android WebView, iOS WKWebView)
  * 
- * CDN Delivery: https://cdn.180workspace.com/sdk/v1/180-core-sdk.js
- *               https://180workspace.com/sdk/v1/180-core-sdk.js
+ * CDN Delivery: https://profile.180core.cloud/sdk/v1/180-core-sdk.js
+ *               https://api.180core.cloud/sdk/v1/180-core-sdk.js
  */
 (function (global) {
   'use strict';

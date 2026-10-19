@@ -16,6 +16,7 @@ export function getPlatformClientId(): string {
  */
 export const KNOWN_LEGACY_ALIASES = [
     '180-core',
+    '180-core-platform',
     '180-core-client',
     '180_core_client',
     '180-workspace-platform',
@@ -118,9 +119,9 @@ export function getFirstPartyAppsConfig() {
     }
 
     apps.push({
-        clientId: '180-workspace-platform',
-        name: '180 Workspace Platform',
-        description: 'First-party corporate workspace platform',
+        clientId: '180-core-platform',
+        name: '180 Core Platform',
+        description: 'First-party sovereign core platform',
         redirectUris: ['http://localhost:3000/auth/callback', 'http://localhost:3000/callback', 'https://profile.180core.cloud/auth/callback'],
         allowedOrigins: ['http://localhost:3000', 'https://profile.180core.cloud'],
         allowedScopes: ['openid', 'identity:read', 'identity:email', 'identity:phone'],
@@ -317,7 +318,7 @@ export async function seedFirstPartyOAuthApps(): Promise<void> {
 }
 
 /**
- * Checks if a given client ID or application identifier belongs to the official 180 Workspace first-party ecosystem.
+ * Checks if a given client ID or application identifier belongs to the official 180 Core first-party ecosystem.
  * Dynamically resolves against environment configuration.
  */
 export function isFirstPartyApp(clientIdOrId: string | undefined | null): boolean {

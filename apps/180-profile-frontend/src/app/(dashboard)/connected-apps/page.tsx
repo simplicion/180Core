@@ -34,7 +34,7 @@ function getFormattedAppName(name: string): string {
   const lower = name.toLowerCase().trim();
   if (lower === '180 social studio') return '180 Social Studio';
   if (lower === '180 developers console' || lower === '180 developer portal') return '180 Developers Console';
-  if (lower === '180 workspace' || lower === '180workspace') return '180 Workspace';
+  if (lower === '180 core' || lower === '180core' || lower === '180 workspace' || lower === '180workspace') return '180 Core';
   if (lower === '180 traffic director') return '180 Traffic Director';
   return name;
 }

@@ -46,8 +46,8 @@ export function AppLogoUploader({
       url.includes('.r2.dev') ||
       url.includes('.r2.cloudflarestorage.com') ||
       url.includes('reels-cdn') ||
-      url.includes('180workspace.com/brands') ||
-      url.includes('180workspace.com/media')
+      url.includes('180core.cloud/brands') ||
+      url.includes('180core.cloud/media')
     );
   };
 

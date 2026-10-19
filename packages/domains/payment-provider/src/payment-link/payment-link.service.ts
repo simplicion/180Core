@@ -178,7 +178,7 @@ export class PaymentLinkService {
         isAvailable: true,
         isSoldOut: false,
         merchant: {
-          name: '180 Workspace Merchant',
+          name: '180 Core Merchant',
           logoUrl: '',
           clientId: 'preview',
         },
@@ -296,7 +296,7 @@ export class PaymentLinkService {
       isSoldOut,
       regionalPricing,
       merchant: {
-        name: link.app?.name || '180 Workspace Merchant',
+        name: link.app?.name || '180 Core Merchant',
         logoUrl: link.app?.logoUrl || '',
         clientId: link.app?.clientId || '',
       },

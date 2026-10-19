@@ -1,7 +1,7 @@
 {
   "name": "@workspace/integrations",
   "version": "1.0.0",
-  "description": "External API Integrations domain for 180workspace",
+  "description": "External API Integrations domain for 180 Core",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {

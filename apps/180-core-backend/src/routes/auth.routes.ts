@@ -48,6 +48,7 @@ router.post('/reset-password/verify-otp', authRateLimiter, AuthApiController.ver
 router.post('/reset-password', authRateLimiter, AuthApiController.resetPassword);
 router.post('/google-continue', authRateLimiter, AuthApiController.googleContinue);
 router.get('/google-config', AuthApiController.getGoogleConfig);
+router.get('/smtp-status', AuthApiController.getSmtpStatus);
 
 // ─── OTP & Verification ──────────────────────────────────────────────────────
 router.post('/otp/send-whatsapp', otpRateLimiter, AuthApiController.sendOtp);

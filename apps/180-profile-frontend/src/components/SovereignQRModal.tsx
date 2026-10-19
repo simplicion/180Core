@@ -31,7 +31,7 @@ export function UniversalQRModal({ isOpen, onClose, userId, userName }: Universa
     >
       <div className="space-y-6 text-slate-800 text-xs text-center pt-2">
         <p className="text-slate-500 text-xs max-w-sm mx-auto">
-          Scan this QR code with any 180 Workspace companion mobile app or hardware key to authenticate instantly.
+          Scan this QR code with any 180 Core companion mobile app or hardware key to authenticate instantly.
         </p>
 
         {/* QR Code Container */}

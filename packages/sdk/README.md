@@ -1,8 +1,8 @@
-# @180workspace/sdk
+# @180core/sdk
 
 Official Universal Client SDK for **180 Identity** (Single Sign-On & WhatsApp 1-Tap Auth) and **180 Pay** (Universal Sovereign Checkout).
 
-[![npm version](https://img.shields.io/npm/v/@180workspace/sdk.svg)](https://www.npmjs.com/package/@180workspace/sdk)
+[![npm version](https://img.shields.io/npm/v/@180core/sdk.svg)](https://www.npmjs.com/package/@180core/sdk)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
 
 ---
@@ -10,11 +10,11 @@ Official Universal Client SDK for **180 Identity** (Single Sign-On & WhatsApp 1-
 ## Installation
 
 ```bash
-npm install @180workspace/sdk
+npm install @180core/sdk
 # or
-pnpm add @180workspace/sdk
+pnpm add @180core/sdk
 # or
-yarn add @180workspace/sdk
+yarn add @180core/sdk
 ```
 
 ---
@@ -26,7 +26,7 @@ yarn add @180workspace/sdk
 ```tsx
 'use client';
 
-import { OneEightyAuth } from '@180workspace/sdk';
+import { OneEightyAuth } from '@180core/sdk';
 
 export function LoginButton() {
   const handleLogin = async () => {
@@ -56,7 +56,7 @@ export function LoginButton() {
 ### 2. Universal Sovereign Checkout (180 Pay)
 
 ```typescript
-import { OneEightyPay } from '@180workspace/sdk';
+import { OneEightyPay } from '@180core/sdk';
 
 // Trigger one-click bottom-sheet checkout
 await OneEightyPay.checkout({
@@ -84,7 +84,7 @@ import { NextResponse } from 'next/server';
 export async function POST(req: Request) {
   const { code } = await req.json();
 
-  const tokenResp = await fetch('https://services.180workspace.com/api/oauth/token', {
+  const tokenResp = await fetch('https://api.180core.cloud/api/oauth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -105,6 +105,6 @@ export async function POST(req: Request) {
 
 ## Documentation & Support
 
-- **API Documentation**: [https://docs.180workspace.com](https://docs.180workspace.com)
-- **Developer Portal**: [https://developers.180workspace.com](https://developers.180workspace.com)
-- **Status Page**: [https://status.180workspace.com](https://status.180workspace.com)
+- **API Documentation**: [https://docs.180core.cloud](https://docs.180core.cloud)
+- **Developer Portal**: [https://developer.180core.cloud](https://developer.180core.cloud)
+- **Status Page**: [https://status.180core.cloud](https://status.180core.cloud)

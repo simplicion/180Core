@@ -16,7 +16,7 @@ import { UsernameService } from '../user/username.service';
 
 /**
  * Architectural Best Practice: First-Party Ecosystem Auto-Whitelisting
- * 180 Workspace and official client apps (Pitch in 180, Social Studio, Developer Portal)
+ * 180 Core and official client apps (Pitch in 180, Social Studio, Developer Portal)
  * are recognized first-party origins.
  */
 function isFirstPartyOrigin(origin: string | undefined): boolean {
@@ -34,10 +34,6 @@ function isFirstPartyOrigin(origin: string | undefined): boolean {
 
         // 180 Ecosystem domains
         if (host === '180core.cloud' || host.endsWith('.180core.cloud')) {
-            return true;
-        }
-
-        if (host === '180workspace.com' || host.endsWith('.180workspace.com')) {
             return true;
         }
 
@@ -103,7 +99,7 @@ export class OAuthController {
                         allowedOrigins: fp.allowedOrigins,
                         allowedScopes: fp.allowedScopes,
                         logoUrl: fp.logoUrl,
-                        homepageUrl: 'https://180workspace.com',
+                        homepageUrl: 'https://180core.cloud',
                         isVerified: true,
                         isActive: true,
                         enableAuth: true,
@@ -390,7 +386,7 @@ export class OAuthController {
                         allowedOrigins: fp.allowedOrigins,
                         allowedScopes: fp.allowedScopes,
                         logoUrl: fp.logoUrl,
-                        homepageUrl: 'https://180workspace.com',
+                        homepageUrl: 'https://180core.cloud',
                         isVerified: true,
                         isActive: true,
                         authDesktopDefault: (fp as any).authDesktopDefault || 'popup',
@@ -477,7 +473,7 @@ export class OAuthController {
                         allowedOrigins: fp.allowedOrigins,
                         allowedScopes: fp.allowedScopes,
                         logoUrl: fp.logoUrl,
-                        homepageUrl: 'https://180workspace.com',
+                        homepageUrl: 'https://180core.cloud',
                         isVerified: true,
                         isActive: true,
                         enableAuth: true,
@@ -632,7 +628,7 @@ export class OAuthController {
                     code,
                     appId: app.id,
                     userId,
-                    redirectUri: targetRedirectUri || 'https://180workspace.com/oauth/callback',
+                    redirectUri: targetRedirectUri || 'https://profile.180core.cloud/oauth/callback',
                     scopes: requestedScopes,
                     codeChallenge: code_challenge || null,
                     codeChallengeMethod: code_challenge_method || 'S256',
@@ -1322,7 +1318,7 @@ export class OAuthController {
                     lowerName.includes('social')
                         ? 'Multi-Channel Social Media Automation & Analytics'
                         : lowerName.includes('developer')
-                            ? 'Developer Console & API Management for 180 Workspace'
+                            ? 'Developer Console & API Management for 180 Core'
                             : 'Authorized Sovereign 180 application'
                 );
 

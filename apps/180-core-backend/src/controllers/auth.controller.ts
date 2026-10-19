@@ -7,6 +7,7 @@ import {
   OAuthController as DomainOAuthController,
   IdentityAuthController as DomainIdentityAuthController,
   Msg91OtpService,
+  EmailOtpService,
   UsernameService,
   LocationService,
 } from '@workspace/identity-provider';
@@ -34,6 +35,15 @@ export class AuthApiController {
   static resetPassword = DomainIdentityAuthController.resetPassword;
   static googleContinue = DomainIdentityAuthController.googleContinue;
   static getGoogleConfig = DomainIdentityAuthController.getGoogleConfig;
+
+  static async getSmtpStatus(req: Request, res: Response) {
+    try {
+      const status = await EmailOtpService.verifyConnection();
+      return res.status(status.success ? 200 : 503).json(status);
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
 
   static async sendOtp(req: Request, res: Response) {
     try {

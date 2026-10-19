@@ -57,7 +57,7 @@ const MODE_CONFIG: Record<AIDrawerMode, {
         subtitle: 'Live Dynamic Question & Theme Engine',
         icon: <Layers className="w-4 h-4 text-violet-300" />,
         themeGradient: 'from-violet-600 via-indigo-600 to-purple-600',
-        welcomeText: (name) => `👋 Hello! I am your **180 Workspace AI Form Architect**.\n\nI have full live awareness of your form${name ? ` **"${name}"**` : ''}. Instruct me to generate new questions, change color themes, add 5-star ratings or resume uploads, or split your form into multi-step pages.`,
+        welcomeText: (name) => `👋 Hello! I am your **180 Core AI Form Architect**.\n\nI have full live awareness of your form${name ? ` **"${name}"**` : ''}. Instruct me to generate new questions, change color themes, add 5-star ratings or resume uploads, or split your form into multi-step pages.`,
         quickPrompts: [
             { label: '📋 Client Onboarding', prompt: 'Build a comprehensive Client Onboarding form with contact info, company size, budget range, timeline, and requirements' },
             { label: '💼 Job Application with Resume', prompt: 'Create a job application form with role selection, experience years, portfolio link, and resume file upload' },
@@ -73,7 +73,7 @@ const MODE_CONFIG: Record<AIDrawerMode, {
         subtitle: 'Live Landing Page & AST Synthesizer',
         icon: <Globe className="w-4 h-4 text-indigo-300" />,
         themeGradient: 'from-indigo-600 via-blue-600 to-purple-600',
-        welcomeText: (name) => `👋 Hello! I am your **180 Workspace AI Website Architect**.\n\nI have full live awareness of your website canvas${name ? ` **"${name}"**` : ''}. Instruct me to generate complete landing pages, change visual themes, add pricing matrices, or insert customer testimonials.`,
+        welcomeText: (name) => `👋 Hello! I am your **180 Core AI Website Architect**.\n\nI have full live awareness of your website canvas${name ? ` **"${name}"**` : ''}. Instruct me to generate complete landing pages, change visual themes, add pricing matrices, or insert customer testimonials.`,
         quickPrompts: [
             { label: '🚀 SaaS Landing Page', prompt: 'Generate a high-converting modern dark-mode SaaS landing page with hero, 3 feature cards, pricing tiers, and contact CTA' },
             { label: '🪔 Festive Diwali Campaign', prompt: 'Build a festive Diwali promotional campaign page with 40% discount offer cards, value props, and lead form' },
@@ -89,7 +89,7 @@ const MODE_CONFIG: Record<AIDrawerMode, {
         subtitle: 'Live Contract & Report Synthesizer',
         icon: <FileText className="w-4 h-4 text-emerald-300" />,
         themeGradient: 'from-emerald-600 via-teal-600 to-cyan-600',
-        welcomeText: (name) => `👋 Hello! I am your **180 Workspace AI Document Architect**.\n\nI can draft corporate contracts, proposals, executive summaries, and legal clauses with full context awareness of ${name ? `**"${name}"**` : 'your active document'}.`,
+        welcomeText: (name) => `👋 Hello! I am your **180 Core AI Document Architect**.\n\nI can draft corporate contracts, proposals, executive summaries, and legal clauses with full context awareness of ${name ? `**"${name}"**` : 'your active document'}.`,
         quickPrompts: [
             { label: '📄 Client Proposal', prompt: 'Draft a comprehensive client proposal with scope of work, timeline milestones, and investment breakdown' },
             { label: '💼 Master Service Agreement', prompt: 'Generate a standard Master Service Agreement with payment terms, IP assignment, and liability clauses' },
@@ -595,7 +595,7 @@ export function UniversalAIDrawer({
                         <span className="flex items-center gap-1 truncate">
                             <ShieldCheck className="w-3 h-3 text-emerald-500" /> Powered by {aiStatus.model}
                         </span>
-                        <span className="truncate">180 Workspace Autonomous OS</span>
+                        <span className="truncate">180 Core Autonomous OS</span>
                     </div>
                 </div>
             </aside>

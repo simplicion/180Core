@@ -265,7 +265,7 @@ export function PricingEmbedClient({ appId: initialAppId }: { appId?: string } =
             : 'bg-zinc-100 border border-zinc-200 text-zinc-700'
         }`}>
           <Sparkles className="w-3.5 h-3.5" style={{ color: accentColor }} />
-          <span>{config.appName || '180 Workspace'} Membership</span>
+          <span>{config.appName || '180 Core'} Membership</span>
         </div>
         <h1 className={`text-2xl sm:text-3xl font-black tracking-tight ${
           isDark ? 'text-white' : 'text-zinc-950'

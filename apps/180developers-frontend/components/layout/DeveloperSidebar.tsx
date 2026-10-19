@@ -78,7 +78,7 @@ export function DeveloperSidebar({
   const pathname = usePathname();
   const isInsideAppDetail = pathname.startsWith('/apps');
 
-  // Sidebar collapse & hover states (matching 180workspace platform behavior)
+  // Sidebar collapse & hover states (matching 180 Core platform behavior)
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [isHovered, setIsHovered] = useState(false);
   const [isProjectsOpen, setIsProjectsOpen] = useState(true);
@@ -540,7 +540,7 @@ export function DeveloperSidebar({
 
   return (
     <>
-      {/* Desktop Persistent Sidebar with Hover Expand (matching 180workspace) */}
+      {/* Desktop Persistent Sidebar with Hover Expand (matching 180 Core) */}
       <aside
         onMouseEnter={() => isCollapsed && setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}

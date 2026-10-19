@@ -200,7 +200,7 @@ export function DesktopSidebar({ user, balance }: DesktopSidebarProps) {
       {/* 5. Footer & Sign Out */}
       <div className="p-3 border-t border-slate-200/70 dark:border-white/10 space-y-1">
         <a
-          href="https://developers.180workspace.com"
+          href="https://developer.180core.cloud"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-900 transition-colors"

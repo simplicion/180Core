@@ -63,12 +63,12 @@ async function runDecouplingSuite() {
         sub: 'usr_decoupled_test_48102',
         name: 'Sarah Connor',
         username: 'sarahc',
-        email: 'sarah@180workspace.com',
+        email: 'sarah@180core.cloud',
         phone: '+14155552671',
     };
 
     await test('@workspace/identity-provider mints cryptographically valid RS256 token', () => {
-        signedIdToken = signIdToken(testClaims, '180-workspace-platform', '1h');
+        signedIdToken = signIdToken(testClaims, '180-core-platform', '1h');
         assert(typeof signedIdToken === 'string');
         const parts = signedIdToken.split('.');
         assert.strictEqual(parts.length, 3, 'JWT must have 3 dot-separated parts');
@@ -82,7 +82,7 @@ async function runDecouplingSuite() {
         // Seed verifier with public keys from IdP
         verifier.setKeys(getJwks());
 
-        const result = await verifier.verifyToken(signedIdToken, '180-workspace-platform');
+        const result = await verifier.verifyToken(signedIdToken, '180-core-platform');
         assert.strictEqual(result.valid, true, `Token verification failed: ${result.error}`);
         assert.strictEqual(result.payload?.sub, testClaims.sub);
         assert.strictEqual(result.payload?.email, testClaims.email);
@@ -108,13 +108,13 @@ async function runDecouplingSuite() {
         assert.strictEqual(result.valid, false, 'Audience mismatch must fail validation');
     });
 
-    // ─── 3. Workspace Tenant Auth (@workspace/workspace-auth) ────────────────
-    console.log('\n3. Auditing 180 Workspace Tenant Authentication Domain...');
+    // ─── 3. Relying Party Auth Integration ────────────────────────────────────
+    console.log('\n3. Auditing 180 Core Tenant Authentication Domain...');
 
     await test('@workspace/workspace-auth OidcConsumer validates tokens and configuration', async () => {
         const consumer = new OidcConsumer({
             identityServerUrl: 'http://localhost:4002',
-            clientId: '180-workspace-platform',
+            clientId: '180-core-platform',
             redirectUri: 'http://localhost:3000/callback',
         });
         consumer.setJwks(getJwks());
@@ -145,7 +145,7 @@ async function runDecouplingSuite() {
             id: 'usr_no_company_user_123',
             sub: 'usr_no_company_user_123',
             name: 'New Founder',
-            email: 'newfounder@180workspace.com',
+            email: 'newfounder@180core.cloud',
         };
 
         const resolution = await CompanyResolver.resolveTenant(unassignedProfile);

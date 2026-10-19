@@ -248,7 +248,7 @@ export function CustomGatewayTab({ appId }: CustomGatewayTabProps) {
                 {gatewayType === 'NONE' && <CheckCircle2 className="w-4 h-4 text-purple-600" />}
               </div>
               <p className="text-xs text-zinc-500 leading-relaxed">
-                Default. 180 Workspace collects funds and automatically manages merchant settlements via RazorpayX.
+                Default. 180 Core collects funds and automatically manages merchant settlements via RazorpayX.
               </p>
             </div>
 
@@ -376,7 +376,7 @@ export function CustomGatewayTab({ appId }: CustomGatewayTabProps) {
                   : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-500'
               }`}
             >
-              {payDomain ? 'Configured' : 'Default (pay.180workspace.com)'}
+              {payDomain ? 'Configured' : 'Default (pay.180core.cloud)'}
             </span>
           </div>
 
@@ -432,7 +432,7 @@ export function CustomGatewayTab({ appId }: CustomGatewayTabProps) {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-2.5 rounded-lg bg-black/40 font-mono text-[11px] text-zinc-200 border border-white/5">
                 <div>Type: <span className="text-purple-400">CNAME</span></div>
                 <div>Host: <span className="text-purple-400">{payDomain ? payDomain.split('.')[0] : 'pay'}</span></div>
-                <div>Target: <span className="text-emerald-400">cname.180workspace.com</span></div>
+                <div>Target: <span className="text-emerald-400">cname.180core.cloud</span></div>
               </div>
 
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 text-[11px] text-zinc-400">

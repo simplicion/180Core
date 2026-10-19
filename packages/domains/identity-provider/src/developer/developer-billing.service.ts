@@ -10,7 +10,7 @@ export const DEV_STARTER_PRICE = 2.0; // $2 / month
 export const DEV_STARTER_MAX_PROJECTS = 5; // 5 projects access
 export const DEV_PRO_PRICE = 5.0; // $5 / month
 export const DEV_PRO_MAX_PROJECTS = 10; // 10 projects access
-export const ENTERPRISE_FORM_URL = 'https://app.180workspace.com/f/9hbzy4u62s';
+export const ENTERPRISE_FORM_URL = 'https://app.180core.cloud/f/9hbzy4u62s';
 
 export const DEV_PLAN_STARTER = 'DEV_STARTER_PLAN';
 export const DEV_PLAN_PRO = 'DEV_PRO_PLAN';

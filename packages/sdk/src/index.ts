@@ -1,5 +1,5 @@
 /**
- * @180workspace/sdk
+ * @180core/sdk
  * Official Universal Client SDK for 180 Identity (SSO/Auth) & 180 Pay (Checkout)
  * 
  * Standards: RFC 6749 (OAuth 2.0), OpenID Connect Core 1.0, RFC 7636 (PKCE S256)

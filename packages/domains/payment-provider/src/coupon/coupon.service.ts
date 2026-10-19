@@ -223,7 +223,6 @@ export class CouponService {
       const normOrigin = normalizeOrigin(origin);
       const isGatewayOrigin =
         !normOrigin ||
-        normOrigin.includes('180workspace.com') ||
         normOrigin.includes('180core.cloud') ||
         normOrigin.includes('localhost') ||
         normOrigin === '127.0.0.1';

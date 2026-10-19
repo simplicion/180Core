@@ -63,11 +63,11 @@ export function InvoiceModal({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-1.5">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Billed By</span>
-            <div className="font-bold text-slate-900 text-xs">180 Workspace Platform Inc.</div>
+            <div className="font-bold text-slate-900 text-xs">180 Core Platform Inc.</div>
             <div className="text-[11px] text-slate-500 leading-relaxed">
               Universal Protocol<br />
               GSTIN: 27AAACW1800P1Z8<br />
-              support@180workspace.com
+              support@180core.cloud
             </div>
           </div>
 

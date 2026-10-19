@@ -4,7 +4,7 @@
  *
  * Usage:
  * <div id="180-auth-button" data-client-id="YOUR_CLIENT_ID" data-redirect-uri="YOUR_CALLBACK_URL"></div>
- * <script src="https://developers.180workspace.com/sdk/180-auth-button.js" async></script>
+ * <script src="https://developer.180core.cloud/sdk/180-auth-button.js" async></script>
  */
 (function() {
   'use strict';
@@ -14,7 +14,7 @@
     if (!targets || targets.length === 0) return;
 
     var isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    var defaultAuthBase = isLocal ? 'http://localhost:3009/auth/login' : 'https://profile.180workspace.com/auth/login';
+    var defaultAuthBase = isLocal ? 'http://localhost:3009/auth/login' : 'https://profile.180core.cloud/auth/login';
 
     targets.forEach(function(container) {
       if (container.getAttribute('data-180-initialized')) return;

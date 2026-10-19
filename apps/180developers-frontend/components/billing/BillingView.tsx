@@ -39,7 +39,7 @@ export interface DeveloperBillingStatus {
   subscriptionId?: string | null;
 }
 
-const ENTERPRISE_FORM_URL = 'https://app.180workspace.com/f/9hbzy4u62s';
+const ENTERPRISE_FORM_URL = 'https://app.180core.cloud/f/9hbzy4u62s';
 
 export function BillingView() {
   const [loading, setLoading] = useState(true);

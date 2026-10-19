@@ -65,7 +65,7 @@ export interface DeveloperBillingStatus {
   subscriptionId?: string | null;
 }
 
-const ENTERPRISE_FORM_URL = 'https://app.180workspace.com/f/9hbzy4u62s';
+const ENTERPRISE_FORM_URL = 'https://app.180core.cloud/f/9hbzy4u62s';
 
 interface DeveloperApp {
   id: string;
@@ -225,8 +225,7 @@ function DeveloperDashboardContent() {
           localStorage.setItem('platform_auth_token', receivedToken);
           const isProd = window.location.protocol === 'https:';
           const isCore = window.location.hostname.endsWith('180core.cloud');
-          const is180 = window.location.hostname.endsWith('180workspace.com');
-          const domainAttr = isCore ? '; domain=.180core.cloud' : (is180 ? '; domain=.180workspace.com' : '');
+          const domainAttr = isCore ? '; domain=.180core.cloud' : '';
           const secureAttr = isProd ? '; Secure' : '';
           document.cookie = `platform_auth_token=${receivedToken}; path=/; max-age=604800; SameSite=Lax${secureAttr}${domainAttr}`;
         }
@@ -326,8 +325,7 @@ function DeveloperDashboardContent() {
     if (typeof document !== 'undefined') {
       const isProd = window.location.protocol === 'https:';
       const isCore = window.location.hostname.endsWith('180core.cloud');
-      const is180 = window.location.hostname.endsWith('180workspace.com');
-      const domainAttr = isCore ? '; domain=.180core.cloud' : (is180 ? '; domain=.180workspace.com' : '');
+      const domainAttr = isCore ? '; domain=.180core.cloud' : '';
       const secureAttr = isProd ? '; Secure' : '';
       document.cookie = `platform_auth_token=${token}; path=/; max-age=604800; SameSite=Lax${secureAttr}${domainAttr}`;
     }
@@ -772,7 +770,7 @@ function DeveloperDashboardContent() {
   const handleDownloadCredentials = () => {
     if (!revealedCredentials) return;
     const lines = [
-      `# 180 Workspace Client Credentials`,
+      `# 180 Core Client Credentials`,
       `# Project: ${revealedCredentials.name || 'Application'}`,
       `# Generated: ${new Date().toISOString()}`,
       `# Keep this file secure. Never commit this file to public version control.`,

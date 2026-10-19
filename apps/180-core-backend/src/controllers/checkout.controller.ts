@@ -141,7 +141,7 @@ export class CheckoutApiController {
       const reqHost = (req.headers.host || '').toLowerCase().split(':')[0];
       
       let app = null;
-      if (reqHost && !reqHost.includes('180workspace.com') && !reqHost.includes('180core.cloud') && !reqHost.includes('localhost') && !reqHost.includes('127.0.0.1')) {
+      if (reqHost && !reqHost.includes('180core.cloud') && !reqHost.includes('localhost') && !reqHost.includes('127.0.0.1')) {
         app = await prisma.oAuthApp.findFirst({
           where: { customPayDomain: reqHost, isActive: true },
         });
@@ -149,7 +149,6 @@ export class CheckoutApiController {
 
       const requestedAppId = req.body.appId || req.body.clientId;
       const isInternalOrigin = req.headers.origin && (
-        String(req.headers.origin).includes('180workspace.com') ||
         String(req.headers.origin).includes('180core.cloud')
       );
       if (!app && requestedAppId && (userId || isInternalOrigin)) {
@@ -197,8 +196,7 @@ export class CheckoutApiController {
           const cleanAo = ao.trim().toLowerCase().replace(/\/$/, '');
           return cleanAo === '*' || cleanAo === cleanOrigin;
         });
-        const isInternalDomain = cleanOrigin.endsWith('180workspace.com') ||
-                                 cleanOrigin.endsWith('180core.cloud') ||
+        const isInternalDomain = cleanOrigin.endsWith('180core.cloud') ||
                                  cleanOrigin.includes('localhost') ||
                                  cleanOrigin.includes('127.0.0.1');
 

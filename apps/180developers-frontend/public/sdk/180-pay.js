@@ -3,7 +3,7 @@
  * Fast, secure, zero-dependency payment & subscription checkout embed SDK.
  *
  * Usage:
- * <script src="https://profile.180workspace.com/sdk/180-pay.js"></script>
+ * <script src="https://profile.180core.cloud/sdk/180-pay.js"></script>
  * <script>
  *   OneEightyPay.openCheckout({
  *     sessionId: 'cs_live_...',
@@ -19,14 +19,8 @@
 (function (global) {
   'use strict';
 
-  var DEFAULT_CHECKOUT_BASE = 'http://localhost:3009';
-  if (typeof window !== 'undefined' && window.location) {
-    if (window.location.hostname.endsWith('180workspace.com')) {
-      DEFAULT_CHECKOUT_BASE = 'https://profile.180workspace.com';
-    } else if (window.location.protocol === 'https:') {
-      DEFAULT_CHECKOUT_BASE = 'https://profile.180workspace.com';
-    }
-  }
+  var isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  var DEFAULT_CHECKOUT_BASE = isLocal ? 'http://localhost:3009' : 'https://profile.180core.cloud';
 
   var activeModalContainer = null;
 

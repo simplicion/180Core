@@ -40,9 +40,6 @@ const allowedOrigins = [
   'http://localhost:3008',
   'http://localhost:3009',
   'http://localhost:3010',
-  'https://180workspace.com',
-  'https://profile.180workspace.com',
-  'https://developers.180workspace.com',
   'https://auth.180core.cloud',
   'https://180core.cloud',
   'https://profile.180core.cloud',
@@ -54,7 +51,7 @@ const allowedOrigins = [
 const corsMiddleware = cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (like mobile apps, curl, server-to-server) or matching allowed
-    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('180workspace.com') || origin.endsWith('180core.cloud')) {
+    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('180core.cloud')) {
       callback(null, true);
     } else {
       callback(null, true); // Allow all for 3rd-party checkout and OAuth integrations

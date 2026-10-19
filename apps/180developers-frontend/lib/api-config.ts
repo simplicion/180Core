@@ -3,7 +3,7 @@
 /**
  * Resolves the 180 Core Backend API base URL.
  * In local development (localhost / 127.0.0.1), uses http://localhost:4003.
- * In production (developers.180workspace.com / Cloudflare Pages), uses https://services.180workspace.com.
+ * In production (developer.180core.cloud / Cloudflare Pages), uses https://api.180core.cloud.
  */
 export const getApiBase = (): string => {
   if (typeof window === 'undefined') {

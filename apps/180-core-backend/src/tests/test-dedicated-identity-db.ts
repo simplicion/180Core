@@ -59,12 +59,12 @@ async function runDedicatedIdentityDbSuite() {
   });
 
   // Test 3: First Party OAuth Apps Catalog
-  await test('FIRST_PARTY_APPS catalog correctly registers Workspace and Social Studio', () => {
+  await test('FIRST_PARTY_APPS catalog correctly registers 180 Core Platform and Social Studio', () => {
     assert(Array.isArray(FIRST_PARTY_APPS), 'FIRST_PARTY_APPS must be an array');
-    const workspaceApp = FIRST_PARTY_APPS.find((a: any) => a.clientId === '180-workspace-platform');
+    const coreApp = FIRST_PARTY_APPS.find((a: any) => a.clientId === '180-core-platform' || a.clientId === '180-core');
     const socialApp = FIRST_PARTY_APPS.find((a: any) => a.clientId === '180-social-studio-mobile');
 
-    assert(workspaceApp, '180-workspace-platform must be registered');
+    assert(coreApp, '180-core-platform must be registered');
     assert(socialApp, '180-social-studio-mobile must be registered');
 
     assert(socialApp?.redirectUris.includes('180social://oauth-callback'), 'Social app must support custom scheme');

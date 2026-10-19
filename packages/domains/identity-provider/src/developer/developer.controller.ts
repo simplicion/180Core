@@ -520,7 +520,7 @@ export class DeveloperController {
                     title: 'Test Webhook Verification Payment',
                     customer: {
                         name: '180 Test Customer',
-                        email: 'test@180workspace.com'
+                        email: 'test@180core.cloud'
                     },
                     metadata: {
                         tier: 'pro_monthly',

@@ -113,7 +113,7 @@ export function EditProfileModal({ isOpen, onClose, user, onSave }: EditProfileM
       {step === 'FORM' ? (
         <form onSubmit={handleSubmit} className="space-y-5 text-xs text-slate-700 pt-1 font-sans">
           <p className="text-slate-500 text-xs">
-            Update your identity across all 180 Workspace apps. Changing contact details requires OTP verification.
+            Update your identity across all 180 Core apps. Changing contact details requires OTP verification.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

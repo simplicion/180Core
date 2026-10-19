@@ -54,7 +54,7 @@ This launches:
 
 ## Consumer Integration
 
-Any consumer application (e.g., 180 Workspace, Offmesh, or 3rd-party platforms) integrates with 180 Core via:
+Any consumer application (e.g., Offmesh, Partner SaaS, or 3rd-party platforms) integrates with 180 Core via:
 1. **OAuth 2.0 / OIDC Authorization Code Flow with PKCE**
-2. **Client SDK Script**: `https://cdn.180workspace.com/sdk/v1/180-core-sdk.js`
+2. **Client SDK Script**: `https://profile.180core.cloud/sdk/v1/180-core-sdk.js`
 3. **Web Components**: `<one-eighty-auth-button>`, `<one-eighty-pay-button>`

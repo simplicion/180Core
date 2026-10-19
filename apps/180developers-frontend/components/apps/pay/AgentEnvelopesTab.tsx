@@ -281,7 +281,7 @@ Idempotency-Key: idemp_93817492
     }
 
     if (specTab === 'typescript') {
-      return `import { OneEightyAgent } from '@180workspace/agent-sdk';
+      return `import { OneEightyAgent } from '@180core/agent-sdk';
 
 // Initialize with pre-authorized envelope key
 const agent = new OneEightyAgent({

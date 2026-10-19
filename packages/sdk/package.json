@@ -1,5 +1,5 @@
 {
-  "name": "@180workspace/sdk",
+  "name": "@180core/sdk",
   "version": "1.0.0",
   "description": "Official Universal Client SDK for 180 Identity (SSO/Auth) and 180 Pay (Checkout)",
   "main": "./dist/index.js",

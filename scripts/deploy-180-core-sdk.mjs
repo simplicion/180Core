@@ -83,7 +83,7 @@ if (r2Endpoint && r2AccessKey && r2SecretKey && r2Bucket) {
           CacheControl: 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800',
         })
       );
-      console.log(`  ☁️ Cloudflare R2: Uploaded https://cdn.180workspace.com/${item.key}`);
+      console.log(`  ☁️ Cloudflare R2: Uploaded https://profile.180core.cloud/${item.key}`);
     }
     console.log('  ✅ Cloudflare R2 Edge Sync Successful');
   } catch (err) {

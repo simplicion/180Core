@@ -190,7 +190,7 @@ export class CustomerPortalService {
       expiresAt: session.expiresAt,
       returnUrl: session.returnUrl,
       merchant: {
-        name: session.app?.name || '180 Workspace Merchant',
+        name: session.app?.name || '180 Core Merchant',
         logoUrl: session.app?.logoUrl || '',
         homepageUrl: session.app?.homepageUrl || '',
         clientId: session.app?.clientId || '',

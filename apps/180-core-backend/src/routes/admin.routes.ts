@@ -2043,7 +2043,7 @@ const deleteUserHandler = async (req: Request, res: Response) => {
 
     const terminationReason =
       reason?.trim() ||
-      'Suspicious activity detected violating 180 Workspace platform security, anti-abuse, and operational policies.';
+      'Suspicious activity detected violating 180 Core platform security, anti-abuse, and operational policies.';
 
     // Immediate queue state addition
     pendingDeletions.add(user.id);

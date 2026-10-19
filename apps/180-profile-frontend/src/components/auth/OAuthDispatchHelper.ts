@@ -55,13 +55,15 @@ export function buildOAuthQueryString(params: OAuthParams): string {
 }
 
 export function resolveAppName(clientId: string): string {
-  if (clientId === '180-workspace-platform' || clientId === '180-workspace') return '180 Workspace';
   const coreClientId = process.env.NEXT_PUBLIC_180_CLIENT_ID || process.env.NEXT_PUBLIC_CORE_CLIENT_ID || '180_client_2d51a605038c38ffb6fa037688988a83';
   if (
     (coreClientId && clientId === coreClientId) ||
     clientId === '180-core' ||
+    clientId === '180-core-platform' ||
     clientId === '180-core-client' ||
-    clientId === '180_core_client'
+    clientId === '180_core_client' ||
+    clientId === '180-workspace-platform' ||
+    clientId === '180-workspace'
   ) return '180 Core';
   if (clientId === '180-developer-portal' || clientId === '180-developers-portal') return '180 Developers';
   if (clientId === '180-traffic-director') return '180 Traffic Director';

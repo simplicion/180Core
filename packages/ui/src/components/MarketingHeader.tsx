@@ -18,7 +18,7 @@ export interface MarketingHeaderProps {
 }
 
 export function MarketingHeader({
-  brandingName = "180workspace",
+  brandingName = "180 Core",
   brandingLogo,
   user,
   scrolled = false,

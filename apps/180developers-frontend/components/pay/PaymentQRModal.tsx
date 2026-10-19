@@ -313,7 +313,7 @@ export function PaymentQRModal({
       ctx.fillText(
         activeTab === 'GATEWAY_UPI'
           ? (gatewayQrData?.vpa ? `UPI VPA: ${gatewayQrData.vpa}` : 'Scan with Any UPI App • GPay, PhonePe, Paytm')
-          : 'Powered by 180 Workspace Ledger Protocol',
+          : 'Powered by 180 Core Ledger Protocol',
         600,
         1340
       );
@@ -389,7 +389,7 @@ export function PaymentQRModal({
             </div>
             <div class="footer">
               ${activeTab === 'GATEWAY_UPI' && gatewayQrData?.vpa ? `<strong>UPI VPA:</strong> ${gatewayQrData.vpa}<br/>` : activeTab === 'GATEWAY_UPI' ? `<strong>Dynamic Gateway:</strong> Scannable by any UPI App (GPay, PhonePe, Paytm)<br/>` : ''}
-              <strong>180 Workspace Sovereign Payment Protocol</strong>
+              <strong>180 Core Sovereign Payment Protocol</strong>
               <div class="footer-sub">Verified Instant Settlement • Secured by Universal Ledger</div>
             </div>
           </div>

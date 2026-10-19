@@ -50,7 +50,7 @@ function AuthFooter() {
       <span>
         {clientId
           ? 'Protected by Universal Identity & End-to-End Encryption'
-          : 'Protected by 180 Workspace Universal Identity & Ledger Protocol'}
+          : 'Protected by 180 Core Universal Identity & Ledger Protocol'}
       </span>
     </footer>
   );

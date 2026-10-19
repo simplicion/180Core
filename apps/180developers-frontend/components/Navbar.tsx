@@ -46,9 +46,7 @@ export default function Navbar() {
 
   const getProfileUrl = () => {
     if (typeof window === 'undefined') return 'http://localhost:3009';
-    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const isCore = window.location.hostname.endsWith('180core.cloud');
-    return isLocal ? 'http://localhost:3009' : (isCore ? 'https://profile.180core.cloud' : 'https://profile.180workspace.com');
+    return isLocal ? 'http://localhost:3009' : 'https://profile.180core.cloud';
   };
 
   const checkAuth = () => {
@@ -110,8 +108,7 @@ export default function Navbar() {
           localStorage.setItem('platform_auth_token', e.data.token);
           const isProd = window.location.protocol === 'https:';
           const isCore = window.location.hostname.endsWith('180core.cloud');
-          const is180 = window.location.hostname.endsWith('180workspace.com');
-          const domainAttr = isCore ? '; domain=.180core.cloud' : (is180 ? '; domain=.180workspace.com' : '');
+          const domainAttr = isCore ? '; domain=.180core.cloud' : '';
           const secureAttr = isProd ? '; Secure' : '';
           document.cookie = `platform_auth_token=${e.data.token}; path=/; max-age=604800; SameSite=Lax${secureAttr}${domainAttr}`;
         }

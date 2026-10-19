@@ -2,7 +2,7 @@
 
 export function getAdminApiUrl(): string {
   if (process.env.NEXT_PUBLIC_ADMIN_API_URL) return process.env.NEXT_PUBLIC_ADMIN_API_URL;
-  if (typeof window !== 'undefined' && (window.location.hostname.endsWith('180core.cloud') || window.location.hostname.endsWith('pages.dev') || window.location.hostname.endsWith('180workspace.com'))) {
+  if (typeof window !== 'undefined' && (window.location.hostname.endsWith('180core.cloud') || window.location.hostname.endsWith('pages.dev'))) {
     return 'https://api.180core.cloud/api/v1/admin';
   }
   return 'http://localhost:4003/api/v1/admin';
@@ -10,7 +10,7 @@ export function getAdminApiUrl(): string {
 
 export function getSupportApiUrl(): string {
   if (process.env.NEXT_PUBLIC_SUPPORT_API_URL) return process.env.NEXT_PUBLIC_SUPPORT_API_URL;
-  if (typeof window !== 'undefined' && (window.location.hostname.endsWith('180core.cloud') || window.location.hostname.endsWith('pages.dev') || window.location.hostname.endsWith('180workspace.com'))) {
+  if (typeof window !== 'undefined' && (window.location.hostname.endsWith('180core.cloud') || window.location.hostname.endsWith('pages.dev'))) {
     return 'https://api.180core.cloud/api/v1/support';
   }
   return 'http://localhost:4003/api/v1/support';

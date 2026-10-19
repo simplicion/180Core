@@ -313,7 +313,7 @@ export class LocationService {
           signal: controller.signal,
           headers: {
             'Accept-Language': 'en-US,en;q=0.9',
-            'User-Agent': '180WorkspacePay/1.0',
+            'User-Agent': '180CorePay/1.0',
           },
         }
       );

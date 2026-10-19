@@ -90,8 +90,8 @@ export default function CallbackPage() {
         } catch (_) {}
 
         const isProd = window.location.protocol === 'https:';
-        const is180 = window.location.hostname.endsWith('180workspace.com');
-        const domainAttr = is180 ? '; domain=.180workspace.com' : '';
+        const isCore = window.location.hostname.endsWith('180core.cloud');
+        const domainAttr = isCore ? '; domain=.180core.cloud' : '';
         const cookieFlags = `; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax${
           isProd ? '; Secure' : ''
         }${domainAttr}`;

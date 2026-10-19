@@ -91,7 +91,7 @@ export function purgeAuthSession(): void {
     const root3 = hostParts.slice(-3).join('.');
     domainsToClear.push(root3, `.${root3}`);
   }
-  domainsToClear.push('180core.cloud', '.180core.cloud', '180workspace.com', '.180workspace.com');
+  domainsToClear.push('180core.cloud', '.180core.cloud');
 
   const uniqueDomains = Array.from(new Set(domainsToClear));
 

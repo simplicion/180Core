@@ -246,10 +246,10 @@ export function PortalSessionClient({ sessionToken: initialSessionToken }: Porta
               </a>
             ) : (
               <a
-                href="https://180workspace.com"
+                href="https://180core.cloud"
                 className="inline-flex items-center gap-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 px-5 py-2.5 text-xs font-semibold text-white transition-all"
               >
-                Back to 180 Workspace
+                Back to 180 Core
               </a>
             )}
           </div>

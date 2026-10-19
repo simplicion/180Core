@@ -70,7 +70,7 @@ export function DeveloperHeader({
     const isLocal =
       window.location.hostname === 'localhost' ||
       window.location.hostname === '127.0.0.1';
-    return isLocal ? 'http://localhost:3009' : 'https://profile.180workspace.com';
+    return isLocal ? 'http://localhost:3009' : 'https://profile.180core.cloud';
   };
 
   return (
@@ -162,7 +162,7 @@ export function DeveloperHeader({
                     {userProfile.name || 'Developer Account'}
                   </p>
                   <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate font-mono">
-                    {userProfile.email || 'developer@180workspace.com'}
+                    {userProfile.email || 'developer@180core.cloud'}
                   </p>
                   {userProfile.username && (
                     <span className="inline-block mt-1 text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">

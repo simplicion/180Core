@@ -347,7 +347,7 @@ model PayoutRequest {
 // ─────────────────────────────────────────────────────────────────────────────
 // PER-APP USERNAME ISOLATION
 // Guarantees that usernames are uniquely scoped per application.
-// e.g., "prince" in 180 Workspace ≠ "prince" in a third-party developer app.
+// e.g., "prince" in 180 Core ≠ "prince" in a third-party developer app.
 // ─────────────────────────────────────────────────────────────────────────────
 
 model AppUserIdentity {

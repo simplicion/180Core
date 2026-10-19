@@ -186,7 +186,7 @@ async function runTest() {
   // ─────────────────────────────────────────────────────────────────────────────
   console.log('\n─── [Test 5] Custom Subdomain DNS Verification Simulation ───');
 
-  const expectedCname = 'cname.180workspace.com';
+  const expectedCname = 'cname.180core.cloud';
   console.log(`✓ Expected DNS Target: ${customDomain} CNAME -> ${expectedCname}`);
 
   // Update status to ACTIVE for verified domain

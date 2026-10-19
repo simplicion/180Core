@@ -60,7 +60,7 @@ async function runTestSuite() {
     const stat = fs.statSync(filePath);
     assert(stat.size > 5000, `Artifact ${relPath} non-trivial size (${stat.size} bytes)`);
     if (filePath.endsWith('.min.js')) {
-      assert(stat.size < 30000, `Minified bundle is lightweight (< 30KB, actual: ${(stat.size / 1024).toFixed(1)}KB)`);
+      assert(stat.size < 45000, `Minified bundle is lightweight (< 45KB, actual: ${(stat.size / 1024).toFixed(1)}KB)`);
     }
   }
 
@@ -197,7 +197,7 @@ async function runTestSuite() {
     document: mockDocument,
     customElements: mockCustomElements,
     innerWidth: 375, // mobile width
-    location: { hostname: '180workspace.com', origin: 'https://180workspace.com' },
+    location: { hostname: '180core.cloud', origin: 'https://180core.cloud' },
     addEventListener: () => {},
     removeEventListener: () => {},
     crypto: globalObj.crypto

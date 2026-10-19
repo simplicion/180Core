@@ -80,7 +80,7 @@
   }
 }
 
-/* Glassmorphism Panels conforming to 180workspace design-system.md */
+/* Glassmorphism Panels conforming to 180 Core design-system.md */
 .glass-panel {
   @apply backdrop-blur-md bg-white/70 dark:bg-black/70 border border-zinc-200/80 dark:border-white/10;
 }

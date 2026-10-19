@@ -1,6 +1,6 @@
 /**
  * Utility helper for dynamic deep links into the dedicated 180 Documentation app.
- * Resolves to http://localhost:3005 in local development, and https://docs.180workspace.com in production.
+ * Resolves to http://localhost:3005 in local development, and https://docs.180core.cloud in production.
  */
 export function getDocsBaseUrl(): string {
   if (process.env.NEXT_PUBLIC_DOCS_URL) {
@@ -9,7 +9,7 @@ export function getDocsBaseUrl(): string {
   if (process.env.NODE_ENV === 'development') {
     return 'http://localhost:3005';
   }
-  return 'https://docs.180workspace.com';
+  return 'https://docs.180core.cloud';
 }
 
 export function getDocsUrl(path = '/docs/products/180-core/overview'): string {

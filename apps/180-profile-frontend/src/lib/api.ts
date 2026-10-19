@@ -1,6 +1,6 @@
 /**
  * 180 Profile Unified API Gateway Helper
- * Directs all API and OAuth calls to the universal core backend (services.180workspace.com)
+ * Directs all API and OAuth calls to the universal core backend (api.180core.cloud)
  */
 
 const envCoreUrl = process.env.NEXT_PUBLIC_CORE_BACKEND_URL || process.env.NEXT_PUBLIC_CORE_API_URL || process.env.NEXT_PUBLIC_API_URL;
@@ -18,7 +18,6 @@ export function isCustomDomainHost(): boolean {
   return (
     host !== 'localhost' &&
     host !== '127.0.0.1' &&
-    !host.endsWith('180workspace.com') &&
     !host.endsWith('180core.cloud') &&
     !host.endsWith('.pages.dev')
   );

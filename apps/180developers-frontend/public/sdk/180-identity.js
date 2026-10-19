@@ -1,19 +1,13 @@
 /**
  * 180 Identity Client Embed SDK (v1.0.0)
- * Fast, secure, zero-dependency authentication SDK for 180 Workspace and the 180 Ecosystem.
+ * Fast, secure, zero-dependency authentication SDK for 180 Core and the 180 Ecosystem.
  * Standards: RFC 6749 (OAuth 2.0), OpenID Connect Core 1.0, RFC 7636 (PKCE)
  */
 (function (global) {
   'use strict';
 
-  var DEFAULT_AUTH_SERVER = 'http://localhost:3002';
-  if (typeof window !== 'undefined' && window.location) {
-    if (window.location.hostname.endsWith('180workspace.com')) {
-      DEFAULT_AUTH_SERVER = 'https://180identity.180workspace.com';
-    } else {
-      DEFAULT_AUTH_SERVER = window.location.origin;
-    }
-  }
+  var isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  var DEFAULT_AUTH_SERVER = isLocal ? 'http://localhost:3009' : 'https://profile.180core.cloud';
 
   var OneEightyIdentity = {
     version: '1.0.0',

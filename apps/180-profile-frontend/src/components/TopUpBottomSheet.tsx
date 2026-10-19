@@ -168,7 +168,7 @@ export function TopUpBottomSheet({
         key: keyId,
         amount: amountPaise,
         currency: 'INR',
-        name: '180 Workspace Profile',
+        name: '180 Core Profile',
         description: 'Universal Prepaid Wallet Recharge',
         order_id: orderId,
         theme: { color: '#2563eb' },

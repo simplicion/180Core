@@ -1731,7 +1731,7 @@ export function PricingTablesTab({ appId }: PricingTablesTabProps) {
                     effectiveCanvasIsDark ? 'bg-white/5 border-white/10 text-zinc-300' : 'bg-zinc-100 border-zinc-200 text-zinc-700'
                   }`}>
                     <Sparkles className="w-3 h-3" style={{ color: config.accentColor }} />
-                    <span>{config.appName || '180 Workspace'} Membership</span>
+                    <span>{config.appName || '180 Core'} Membership</span>
                   </div>
                   <h3 className={`text-xl sm:text-2xl font-black tracking-tight ${
                     effectiveCanvasIsDark ? 'text-white' : 'text-zinc-950'

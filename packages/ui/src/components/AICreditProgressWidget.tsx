@@ -43,7 +43,7 @@ export const AI_CREDITS_SYNC_EVENT = "180_ai_credits_updated";
 
 /**
  * Universal Centralized AI Credit Progress Widget:
- * Uses the official 180 Workspace AI logo and strictly adheres to the
+ * Uses the official 180 Core AI logo and strictly adheres to the
  * centralized design system, UI/UX Pro Max guidelines, and light/dark theme responsiveness.
  */
 export const AICreditProgressWidget: React.FC<AICreditProgressWidgetProps> = ({

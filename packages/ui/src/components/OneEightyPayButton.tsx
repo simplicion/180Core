@@ -96,7 +96,7 @@ export const OneEightyPayButton: React.FC<OneEightyPayButtonProps> = ({
         }
       } else {
         // 2. Direct fallback
-        const baseUrl = payServerUrl || (typeof window !== 'undefined' && (window.location.hostname.endsWith('180core.cloud') || window.location.hostname.endsWith('180workspace.com'))
+        const baseUrl = payServerUrl || (typeof window !== 'undefined' && window.location.hostname.endsWith('180core.cloud')
           ? 'https://profile.180core.cloud'
           : 'http://localhost:3009');
         const sid = sessionId || 'cs_' + Math.random().toString(36).substring(2, 14);

@@ -428,7 +428,6 @@ export class PricingTableApiController {
         isLocalhost ||
         allowedOrigins.includes(origin) ||
         allowedOrigins.includes('*') ||
-        origin.endsWith('180workspace.com') ||
         origin.endsWith('180core.cloud');
 
       if (!isWhitelisted && allowedOrigins.length > 0) {

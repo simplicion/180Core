@@ -25,7 +25,7 @@ export class LocationService {
                     zoom: 10
                 },
                 headers: {
-                    'User-Agent': '180Identity/1.0 (info@180workspace.com)'
+                    'User-Agent': '180Identity/1.0 (info@180core.cloud)'
                 },
                 timeout: 5000
             });

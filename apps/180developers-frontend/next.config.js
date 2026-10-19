@@ -22,7 +22,7 @@ const nextConfig = {
       },
       {
         source: '/docs',
-        destination: isDev ? 'http://localhost:3005/docs/products/180-core/overview' : 'https://docs.180workspace.com/docs/products/180-core/overview',
+        destination: isDev ? 'http://localhost:3005/docs/products/180-core/overview' : 'https://docs.180core.cloud/docs/products/180-core/overview',
         permanent: false,
       },
     ];

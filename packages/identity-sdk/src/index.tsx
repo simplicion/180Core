@@ -1,5 +1,5 @@
 /**
- * @180workspace/identity-sdk / @workspace/identity-sdk
+ * @180core/identity-sdk / @workspace/identity-sdk
  * Official Universal Client SDK for 180 Identity (SSO/Auth) & 180 Pay (Checkout)
  */
 
@@ -776,8 +776,7 @@ export const OneEightyIdentity = {
                 localStorage.setItem('token', bestToken);
                 const isProd = window.location.protocol === 'https:';
                 const isCore = window.location.hostname.endsWith('180core.cloud');
-                const is180 = window.location.hostname.endsWith('180workspace.com');
-                const domainAttr = isCore ? '; domain=.180core.cloud' : (is180 ? '; domain=.180workspace.com' : '');
+                const domainAttr = isCore ? '; domain=.180core.cloud' : '';
                 const secureAttr = isProd ? '; Secure' : '';
                 document.cookie = `platform_auth_token=${bestToken}; path=/; max-age=604800; SameSite=Lax${secureAttr}${domainAttr}`;
               }
@@ -844,8 +843,7 @@ export const OneEightyIdentity = {
                 localStorage.setItem('token', bestToken);
                 const isProd = window.location.protocol === 'https:';
                 const isCore = window.location.hostname.endsWith('180core.cloud');
-                const is180 = window.location.hostname.endsWith('180workspace.com');
-                const domainAttr = isCore ? '; domain=.180core.cloud' : (is180 ? '; domain=.180workspace.com' : '');
+                const domainAttr = isCore ? '; domain=.180core.cloud' : '';
                 const secureAttr = isProd ? '; Secure' : '';
                 document.cookie = `platform_auth_token=${bestToken}; path=/; max-age=604800; SameSite=Lax${secureAttr}${domainAttr}`;
               }
@@ -909,8 +907,7 @@ export const OneEightyIdentity = {
               localStorage.setItem('token', bestToken);
               const isProd = window.location.protocol === 'https:';
               const isCore = window.location.hostname.endsWith('180core.cloud');
-              const is180 = window.location.hostname.endsWith('180workspace.com');
-              const domainAttr = isCore ? '; domain=.180core.cloud' : (is180 ? '; domain=.180workspace.com' : '');
+              const domainAttr = isCore ? '; domain=.180core.cloud' : '';
               const secureAttr = isProd ? '; Secure' : '';
               document.cookie = `platform_auth_token=${bestToken}; path=/; max-age=604800; SameSite=Lax${secureAttr}${domainAttr}`;
             }
@@ -1111,14 +1108,14 @@ export const OneEightyIdentity = {
    * Universal Sign-In alias (opens auth in adaptive presentation)
    */
   signIn(options?: OpenAuthOptions): Promise<AuthResponse> {
-    return OneEightyIdentity.openAuth(options || { clientId: '180-workspace' });
+    return OneEightyIdentity.openAuth(options || { clientId: '180-core' });
   },
 
   /**
    * Modal alias for backward compatibility
    */
   openAuthModal(options?: OpenAuthOptions): Promise<AuthResponse> {
-    return OneEightyIdentity.openAuth(options || { clientId: '180-workspace' });
+    return OneEightyIdentity.openAuth(options || { clientId: '180-core' });
   },
 
   /**
@@ -1156,7 +1153,7 @@ export const OneEightyIdentity = {
           const root2 = hostParts.slice(-2).join('.');
           domainsToClear.push(root2, `.${root2}`);
         }
-        domainsToClear.push('180core.cloud', '.180core.cloud', '180workspace.com', '.180workspace.com');
+        domainsToClear.push('180core.cloud', '.180core.cloud');
         const uniqueDomains = Array.from(new Set(domainsToClear));
 
         const cookieNames = [
@@ -1814,7 +1811,7 @@ export const OneEightyIdentityButton: React.FC<OneEightyIdentityButtonProps> = (
   text = 'Continue with 180 Profile',
   subtitle,
   loadingText = 'Opening 180 Profile…',
-  processingText = 'Logging into 180 Workspace…',
+  processingText = 'Logging into 180 Core…',
   className = '',
   onSuccess,
   onError,

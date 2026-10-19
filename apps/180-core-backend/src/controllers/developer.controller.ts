@@ -1513,7 +1513,7 @@ export class DeveloperApiController {
 
   /**
    * POST /api/v1/developer/apps/:id/custom-domain/verify
-   * Performs live DNS resolution to check if the custom subdomain points to cname.180workspace.com
+   * Performs live DNS resolution to check if the custom subdomain points to cname.180core.cloud
    */
   static async verifyCustomDomain(req: Request, res: Response) {
     try {

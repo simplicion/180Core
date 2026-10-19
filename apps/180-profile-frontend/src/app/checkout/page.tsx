@@ -146,7 +146,7 @@ function CheckoutEntryPoint() {
           onClick={() => router.push('/')}
           className="mt-2 w-full py-2.5 rounded-xl bg-slate-900 dark:bg-zinc-800 hover:bg-slate-800 dark:hover:bg-zinc-700 text-white text-xs font-semibold"
         >
-          Return to 180 Workspace
+          Return to 180 Core
         </Button>
       </div>
     );

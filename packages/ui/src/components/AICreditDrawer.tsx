@@ -241,7 +241,7 @@ export const AICreditDrawer: React.FC<AICreditDrawerProps> = ({
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">
-                    Universal balance. Works across all 180 Workspace apps.
+                    Universal balance. Works across all 180 Core apps.
                   </p>
                 </div>
               </div>

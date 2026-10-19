@@ -25,7 +25,7 @@ async function runPhase24ProductionMaster() {
     if (!sysUser) {
       sysUser = await prisma.user.create({
         data: {
-          email: `prod_tester_${Date.now()}@180workspace.com`,
+          email: `prod_tester_${Date.now()}@180core.cloud`,
           name: 'Master Production Tester',
           passwordHash: 'test_hash',
           isVerified: true,
@@ -61,8 +61,8 @@ async function runPhase24ProductionMaster() {
     customSlug: uniqueSlug,
     maxPurchases: 2,
     fulfillmentMessage: 'YOUR-PRODUCTION-SECRET-LICENSE-KEY-9988',
-    fulfillmentFileUrl: 'https://cdn.180workspace.com/downloads/toolkit-v1.zip',
-    redirectUrl: 'https://180workspace.com/welcome',
+    fulfillmentFileUrl: 'https://profile.180core.cloud/downloads/toolkit-v1.zip',
+    redirectUrl: 'https://180core.cloud/welcome',
   });
   console.log(`✓ Created Payment Link: /link/${paymentLink.slug} (Max Inventory: 2)`);
 

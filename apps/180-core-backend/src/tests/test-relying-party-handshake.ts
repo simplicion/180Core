@@ -47,16 +47,16 @@ async function runRelyingPartyHandshakeSuite() {
     });
 
     // ─── 2. Seed / Fetch Live Relying Party Credentials ──────────────────────
-    let workspaceApp: any = null;
-    await test('Verify registered confidential client credentials for 180-workspace-platform', async () => {
+    let coreApp: any = null;
+    await test('Verify registered confidential client credentials for 180-core-platform', async () => {
         await seedFirstPartyOAuthApps();
-        workspaceApp = await prisma.oAuthApp.findUnique({
-            where: { clientId: '180-workspace-platform' },
+        coreApp = await prisma.oAuthApp.findUnique({
+            where: { clientId: '180-core-platform' },
         });
-        assert(workspaceApp !== null, '180 Workspace confidential client must exist in database');
-        assert.strictEqual(workspaceApp.isActive, true);
-        assert.strictEqual(workspaceApp.isVerified, true);
-        assert(workspaceApp.clientSecretHash !== null, 'Client secret hash must be set');
+        assert(coreApp !== null, '180 Core confidential client must exist in database');
+        assert.strictEqual(coreApp.isActive, true);
+        assert.strictEqual(coreApp.isVerified, true);
+        assert(coreApp.clientSecretHash !== null, 'Client secret hash must be set');
     });
 
     // ─── 3. Full OIDC Relying Party Flow Simulation ─────────────────────────
@@ -80,7 +80,7 @@ async function runRelyingPartyHandshakeSuite() {
         await prisma.oAuthAuthorizationCode.create({
             data: {
                 code: authCode,
-                appId: workspaceApp.id,
+                appId: coreApp.id,
                 userId: testUser.id,
                 redirectUri: 'http://localhost:3000/callback',
                 codeChallenge,
@@ -95,7 +95,7 @@ async function runRelyingPartyHandshakeSuite() {
     await test('Relying Party OidcConsumer initializes with live configuration & JWKS cache', () => {
         const consumer = new OidcConsumer({
             identityServerUrl: 'http://localhost:4002',
-            clientId: '180-workspace-platform',
+            clientId: '180-core-platform',
             redirectUri: 'http://localhost:3000/callback',
         });
         consumer.setJwks(getJwks());
@@ -109,11 +109,11 @@ async function runRelyingPartyHandshakeSuite() {
             name: testUser.name || 'Test User',
             email: testUser.email,
         };
-        const idToken = signIdToken(idClaims, '180-workspace-platform', '1h');
+        const idToken = signIdToken(idClaims, '180-core-platform', '1h');
 
         const consumer = new OidcConsumer({
             identityServerUrl: 'http://localhost:4002',
-            clientId: '180-workspace-platform',
+            clientId: '180-core-platform',
             redirectUri: 'http://localhost:3000/callback',
         });
         consumer.setJwks(getJwks());
@@ -121,7 +121,7 @@ async function runRelyingPartyHandshakeSuite() {
         const verified = await consumer.verifyToken(idToken);
         assert.strictEqual(verified.valid, true, `Verification failed: ${verified.error}`);
         assert.strictEqual(verified.payload?.sub, testUser.id);
-        assert.strictEqual(verified.payload?.aud, '180-workspace-platform');
+        assert.strictEqual(verified.payload?.aud, '180-core-platform');
     });
 
     await test('Tenant Resolution: Maps verified 180 Profile to corporate company workspace', async () => {

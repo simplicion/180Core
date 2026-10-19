@@ -269,10 +269,15 @@ export class IdentityAuthController {
 
             // Dispatch via Email SMTP or MSG91 WhatsApp Outbound
             if (isEmail) {
-                try {
-                    await EmailOtpService.sendSignupOtp(cleanInput, otpCode);
-                } catch (emailErr: any) {
-                    console.warn('[IdentityAuthController] Email OTP dispatch note:', emailErr.message);
+                const emailResult = await EmailOtpService.sendSignupOtp(cleanInput, otpCode);
+                if (!emailResult.success) {
+                    console.error('[IdentityAuthController] Email OTP dispatch failed:', emailResult.message);
+                    return res.status(500).json({
+                        success: false,
+                        error: 'email_dispatch_failed',
+                        message: `Failed to deliver verification code to ${cleanInput}. ${emailResult.message}`,
+                        ...(process.env.NODE_ENV !== 'production' ? { devOtp: otpCode } : {})
+                    });
                 }
             } else {
                 try {
