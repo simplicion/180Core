@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { LogoLoader } from '@workspace/ui';
 import { getCoreApiUrl } from '@/lib/api';
 
-export default function LinkedInOAuthCallbackPage() {
+function LinkedInCallbackContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [status, setStatus] = useState<string>('Completing LinkedIn authorization...');
@@ -102,3 +102,18 @@ export default function LinkedInOAuthCallbackPage() {
     </div>
   );
 }
+
+export default function LinkedInOAuthCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-white text-center">
+          <LogoLoader size={36} color="primary" />
+        </div>
+      }
+    >
+      <LinkedInCallbackContent />
+    </Suspense>
+  );
+}
+

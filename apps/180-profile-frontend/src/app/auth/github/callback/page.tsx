@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { LogoLoader } from '@workspace/ui';
 import { getCoreApiUrl } from '@/lib/api';
 
-export default function GitHubOAuthCallbackPage() {
+function GitHubCallbackContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [status, setStatus] = useState<string>('Completing GitHub authorization...');
@@ -104,5 +104,19 @@ export default function GitHubOAuthCallbackPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function GitHubOAuthCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-white text-center">
+          <LogoLoader size={36} color="primary" />
+        </div>
+      }
+    >
+      <GitHubCallbackContent />
+    </Suspense>
   );
 }
