@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Smartphone } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { OneEightyPay } from '@workspace/identity-sdk';
 import { usePlatformCurrency } from '@workspace/ui';
 import { AppShellLayout } from '@/components/common/AppShellLayout';
 import { PaySidebar } from '@/components/pay/PaySidebar';
@@ -11,9 +12,26 @@ import { PayOverviewView } from '@/components/pay/PayOverviewView';
 import { useProject } from '@/context/ProjectContext';
 
 export default function PayOverviewPage() {
-  const { enablePay, setEnablePay, saveSettings, saving } = useProject();
+  const { enablePay, setEnablePay, saveSettings, saving, project } = useProject();
   const { activeCurrency, activeMeta, openCurrencyModal } = usePlatformCurrency();
   const [isTogglingPay, setIsTogglingPay] = useState(false);
+
+  const handleTestCheckout = () => {
+    try {
+      const cur = ((project as any)?.currency || activeCurrency || 'USD').toUpperCase();
+      const amt = (project as any)?.defaultAmount !== undefined ? (project as any).defaultAmount : 49.0;
+      OneEightyPay.checkout({
+        amount: amt,
+        currency: cur,
+        title: `${project?.name || 'Developer Project'} Checkout`,
+        description: 'Sandbox verification session (Adaptive Sheet)',
+        onSuccess: (res: any) => toast.success(`Payment test passed! TxID: ${res?.transactionId || res?.sessionId || 'SUCCESS'}`),
+        onCancel: () => toast('Pay checkout closed', { icon: 'ℹ️' }),
+      });
+    } catch (e: any) {
+      toast.error(e.message || 'Checkout test failed');
+    }
+  };
 
   const handleToggleEnablePay = async () => {
     setIsTogglingPay(true);
@@ -37,6 +55,17 @@ export default function PayOverviewPage() {
       badgeColor="purple"
       action={
         <div className="flex items-center gap-2.5">
+          {/* View Demo Checkout Button */}
+          <button
+            type="button"
+            onClick={handleTestCheckout}
+            className="px-3.5 py-1.5 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+            title="Launch test checkout sheet demo"
+          >
+            <Smartphone className="w-3.5 h-3.5 text-white" />
+            <span>View Demo</span>
+          </button>
+
           {/* Global Currency Selector (from 180 Checkout) */}
           <button
             type="button"

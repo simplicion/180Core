@@ -31,6 +31,7 @@ import DeveloperHeader from '@/components/layout/DeveloperHeader';
 import { purgeAuthSession } from '@/lib/auth';
 import { useProject } from '@/context/ProjectContext';
 import { invalidateCache } from '@/lib/cache';
+import { getAppSlug } from '@/lib/slug';
 
 interface AppDetailClientProps {
   initialView?: 'overview' | 'identity' | 'pay';
@@ -95,12 +96,13 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
   const paramView = searchParams?.get('view') as 'overview' | 'identity' | 'pay' | null;
 
   useEffect(() => {
-    if (paramView === 'identity' && appId) {
-      router.replace(`/apps/${appId}/identity`);
-    } else if (paramView === 'pay' && appId) {
-      router.replace(`/apps/${appId}/pay`);
+    const effectiveSlug = (app ? getAppSlug(app) : '') || appId;
+    if (paramView === 'identity' && effectiveSlug) {
+      router.replace(`/apps/${effectiveSlug}/identity/users`);
+    } else if (paramView === 'pay' && effectiveSlug) {
+      router.replace(`/apps/${effectiveSlug}/pay`);
     }
-  }, [paramView, appId, router]);
+  }, [paramView, appId, app, router]);
 
   const [activeView, setActiveView] = useState<'overview' | 'identity' | 'pay'>(
     initialView || 'overview'
@@ -110,14 +112,15 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
   const wasInSettingsRef = useRef(false);
 
   const navigateView = (view: 'overview' | 'identity' | 'pay') => {
+    const effectiveSlug = (app ? getAppSlug(app) : '') || appId;
     if (view === 'identity') {
-      router.push(`/apps/${appId}/identity`);
+      router.push(`/apps/${effectiveSlug}/identity/users`);
     } else if (view === 'pay') {
-      router.push(`/apps/${appId}/pay`);
+      router.push(`/apps/${effectiveSlug}/pay`);
     } else {
       setActiveView('overview');
       if (typeof window !== 'undefined') {
-        window.history.pushState(null, '', `/apps/${appId}`);
+        window.history.pushState(null, '', `/apps/${effectiveSlug}`);
       }
     }
   };

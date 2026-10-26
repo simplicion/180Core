@@ -322,7 +322,13 @@ export class OAuthController {
                 authDesktopDefault,
                 authMobileDefault,
                 payDesktopDefault,
-                payMobileDefault
+                payMobileDefault,
+                enableGoogleAuth: ((app as any).bankDetails as any)?.enableGoogleAuth ?? true,
+                enableLinkedInAuth: ((app as any).bankDetails as any)?.enableLinkedInAuth ?? true,
+                enableGitHubAuth: ((app as any).bankDetails as any)?.enableGitHubAuth ?? true,
+                enableEmailAuth: ((app as any).bankDetails as any)?.enableEmailAuth ?? true,
+                enableWhatsappAuth: ((app as any).bankDetails as any)?.enableWhatsappAuth ?? false,
+                enableSmsAuth: ((app as any).bankDetails as any)?.enableSmsAuth ?? false
             };
 
             const computedDefaultUx = isMobileReq ? authMobileDefault : authDesktopDefault;
@@ -418,6 +424,12 @@ export class OAuthController {
                 authMobileDefault: (app as any).authMobileDefault || 'bottom_sheet',
                 payDesktopDefault: (app as any).payDesktopDefault || 'bottom_sheet',
                 payMobileDefault: (app as any).payMobileDefault || 'bottom_sheet',
+                enableGoogleAuth: ((app as any).bankDetails as any)?.enableGoogleAuth ?? true,
+                enableLinkedInAuth: ((app as any).bankDetails as any)?.enableLinkedInAuth ?? true,
+                enableGitHubAuth: ((app as any).bankDetails as any)?.enableGitHubAuth ?? true,
+                enableEmailAuth: ((app as any).bankDetails as any)?.enableEmailAuth ?? true,
+                enableWhatsappAuth: ((app as any).bankDetails as any)?.enableWhatsappAuth ?? false,
+                enableSmsAuth: ((app as any).bankDetails as any)?.enableSmsAuth ?? false,
             });
         } catch (err: any) {
             console.error('[OAuthController] getAppPublicConfig error:', err);

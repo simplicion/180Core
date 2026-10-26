@@ -160,16 +160,7 @@ export class CouponService {
       },
     });
 
-    if (!coupon) {
-      // Fallback: look for active coupon by code matching the app name or global
-      coupon = await (prisma as any).coupon.findFirst({
-        where: {
-          code: { in: codeVariants, mode: 'insensitive' },
-          isActive: true,
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-    }
+    // Strictly scoped to candidateAppIds of the target application (zero cross-project leakage)
 
     if (!coupon) {
       return {
@@ -466,18 +457,20 @@ export class CouponService {
         candidateSet.add(app.id);
         candidateSet.add(app.clientId);
 
-        const siblingApps = await (prisma as any).oAuthApp.findMany({
-          where: {
-            OR: [
-              { name: { equals: app.name, mode: 'insensitive' } },
-              ...(app.userId ? [{ userId: app.userId }] : []),
-            ],
-          },
-        });
+        // Strictly scoped to exact same app identity or duplicate clones with identical name
+        if (app.name) {
+          const identicalApps = await (prisma as any).oAuthApp.findMany({
+            where: {
+              id: { not: app.id },
+              name: { equals: app.name, mode: 'insensitive' },
+              ...(app.userId ? { userId: app.userId } : {}),
+            },
+          });
 
-        for (const sibling of siblingApps) {
-          candidateSet.add(sibling.id);
-          candidateSet.add(sibling.clientId);
+          for (const identical of identicalApps) {
+            candidateSet.add(identical.id);
+            candidateSet.add(identical.clientId);
+          }
         }
       }
 
@@ -581,26 +574,24 @@ export class CouponService {
     try {
       const currentApp = await (prisma as any).oAuthApp.findUnique({ where: { id: targetAppId } });
       if (currentApp) {
-        const siblingApps = await (prisma as any).oAuthApp.findMany({
+        const identicalApps = await (prisma as any).oAuthApp.findMany({
           where: {
             id: { not: targetAppId },
-            OR: [
-              { name: { equals: currentApp.name, mode: 'insensitive' } },
-              ...(currentApp.userId ? [{ userId: currentApp.userId }] : []),
-            ],
+            name: { equals: currentApp.name, mode: 'insensitive' },
+            ...(currentApp.userId ? { userId: currentApp.userId } : {}),
           },
         });
 
-        for (const sibling of siblingApps) {
+        for (const identical of identicalApps) {
           await (prisma as any).coupon.upsert({
             where: {
               appId_code: {
-                appId: sibling.id,
+                appId: identical.id,
                 code: normalizedCode,
               },
             },
             create: {
-              appId: sibling.id,
+              appId: identical.id,
               code: normalizedCode,
               discountType: data.discountType,
               discountValue: Number(data.discountValue),

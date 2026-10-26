@@ -11,7 +11,7 @@ export default function IdentitySecurityPage() {
     <AppShellLayout
       sidebar={<IdentitySidebar />}
       bottomNav={<IdentityBottomNav />}
-      title="Security, Whitelist & Tokens"
+      title="Security, Auth Methods & Tokens"
       badge="Zero-Trust"
       badgeColor="blue"
     >

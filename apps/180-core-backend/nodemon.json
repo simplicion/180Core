@@ -1,0 +1,9 @@
+{
+  "watch": [
+    "src",
+    "../../packages/domains/identity-provider/src",
+    "../../packages/domains/payment-provider/src"
+  ],
+  "ext": "ts,js,json",
+  "exec": "tsx src/server.ts"
+}

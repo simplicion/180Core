@@ -222,6 +222,16 @@
       }
       card.style.cssText = cardStyle.join(';');
 
+      var isFullScreen = false;
+      var isDomainLocked = false;
+
+      card.addEventListener('animationend', function () {
+        card.style.animation = 'none';
+        if (!isFullScreen) {
+          card.style.transform = 'translateY(0)';
+        }
+      });
+
       // 4. Header Bar
       var header = document.createElement('div');
       header.style.cssText = [
@@ -232,12 +242,22 @@
         'align-items: center',
         'border-bottom: 1px solid rgba(255, 255, 255, 0.08)',
         'background: #09090b',
-        'position: relative'
+        'position: relative',
+        'touch-action: none',
+        'user-select: none',
+        '-webkit-user-select: none',
+        isMobile ? 'cursor: grab' : ''
       ].join(';');
 
+      var grabHandle = null;
       if (isMobile) {
-        var grabHandle = document.createElement('div');
-        grabHandle.style.cssText = 'width: 40px; height: 4px; border-radius: 9999px; background: rgba(255, 255, 255, 0.22); margin-bottom: 6px;';
+        grabHandle = document.createElement('div');
+        grabHandle.style.cssText = 'width: 40px; height: 5px; border-radius: 9999px; background: rgba(255, 255, 255, 0.22); margin-bottom: 6px; cursor: pointer; transition: all 0.25s ease;';
+        grabHandle.setAttribute('title', 'Drag up or tap for full screen');
+        grabHandle.onclick = function (e) {
+          e.stopPropagation();
+          setFullScreen(!isFullScreen);
+        };
         header.appendChild(grabHandle);
       }
 
@@ -256,6 +276,22 @@
       var actionGroup = document.createElement('div');
       actionGroup.style.cssText = 'display: flex; align-items: center; gap: 6px;';
 
+      // Expand / Full-screen toggle button on mobile
+      var expandBtn = null;
+      if (isMobile) {
+        expandBtn = document.createElement('button');
+        expandBtn.type = 'button';
+        expandBtn.setAttribute('aria-label', 'Toggle Full Screen');
+        expandBtn.setAttribute('title', 'Expand full screen');
+        expandBtn.style.cssText = 'width: 28px; height: 28px; border-radius: 50%; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); color: #a1a1aa; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; outline: none; margin-right: 2px;';
+        expandBtn.innerHTML = '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>';
+        expandBtn.onclick = function (e) {
+          e.stopPropagation();
+          setFullScreen(!isFullScreen);
+        };
+        actionGroup.appendChild(expandBtn);
+      }
+
       // Close button
       var closeBtn = document.createElement('button');
       closeBtn.type = 'button';
@@ -267,6 +303,42 @@
       navBar.appendChild(brandWrap);
       navBar.appendChild(actionGroup);
       header.appendChild(navBar);
+
+      function setFullScreen(expand) {
+        if (!isMobile) return;
+        isFullScreen = !!expand;
+        card.style.transition = 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+        card.style.transform = 'translateY(0)';
+        if (isFullScreen) {
+          card.style.height = '100dvh';
+          card.style.maxHeight = '100dvh';
+          card.style.borderRadius = '0';
+          card.style.borderTop = 'none';
+          card.style.borderLeft = 'none';
+          card.style.borderRight = 'none';
+          if (grabHandle) {
+            grabHandle.style.background = 'rgba(255, 255, 255, 0.45)';
+            grabHandle.style.width = '48px';
+          }
+          if (expandBtn) {
+            expandBtn.innerHTML = '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>';
+            expandBtn.setAttribute('title', 'Collapse to bottom sheet');
+          }
+        } else {
+          card.style.height = '88vh';
+          card.style.maxHeight = '92vh';
+          card.style.borderRadius = '24px 24px 0 0';
+          card.style.border = '1px solid rgba(255, 255, 255, 0.12)';
+          if (grabHandle) {
+            grabHandle.style.background = 'rgba(255, 255, 255, 0.22)';
+            grabHandle.style.width = '40px';
+          }
+          if (expandBtn) {
+            expandBtn.innerHTML = '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>';
+            expandBtn.setAttribute('title', 'Expand full screen');
+          }
+        }
+      }
 
       // 5. Iframe Viewport
       var iframeWrap = document.createElement('div');
@@ -333,42 +405,122 @@
       root.appendChild(card);
       document.body.appendChild(root);
 
-      // Touch drag-down gesture for mobile bottom sheet
+      // Touch & Mouse Drag Gestures for Mobile Bottom Sheet
+      var isDragging = false;
       var startY = 0;
       var currentY = 0;
-      header.addEventListener('touchstart', function (e) {
-        if (e.touches && e.touches[0]) {
-          startY = e.touches[0].clientY;
-        }
-      }, { passive: true });
 
-      header.addEventListener('touchmove', function (e) {
-        if (isFullScreen || !isMobile) return;
-        if (e.touches && e.touches[0]) {
-          currentY = e.touches[0].clientY;
-          var diff = currentY - startY;
+      function onDragStart(clientY, target) {
+        if (!isMobile) return;
+        if (target === closeBtn || (closeBtn && closeBtn.contains(target))) return;
+        if (target === expandBtn || (expandBtn && expandBtn.contains(target))) return;
+        isDragging = true;
+        startY = clientY;
+        currentY = clientY;
+        card.style.transition = 'none';
+        header.style.cursor = 'grabbing';
+      }
+
+      function onDragMove(clientY) {
+        if (!isDragging || !isMobile) return;
+        currentY = clientY;
+        var diff = currentY - startY;
+
+        if (isFullScreen) {
+          // In full screen: allow dragging DOWN to collapse
           if (diff > 0) {
             card.style.transform = 'translateY(' + diff + 'px)';
           }
-        }
-      }, { passive: true });
-
-      header.addEventListener('touchend', function () {
-        if (!isMobile) return;
-        var diff = currentY - startY;
-        if (diff > 80) {
-          handleCancel();
         } else {
-          card.style.transform = 'translateY(0)';
+          // In bottom sheet:
+          // Dragging UP (diff < 0): pull up towards full screen
+          // Dragging DOWN (diff > 0): pull down towards dismiss
+          card.style.transform = 'translateY(' + diff + 'px)';
+        }
+      }
+
+      function onDragEnd() {
+        if (!isDragging || !isMobile) return;
+        isDragging = false;
+        header.style.cursor = 'grab';
+        var diff = currentY - startY;
+
+        if (isFullScreen) {
+          // If in full screen and dragged down > 50px, collapse to bottom sheet
+          if (diff > 50) {
+            setFullScreen(false);
+          } else {
+            setFullScreen(true);
+          }
+        } else {
+          // In bottom sheet:
+          if (diff < -40) {
+            // DRAGGED UP! Hold and expand to full screen
+            setFullScreen(true);
+          } else if (diff > 80) {
+            // DRAGGED DOWN!
+            if (!isDomainLocked) {
+              handleCancel();
+            } else {
+              setFullScreen(false);
+            }
+          } else {
+            setFullScreen(false);
+          }
         }
         startY = 0;
         currentY = 0;
+      }
+
+      header.addEventListener('touchstart', function (e) {
+        if (e.touches && e.touches[0]) {
+          onDragStart(e.touches[0].clientY, e.target);
+        }
       }, { passive: true });
+
+      function onWindowTouchMove(e) {
+        if (!isDragging) return;
+        if (e.touches && e.touches[0]) {
+          onDragMove(e.touches[0].clientY);
+        }
+      }
+
+      function onWindowTouchEnd() {
+        if (isDragging) {
+          onDragEnd();
+        }
+      }
+
+      window.addEventListener('touchmove', onWindowTouchMove, { passive: true });
+      window.addEventListener('touchend', onWindowTouchEnd, { passive: true });
+
+      header.addEventListener('mousedown', function (e) {
+        onDragStart(e.clientY, e.target);
+      });
+
+      function onWindowMouseMove(e) {
+        if (isDragging) {
+          onDragMove(e.clientY);
+        }
+      }
+
+      function onWindowMouseUp() {
+        if (isDragging) {
+          onDragEnd();
+        }
+      }
+
+      window.addEventListener('mousemove', onWindowMouseMove);
+      window.addEventListener('mouseup', onWindowMouseUp);
 
       function cleanupListeners() {
         if (window.removeEventListener) {
           window.removeEventListener('message', onMessage);
           window.removeEventListener('keydown', onKeyDown);
+          window.removeEventListener('touchmove', onWindowTouchMove);
+          window.removeEventListener('touchend', onWindowTouchEnd);
+          window.removeEventListener('mousemove', onWindowMouseMove);
+          window.removeEventListener('mouseup', onWindowMouseUp);
         }
       }
 
@@ -410,6 +562,15 @@
         var data = event.data;
         if (!data || typeof data !== 'object') {
           try { data = JSON.parse(event.data); } catch (_) { return; }
+        }
+
+        if (data.type === '180_MODAL_LOCK_CLOSE') {
+          isDomainLocked = true;
+          if (closeBtn) closeBtn.style.display = 'none';
+          backdrop.onclick = null;
+          root.onclick = null;
+          window.removeEventListener('keydown', onKeyDown);
+          return;
         }
 
         var successTypes = options.successTypes || ['180_IDENTITY_SUCCESS', '180_AUTH_SUCCESS', '180_PAY_SUCCESS', '180_PAYMENT_SUCCESS'];

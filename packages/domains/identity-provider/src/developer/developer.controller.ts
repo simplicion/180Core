@@ -5,7 +5,67 @@ import { generateRandomToken, hashSecret } from '../oauth/oauth.service';
 import { LEGACY_FIRST_PARTY_ALIASES, resolveCanonicalClientId } from '../oauth/seed-first-party';
 import { DeveloperBillingService } from './developer-billing.service';
 
+function slugify(text: string): string {
+    return String(text || '')
+        .toLowerCase()
+        .trim()
+        .replace(/[^\w\s-]/g, '')
+        .replace(/[\s_-]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
+
 export class DeveloperController {
+    /**
+     * Resolves an OAuth application by ID, Client ID, canonical Client ID, name, or slug
+     */
+    static async resolveApp(idOrSlug: string, userIds: string[], includeCounts = false) {
+        if (!idOrSlug) return null;
+        const canonicalClientId = resolveCanonicalClientId(idOrSlug);
+
+        const app = await prisma.oAuthApp.findFirst({
+            where: {
+                OR: [
+                    { id: idOrSlug, userId: { in: userIds } },
+                    { clientId: idOrSlug, userId: { in: userIds } },
+                    { clientId: canonicalClientId, userId: { in: userIds } },
+                    { name: { equals: idOrSlug, mode: 'insensitive' }, userId: { in: userIds } }
+                ]
+            },
+            ...(includeCounts ? {
+                include: {
+                    _count: {
+                        select: {
+                            tokens: true,
+                            consents: true
+                        }
+                    }
+                }
+            } : {})
+        });
+
+        if (app) return app;
+
+        // Fallback: match by slugified app name
+        const normalizedTarget = slugify(idOrSlug);
+        if (!normalizedTarget) return null;
+
+        const userApps = await prisma.oAuthApp.findMany({
+            where: { userId: { in: userIds } },
+            ...(includeCounts ? {
+                include: {
+                    _count: {
+                        select: {
+                            tokens: true,
+                            consents: true
+                        }
+                    }
+                }
+            } : {})
+        });
+
+        return userApps.find((a: any) => slugify(a.name) === normalizedTarget) || null;
+    }
+
     /**
      * Resolves all user IDs associated with the current session (by user ID and account email)
      */
@@ -57,6 +117,7 @@ export class DeveloperController {
 
             const sanitized = activeApps.map((app: any) => ({
                 id: app.id,
+                slug: slugify(app.name),
                 name: app.name,
                 description: app.description,
                 clientId: app.clientId,
@@ -80,6 +141,12 @@ export class DeveloperController {
                 payMobileDefault: (app as any).payMobileDefault || 'bottom_sheet',
                 accessTokenTtl: ((app as any).bankDetails as any)?.accessTokenTtl || 900,
                 refreshTokenDays: ((app as any).bankDetails as any)?.refreshTokenDays || 7,
+                enableGoogleAuth: ((app as any).bankDetails as any)?.enableGoogleAuth ?? true,
+                enableLinkedInAuth: ((app as any).bankDetails as any)?.enableLinkedInAuth ?? true,
+                enableGitHubAuth: ((app as any).bankDetails as any)?.enableGitHubAuth ?? true,
+                enableEmailAuth: ((app as any).bankDetails as any)?.enableEmailAuth ?? true,
+                enableWhatsappAuth: ((app as any).bankDetails as any)?.enableWhatsappAuth ?? false,
+                enableSmsAuth: ((app as any).bankDetails as any)?.enableSmsAuth ?? false,
                 metrics: {
                     activeTokens: app._count.tokens,
                     authorizedUsers: app._count.consents
@@ -105,25 +172,8 @@ export class DeveloperController {
                 return res.status(401).json({ success: false, message: 'Authentication required' });
             }
             const { id } = req.params;
-            const canonicalClientId = resolveCanonicalClientId(id);
 
-            const app = await prisma.oAuthApp.findFirst({
-                where: {
-                    OR: [
-                        { id, userId: { in: userIds } },
-                        { clientId: id, userId: { in: userIds } },
-                        { clientId: canonicalClientId, userId: { in: userIds } }
-                    ]
-                },
-                include: {
-                    _count: {
-                        select: {
-                            tokens: true,
-                            consents: true
-                        }
-                    }
-                }
-            });
+            const app = await DeveloperController.resolveApp(id, userIds, true);
 
             if (!app) {
                 return res.status(404).json({ success: false, message: 'OAuth application not found' });
@@ -133,6 +183,7 @@ export class DeveloperController {
                 success: true,
                 app: {
                     id: app.id,
+                    slug: slugify(app.name),
                     name: app.name,
                     description: app.description,
                     clientId: app.clientId,
@@ -156,9 +207,15 @@ export class DeveloperController {
                     payMobileDefault: (app as any).payMobileDefault || 'bottom_sheet',
                     accessTokenTtl: ((app as any).bankDetails as any)?.accessTokenTtl || 900,
                     refreshTokenDays: ((app as any).bankDetails as any)?.refreshTokenDays || 7,
+                    enableGoogleAuth: ((app as any).bankDetails as any)?.enableGoogleAuth ?? true,
+                    enableLinkedInAuth: ((app as any).bankDetails as any)?.enableLinkedInAuth ?? true,
+                    enableGitHubAuth: ((app as any).bankDetails as any)?.enableGitHubAuth ?? true,
+                    enableEmailAuth: ((app as any).bankDetails as any)?.enableEmailAuth ?? true,
+                    enableWhatsappAuth: ((app as any).bankDetails as any)?.enableWhatsappAuth ?? false,
+                    enableSmsAuth: ((app as any).bankDetails as any)?.enableSmsAuth ?? false,
                     metrics: {
-                        activeTokens: app._count.tokens,
-                        authorizedUsers: app._count.consents
+                        activeTokens: (app as any)._count?.tokens || 0,
+                        authorizedUsers: (app as any)._count?.consents || 0
                     },
                     createdAt: app.createdAt,
                     updatedAt: app.updatedAt
@@ -258,6 +315,16 @@ export class DeveloperController {
                     authMobileDefault: String(authMobileDefault || 'bottom_sheet'),
                     payDesktopDefault: String(payDesktopDefault || 'bottom_sheet'),
                     payMobileDefault: String(payMobileDefault || 'bottom_sheet'),
+                    bankDetails: {
+                        enableGoogleAuth: true,
+                        enableLinkedInAuth: true,
+                        enableGitHubAuth: true,
+                        enableEmailAuth: true,
+                        enableWhatsappAuth: false,
+                        enableSmsAuth: false,
+                        accessTokenTtl: 900,
+                        refreshTokenDays: 7
+                    },
                     userId
                 } as any
             });
@@ -328,28 +395,47 @@ export class DeveloperController {
                 payDesktopDefault,
                 payMobileDefault,
                 accessTokenTtl,
-                refreshTokenDays
+                refreshTokenDays,
+                enableGoogleAuth,
+                enableLinkedInAuth,
+                enableGitHubAuth,
+                enableEmailAuth,
+                enableWhatsappAuth,
+                enableSmsAuth
             } = req.body;
 
-            const app = await prisma.oAuthApp.findFirst({
-                where: { id, userId: { in: userIds } }
-            });
+            const app = await DeveloperController.resolveApp(id, userIds);
 
             if (!app) {
                 return res.status(404).json({ success: false, message: 'OAuth application not found' });
             }
 
             let updatedBankDetails = (app.bankDetails as any) || {};
-            if (accessTokenTtl !== undefined || refreshTokenDays !== undefined) {
+            if (
+                accessTokenTtl !== undefined ||
+                refreshTokenDays !== undefined ||
+                enableGoogleAuth !== undefined ||
+                enableLinkedInAuth !== undefined ||
+                enableGitHubAuth !== undefined ||
+                enableEmailAuth !== undefined ||
+                enableWhatsappAuth !== undefined ||
+                enableSmsAuth !== undefined
+            ) {
                 updatedBankDetails = {
                     ...updatedBankDetails,
                     ...(accessTokenTtl !== undefined && { accessTokenTtl: Math.max(60, Number(accessTokenTtl)) }),
-                    ...(refreshTokenDays !== undefined && { refreshTokenDays: Math.max(1, Number(refreshTokenDays)) })
+                    ...(refreshTokenDays !== undefined && { refreshTokenDays: Math.max(1, Number(refreshTokenDays)) }),
+                    ...(enableGoogleAuth !== undefined && { enableGoogleAuth: Boolean(enableGoogleAuth) }),
+                    ...(enableLinkedInAuth !== undefined && { enableLinkedInAuth: Boolean(enableLinkedInAuth) }),
+                    ...(enableGitHubAuth !== undefined && { enableGitHubAuth: Boolean(enableGitHubAuth) }),
+                    ...(enableEmailAuth !== undefined && { enableEmailAuth: true }),
+                    ...(enableWhatsappAuth !== undefined && { enableWhatsappAuth: Boolean(enableWhatsappAuth) }),
+                    ...(enableSmsAuth !== undefined && { enableSmsAuth: Boolean(enableSmsAuth) })
                 };
             }
 
             const updated = await prisma.oAuthApp.update({
-                where: { id },
+                where: { id: app.id },
                 data: {
                     ...(name && { name: String(name).trim() }),
                     ...(description !== undefined && { description: String(description).trim() }),
@@ -368,7 +454,7 @@ export class DeveloperController {
                     ...(authMobileDefault !== undefined && { authMobileDefault: String(authMobileDefault) }),
                     ...(payDesktopDefault !== undefined && { payDesktopDefault: String(payDesktopDefault) }),
                     ...(payMobileDefault !== undefined && { payMobileDefault: String(payMobileDefault) }),
-                    ...((accessTokenTtl !== undefined || refreshTokenDays !== undefined) && { bankDetails: updatedBankDetails })
+                    ...((accessTokenTtl !== undefined || refreshTokenDays !== undefined || enableGoogleAuth !== undefined || enableLinkedInAuth !== undefined || enableGitHubAuth !== undefined || enableEmailAuth !== undefined || enableWhatsappAuth !== undefined || enableSmsAuth !== undefined) && { bankDetails: updatedBankDetails })
                 } as any
             });
 
@@ -377,6 +463,7 @@ export class DeveloperController {
                 message: 'Application updated successfully',
                 app: {
                     id: updated.id,
+                    slug: slugify(updated.name),
                     name: updated.name,
                     clientId: updated.clientId,
                     enableAuth: (updated as any).enableAuth,
@@ -392,7 +479,13 @@ export class DeveloperController {
                     payDesktopDefault: (updated as any).payDesktopDefault,
                     payMobileDefault: (updated as any).payMobileDefault,
                     accessTokenTtl: ((updated as any).bankDetails as any)?.accessTokenTtl || 900,
-                    refreshTokenDays: ((updated as any).bankDetails as any)?.refreshTokenDays || 7
+                    refreshTokenDays: ((updated as any).bankDetails as any)?.refreshTokenDays || 7,
+                    enableGoogleAuth: ((updated as any).bankDetails as any)?.enableGoogleAuth ?? true,
+                    enableLinkedInAuth: ((updated as any).bankDetails as any)?.enableLinkedInAuth ?? true,
+                    enableGitHubAuth: ((updated as any).bankDetails as any)?.enableGitHubAuth ?? true,
+                    enableEmailAuth: ((updated as any).bankDetails as any)?.enableEmailAuth ?? true,
+                    enableWhatsappAuth: ((updated as any).bankDetails as any)?.enableWhatsappAuth ?? false,
+                    enableSmsAuth: ((updated as any).bankDetails as any)?.enableSmsAuth ?? false
                 }
             });
         } catch (err: any) {
@@ -412,9 +505,7 @@ export class DeveloperController {
             }
             const { id } = req.params;
 
-            const app = await prisma.oAuthApp.findFirst({
-                where: { id, userId: { in: userIds } }
-            });
+            const app = await DeveloperController.resolveApp(id, userIds);
 
             if (!app) {
                 return res.status(404).json({ success: false, message: 'OAuth application not found' });
@@ -425,7 +516,7 @@ export class DeveloperController {
             const clientSecretHint = `...${newRawSecret.slice(-4)}`;
 
             await prisma.oAuthApp.update({
-                where: { id },
+                where: { id: app.id },
                 data: {
                     clientSecretHash,
                     clientSecretHint
@@ -454,9 +545,7 @@ export class DeveloperController {
             }
             const { id } = req.params;
 
-            const app = await prisma.oAuthApp.findFirst({
-                where: { id, userId: { in: userIds } }
-            });
+            const app = await DeveloperController.resolveApp(id, userIds);
 
             if (!app) {
                 return res.status(404).json({ success: false, message: 'OAuth application not found' });
@@ -465,7 +554,7 @@ export class DeveloperController {
             const newWebhookSecret = generateRandomToken('whsec', 24);
 
             await prisma.oAuthApp.update({
-                where: { id },
+                where: { id: app.id },
                 data: {
                     webhookSecret: newWebhookSecret
                 } as any
@@ -495,46 +584,172 @@ export class DeveloperController {
             const axios = require('axios');
             const crypto = require('crypto');
 
-            const app = await prisma.oAuthApp.findFirst({
-                where: { id, userId: { in: userIds } }
-            });
+            const app = await DeveloperController.resolveApp(id, userIds);
 
             if (!app) {
                 return res.status(404).json({ success: false, message: 'OAuth application not found' });
             }
 
-            const targetUrl = (app as any).webhookUrl || req.body?.url;
+            const targetUrl = req.body?.url || (app as any).webhookUrl;
             if (!targetUrl || !targetUrl.startsWith('http')) {
                 return res.status(400).json({ success: false, message: 'No valid webhook URL configured for this app' });
             }
 
             const signingSecret = (app as any).webhookSecret || app.clientSecretHash;
-            const payload = {
-                event: 'payment.test',
-                id: `evt_test_${Date.now()}`,
-                createdAt: new Date().toISOString(),
-                data: {
-                    sessionId: `cs_test_${generateRandomToken('180', 8)}`,
-                    amount: 499.00,
-                    currency: 'INR',
-                    title: 'Test Webhook Verification Payment',
-                    customer: {
-                        name: '180 Test Customer',
-                        email: 'test@180core.cloud'
-                    },
-                    metadata: {
-                        tier: 'pro_monthly',
-                        isSandbox: true
-                    },
-                    timestamp: new Date().toISOString()
+            const eventType = req.body?.event || req.body?.eventType || 'identity.user.signup';
+            const timestamp = Math.floor(Date.now() / 1000).toString();
+
+            let payloadData: any = req.body?.customPayload;
+            if (!payloadData) {
+                if (eventType === 'identity.user.signup') {
+                    payloadData = {
+                        userId: `usr_${crypto.randomUUID()}`,
+                        username: 'alex.rivera_92',
+                        email: 'alex.rivera@example.com',
+                        phone: '+919876543210',
+                        phoneVerified: true,
+                        authMethod: 'whatsapp_otp',
+                        ipAddress: '203.0.113.195',
+                        createdAt: new Date().toISOString()
+                    };
+                } else if (eventType === 'identity.user.authenticated') {
+                    payloadData = {
+                        userId: `usr_${crypto.randomUUID()}`,
+                        sessionId: `sess_live_${generateRandomToken('auth', 12)}`,
+                        ipAddress: '203.0.113.195',
+                        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+                        authMethod: 'google_oauth',
+                        authenticatedAt: new Date().toISOString()
+                    };
+                } else if (eventType === 'identity.user.phone_verified') {
+                    payloadData = {
+                        userId: `usr_${crypto.randomUUID()}`,
+                        phone: '+919876543210',
+                        channel: 'whatsapp',
+                        verifiedAt: new Date().toISOString()
+                    };
+                } else if (eventType === 'identity.session.revoked') {
+                    payloadData = {
+                        userId: `usr_${crypto.randomUUID()}`,
+                        sessionId: `sess_live_${generateRandomToken('auth', 12)}`,
+                        reason: 'user_signout',
+                        revokedAt: new Date().toISOString()
+                    };
+                } else if (eventType === 'identity.test') {
+                    payloadData = {
+                        ping: 'pong',
+                        service: '180 Identity Engine',
+                        appId: app.id,
+                        appName: app.name,
+                        environment: 'sandbox',
+                        message: 'Test webhook ping delivered from 180 Core Developer Console',
+                        timestamp: new Date().toISOString()
+                    };
+                } else if (eventType === 'payment.captured' || eventType === 'payment.succeeded') {
+                    const currency = ((app as any).currency || 'USD').toUpperCase();
+                    const amount = (app as any).defaultAmount !== undefined ? (app as any).defaultAmount : 49.0;
+                    payloadData = {
+                        sessionId: `sess_live_${generateRandomToken('180pay', 12)}`,
+                        transactionId: `txn_${generateRandomToken('ledg', 12)}`,
+                        amount,
+                        currency,
+                        amountFormatted: `${currency === 'INR' ? '₹' : '$'}${amount.toFixed(2)}`,
+                        title: `${app.name} Checkout Session`,
+                        customerEmail: 'alex.dev@example.com',
+                        customerName: 'Alex Dev',
+                        paymentMethod: 'card_visa',
+                        platformFeeAmount: Number((amount * 0.015).toFixed(2)),
+                        netPayoutAmount: Number((amount * 0.985).toFixed(2)),
+                        metadata: {
+                            orderId: `ord_${Date.now().toString(36)}`,
+                            planName: 'Enterprise Growth Tier',
+                        },
+                        timestamp: new Date().toISOString()
+                    };
+                } else if (eventType === 'subscription.created') {
+                    const currency = ((app as any).currency || 'USD').toUpperCase();
+                    const amount = (app as any).defaultAmount !== undefined ? (app as any).defaultAmount : 49.0;
+                    payloadData = {
+                        subscriptionId: `sub_live_${generateRandomToken('180sub', 10)}`,
+                        planCode: 'pro-monthly',
+                        billingInterval: 'month',
+                        amount,
+                        currency,
+                        currentPeriodStart: Math.floor(Date.now() / 1000),
+                        currentPeriodEnd: Math.floor(Date.now() / 1000) + 30 * 86400,
+                        trialEnd: null,
+                        status: 'active',
+                        customerEmail: 'alex.dev@example.com',
+                    };
+                } else if (eventType === 'subscription.renewed') {
+                    const currency = ((app as any).currency || 'USD').toUpperCase();
+                    const amount = (app as any).defaultAmount !== undefined ? (app as any).defaultAmount : 49.0;
+                    payloadData = {
+                        subscriptionId: `sub_live_${generateRandomToken('180sub', 10)}`,
+                        transactionId: `txn_ren_${generateRandomToken('180', 8)}`,
+                        amount,
+                        currency,
+                        nextBillingDate: Math.floor(Date.now() / 1000) + 30 * 86400,
+                        status: 'active',
+                        customerEmail: 'alex.dev@example.com',
+                    };
+                } else if (eventType === 'coupon.redeemed') {
+                    payloadData = {
+                        couponId: `cpn_${generateRandomToken('180cpn', 8)}`,
+                        couponCode: 'LAUNCH50',
+                        discountType: 'percentage',
+                        discountPercent: 50,
+                        discountAmount: 25.0,
+                        sessionId: `sess_live_${generateRandomToken('180pay', 10)}`,
+                        customerEmail: 'alex.dev@example.com',
+                    };
+                } else {
+                    // Payment or fallback event
+                    const currency = ((app as any).currency || 'USD').toUpperCase();
+                    const amount = (app as any).defaultAmount !== undefined ? (app as any).defaultAmount : 49.0;
+                    payloadData = {
+                        sessionId: `sess_live_${generateRandomToken('180pay', 8)}`,
+                        amount,
+                        currency,
+                        title: `${app.name} Webhook Event`,
+                        customer: {
+                            name: '180 Test Customer',
+                            email: 'test@180core.cloud'
+                        },
+                        metadata: {
+                            tier: 'pro_monthly',
+                            isSandbox: true
+                        },
+                        timestamp: new Date().toISOString()
+                    };
                 }
+            }
+
+            const payload = {
+                id: `evt_test_${Date.now()}`,
+                event: eventType,
+                appId: app.id,
+                timestamp: parseInt(timestamp, 10),
+                createdAt: new Date().toISOString(),
+                data: payloadData
             };
 
             const payloadString = JSON.stringify(payload);
             const signature = crypto
                 .createHmac('sha256', signingSecret)
-                .update(payloadString)
+                .update(`${timestamp}.${payloadString}`)
                 .digest('hex');
+
+            const headersSent: Record<string, string> = {
+                'Content-Type': 'application/json',
+                'X-180-Signature': signature,
+                'X-180-Timestamp': timestamp,
+                'X-180-Event': eventType,
+                'x-180-signature': `t=${timestamp},v1=${signature}`,
+                'x-180-timestamp': timestamp,
+                'x-180-event': eventType,
+                'User-Agent': '180-Webhook-Dispatcher/1.0'
+            };
 
             const startTime = Date.now();
             let deliveryStatus = 'SUCCESS';
@@ -543,20 +758,15 @@ export class DeveloperController {
 
             try {
                 const response = await axios.post(targetUrl, payload, {
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-180-Signature': signature,
-                        'X-180-Event': 'payment.test',
-                        'User-Agent': '180-Webhook-Dispatcher/1.0'
-                    },
+                    headers: headersSent,
                     timeout: 8000
                 });
                 responseStatus = response.status;
-                responseBody = typeof response.data === 'string' ? response.data.slice(0, 500) : JSON.stringify(response.data).slice(0, 500);
+                responseBody = typeof response.data === 'string' ? response.data.slice(0, 1000) : JSON.stringify(response.data).slice(0, 1000);
             } catch (httpErr: any) {
                 deliveryStatus = 'FAILED';
                 responseStatus = httpErr.response?.status || 500;
-                responseBody = httpErr.response?.data ? JSON.stringify(httpErr.response.data).slice(0, 500) : httpErr.message;
+                responseBody = httpErr.response?.data ? (typeof httpErr.response.data === 'string' ? httpErr.response.data.slice(0, 1000) : JSON.stringify(httpErr.response.data).slice(0, 1000)) : httpErr.message;
             }
 
             const latencyMs = Date.now() - startTime;
@@ -564,14 +774,17 @@ export class DeveloperController {
             return res.json({
                 success: deliveryStatus === 'SUCCESS',
                 targetUrl,
-                event: 'payment.test',
+                event: eventType,
                 signature,
+                timestamp,
+                headersSent,
+                requestPayload: payload,
                 statusCode: responseStatus,
                 latencyMs,
                 response: responseBody,
                 message: deliveryStatus === 'SUCCESS' 
                     ? `Webhook verified successfully (HTTP ${responseStatus} in ${latencyMs}ms)` 
-                    : `Webhook delivered with error (HTTP ${responseStatus} in ${latencyMs}ms)`
+                    : `Webhook delivered with HTTP ${responseStatus} in ${latencyMs}ms`
             });
         } catch (err: any) {
             console.error('[DeveloperController] testWebhook error:', err);
@@ -590,16 +803,14 @@ export class DeveloperController {
             }
             const { id } = req.params;
 
-            const app = await prisma.oAuthApp.findFirst({
-                where: { id, userId: { in: userIds } }
-            });
+            const app = await DeveloperController.resolveApp(id, userIds);
 
             if (!app) {
                 return res.status(404).json({ success: false, message: 'OAuth application not found' });
             }
 
             await prisma.oAuthApp.delete({
-                where: { id }
+                where: { id: app.id }
             });
 
             // Dynamically recalculate subscription for remaining projects

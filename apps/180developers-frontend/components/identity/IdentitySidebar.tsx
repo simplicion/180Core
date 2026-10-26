@@ -59,14 +59,15 @@ export function IdentitySidebar({
     } catch (_) {}
   };
 
-  const navItems = [
-    {
-      label: 'Overview',
-      href: `/apps/${projectId}/identity`,
-      icon: Shield,
-      exact: true,
-      description: 'Engine status & auth UX modes',
-    },
+  const navItems: Array<{
+    label: string;
+    href: string;
+    icon: any;
+    exact?: boolean;
+    badge?: string;
+    isLive?: boolean;
+    description?: string;
+  }> = [
     {
       label: 'Authenticated Users',
       href: `/apps/${projectId}/identity/users`,
@@ -82,10 +83,10 @@ export function IdentitySidebar({
       description: 'Live auth telemetry stream',
     },
     {
-      label: 'Security & Whitelist',
+      label: 'Security & Auth Methods',
       href: `/apps/${projectId}/identity/security`,
       icon: Lock,
-      description: 'IP & URL whitelisting',
+      description: 'Auth providers & token policies',
     },
     {
       label: 'Webhooks & Events',

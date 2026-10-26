@@ -858,6 +858,385 @@ export class IdentityAuthController {
     }
 
     /**
+     * Public LinkedIn OAuth Client Configuration Endpoint
+     */
+    static async getLinkedInConfig(req: any, res: any) {
+        const clientId =
+            process.env.LINKEDIN_CLIENT_ID ||
+            process.env.NEXT_PUBLIC_LINKEDIN_CLIENT_ID ||
+            '';
+        return res.json({
+            success: true,
+            clientId
+        });
+    }
+
+    /**
+     * LinkedIn OpenID Connect Sign-In / Sign-Up
+     * Accepts { code, redirectUri } or { accessToken }
+     */
+    static async linkedinContinue(req: any, res: any) {
+        try {
+            const { code, redirectUri, accessToken, password } = req.body;
+
+            let resolvedAccessToken = accessToken;
+            let linkedinEmail = '';
+            let linkedinName = '';
+            let linkedinAvatar = '';
+            let linkedinSub = '';
+
+            // If authorization code provided, exchange for token with LinkedIn OAuth
+            if (code) {
+                const clientId = process.env.LINKEDIN_CLIENT_ID || process.env.NEXT_PUBLIC_LINKEDIN_CLIENT_ID;
+                const clientSecret = process.env.LINKEDIN_CLIENT_SECRET;
+
+                if (!clientId || !clientSecret) {
+                    return res.status(500).json({
+                        success: false,
+                        error: 'config_error',
+                        message: 'LinkedIn OAuth credentials not configured on server'
+                    });
+                }
+
+                const tokenParams = new URLSearchParams({
+                    grant_type: 'authorization_code',
+                    code,
+                    redirect_uri: redirectUri || 'http://localhost:3009/auth/linkedin/callback',
+                    client_id: clientId,
+                    client_secret: clientSecret
+                });
+
+                const tokenRes = await fetch('https://www.linkedin.com/oauth/v2/accessToken', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: tokenParams.toString()
+                });
+
+                if (!tokenRes.ok) {
+                    const errData: any = await tokenRes.json().catch(() => ({}));
+                    return res.status(400).json({
+                        success: false,
+                        error: 'token_exchange_failed',
+                        message: errData.error_description || 'Failed to exchange LinkedIn authorization code'
+                    });
+                }
+
+                const tokenData: any = await tokenRes.json();
+                resolvedAccessToken = tokenData.access_token;
+            }
+
+            if (!resolvedAccessToken) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'missing_token',
+                    message: 'LinkedIn authorization code or access token is required'
+                });
+            }
+
+            // Fetch userinfo from LinkedIn OpenID Connect endpoint
+            const userinfoRes = await fetch('https://api.linkedin.com/v2/userinfo', {
+                headers: { Authorization: `Bearer ${resolvedAccessToken}` }
+            });
+
+            if (!userinfoRes.ok) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'userinfo_failed',
+                    message: 'Failed to retrieve profile from LinkedIn OpenID Connect'
+                });
+            }
+
+            const profile: any = await userinfoRes.json();
+            linkedinEmail = profile.email || '';
+            linkedinName = profile.name || `${profile.given_name || ''} ${profile.family_name || ''}`.trim() || 'LinkedIn Member';
+            linkedinAvatar = profile.picture || '';
+            linkedinSub = profile.sub || '';
+
+            if (!linkedinEmail) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'missing_email',
+                    message: 'LinkedIn account email could not be resolved'
+                });
+            }
+
+            const cleanEmail = String(linkedinEmail).toLowerCase().trim();
+
+            let hashedPassword: string | null = null;
+            if (password && password.length >= 6) {
+                const salt = await bcrypt.genSalt(10);
+                hashedPassword = await bcrypt.hash(password, salt);
+            }
+
+            // Find existing user by email
+            const existingUser = await prisma.user.findFirst({
+                where: { email: { equals: cleanEmail, mode: 'insensitive' } }
+            });
+
+            let user;
+            if (existingUser) {
+                const currentSec = (existingUser.securityPreferences as any) || {};
+                user = await prisma.user.update({
+                    where: { id: existingUser.id },
+                    data: {
+                        name: existingUser.name || linkedinName,
+                        avatarUrl: existingUser.avatarUrl || linkedinAvatar || '',
+                        securityPreferences: {
+                            ...currentSec,
+                            linkedinId: linkedinSub || currentSec.linkedinId
+                        },
+                        isEmailVerified: true,
+                        isVerified: true,
+                        ...(hashedPassword ? { passwordHash: hashedPassword } : {})
+                    }
+                });
+            } else {
+                const uniqueUsername = await UsernameService.generateUniqueUsername(linkedinName || cleanEmail.split('@')[0]);
+                user = await prisma.user.create({
+                    data: {
+                        name: linkedinName,
+                        email: cleanEmail,
+                        username: uniqueUsername,
+                        avatarUrl: linkedinAvatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${uniqueUsername}`,
+                        securityPreferences: {
+                            linkedinId: linkedinSub
+                        },
+                        passwordHash: hashedPassword || null,
+                        isEmailVerified: true,
+                        isVerified: true,
+                        isOnboarded: false,
+                        role: 'USER'
+                    }
+                });
+            }
+
+            const token = signToken(user.id);
+            const requiresPassword = !user.passwordHash;
+
+            return res.json({
+                success: true,
+                token,
+                user: sanitizeUser(user),
+                isOnboarded: Boolean(user.isOnboarded),
+                requiresPassword,
+                nextStep: requiresPassword ? 'password' : (user.isOnboarded ? 'done' : 'onboarding')
+            });
+        } catch (err: any) {
+            console.error('[IdentityAuthController] linkedinContinue error:', err);
+            return res.status(500).json({ success: false, error: 'server_error', message: err.message });
+        }
+    }
+
+    /**
+     * Public GitHub OAuth Client Configuration Endpoint
+     */
+    static async getGitHubConfig(req: any, res: any) {
+        const clientId =
+            process.env.GITHUB_CLIENT_ID ||
+            process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID ||
+            '';
+        return res.json({
+            success: true,
+            clientId
+        });
+    }
+
+    /**
+     * GitHub OAuth Sign-In / Sign-Up
+     * Accepts { code, redirectUri } or { accessToken }
+     */
+    static async githubContinue(req: any, res: any) {
+        try {
+            const { code, redirectUri, accessToken, password } = req.body;
+
+            let resolvedAccessToken = accessToken;
+            let githubEmail = '';
+            let githubName = '';
+            let githubAvatar = '';
+            let githubSub = '';
+            let githubLogin = '';
+
+            // If authorization code provided, exchange for token with GitHub OAuth
+            if (code) {
+                const clientId = process.env.GITHUB_CLIENT_ID || process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID;
+                const clientSecret = process.env.GITHUB_CLIENT_SECRET;
+
+                if (!clientId || !clientSecret) {
+                    return res.status(500).json({
+                        success: false,
+                        error: 'config_error',
+                        message: 'GitHub OAuth credentials not configured on server'
+                    });
+                }
+
+                const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json'
+                    },
+                    body: JSON.stringify({
+                        client_id: clientId,
+                        client_secret: clientSecret,
+                        code,
+                        redirect_uri: redirectUri || 'http://localhost:3009/auth/github/callback'
+                    })
+                });
+
+                if (!tokenRes.ok) {
+                    const errData: any = await tokenRes.json().catch(() => ({}));
+                    return res.status(400).json({
+                        success: false,
+                        error: 'token_exchange_failed',
+                        message: errData.error_description || 'Failed to exchange GitHub authorization code'
+                    });
+                }
+
+                const tokenData: any = await tokenRes.json();
+                if (tokenData.error) {
+                    return res.status(400).json({
+                        success: false,
+                        error: tokenData.error,
+                        message: tokenData.error_description || 'GitHub authorization token request failed'
+                    });
+                }
+                resolvedAccessToken = tokenData.access_token;
+            }
+
+            if (!resolvedAccessToken) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'missing_token',
+                    message: 'GitHub authorization code or access token is required'
+                });
+            }
+
+            // Fetch user profile from GitHub API
+            const userRes = await fetch('https://api.github.com/user', {
+                headers: {
+                    Authorization: `Bearer ${resolvedAccessToken}`,
+                    'User-Agent': '180Core-Identity-Provider'
+                }
+            });
+
+            if (!userRes.ok) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'userinfo_failed',
+                    message: 'Failed to retrieve profile from GitHub'
+                });
+            }
+
+            const profile: any = await userRes.json();
+            githubLogin = profile.login || '';
+            githubName = profile.name || profile.login || 'GitHub User';
+            githubAvatar = profile.avatar_url || '';
+            githubSub = String(profile.id || '');
+            githubEmail = profile.email || '';
+
+            // If email is private on GitHub, fetch verified emails
+            if (!githubEmail) {
+                try {
+                    const emailsRes = await fetch('https://api.github.com/user/emails', {
+                        headers: {
+                            Authorization: `Bearer ${resolvedAccessToken}`,
+                            'User-Agent': '180Core-Identity-Provider'
+                        }
+                    });
+                    if (emailsRes.ok) {
+                        const rawEmails: any = await emailsRes.json();
+                        const emails: any[] = Array.isArray(rawEmails) ? rawEmails : [];
+                        const primaryEmail = emails.find((e: any) => e.primary && e.verified) || emails.find((e: any) => e.verified) || emails[0];
+                        if (primaryEmail?.email) {
+                            githubEmail = primaryEmail.email;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[IdentityAuthController] GitHub emails fetch error:', e);
+                }
+            }
+
+            // Fallback for GitHub accounts with strictly private no-reply email
+            if (!githubEmail && githubLogin) {
+                githubEmail = `${githubLogin}@users.noreply.github.com`;
+            }
+
+            if (!githubEmail) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'missing_email',
+                    message: 'GitHub account email could not be resolved'
+                });
+            }
+
+            const cleanEmail = String(githubEmail).toLowerCase().trim();
+
+            let hashedPassword: string | null = null;
+            if (password && password.length >= 6) {
+                const salt = await bcrypt.genSalt(10);
+                hashedPassword = await bcrypt.hash(password, salt);
+            }
+
+            // Find existing user by email
+            const existingUser = await prisma.user.findFirst({
+                where: { email: { equals: cleanEmail, mode: 'insensitive' } }
+            });
+
+            let user;
+            if (existingUser) {
+                const currentSec = (existingUser.securityPreferences as any) || {};
+                user = await prisma.user.update({
+                    where: { id: existingUser.id },
+                    data: {
+                        name: existingUser.name || githubName,
+                        avatarUrl: existingUser.avatarUrl || githubAvatar || '',
+                        securityPreferences: {
+                            ...currentSec,
+                            githubId: githubSub || currentSec.githubId
+                        },
+                        isEmailVerified: true,
+                        isVerified: true,
+                        ...(hashedPassword ? { passwordHash: hashedPassword } : {})
+                    }
+                });
+            } else {
+                const uniqueUsername = await UsernameService.generateUniqueUsername(githubLogin || githubName || cleanEmail.split('@')[0]);
+                user = await prisma.user.create({
+                    data: {
+                        name: githubName,
+                        email: cleanEmail,
+                        username: uniqueUsername,
+                        avatarUrl: githubAvatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${uniqueUsername}`,
+                        securityPreferences: {
+                            githubId: githubSub
+                        },
+                        passwordHash: hashedPassword || null,
+                        isEmailVerified: true,
+                        isVerified: true,
+                        isOnboarded: false,
+                        role: 'USER'
+                    }
+                });
+            }
+
+            const token = signToken(user.id);
+            const requiresPassword = !user.passwordHash;
+
+            return res.json({
+                success: true,
+                token,
+                user: sanitizeUser(user),
+                isOnboarded: Boolean(user.isOnboarded),
+                requiresPassword,
+                nextStep: requiresPassword ? 'password' : (user.isOnboarded ? 'done' : 'onboarding')
+            });
+        } catch (err: any) {
+            console.error('[IdentityAuthController] githubContinue error:', err);
+            return res.status(500).json({ success: false, error: 'server_error', message: err.message });
+        }
+    }
+
+    /**
      * 7. Legacy / Direct Register Endpoint (Full Single Step)
      */
     static async register(req: any, res: any) {

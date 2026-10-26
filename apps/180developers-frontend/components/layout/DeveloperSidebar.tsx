@@ -22,6 +22,7 @@ import {
 import { Button } from '@workspace/ui';
 import { OneEightyCoreLogo, OneEightyCoreIcon } from '@/components/OneEightyCoreLogo';
 import { getDocsUrl, DOCS_LINKS } from '@/lib/docs-url';
+import { getAppSlug } from '@/lib/slug';
 
 export interface DeveloperSidebarProps {
   activeTab: string;
@@ -37,6 +38,7 @@ export interface DeveloperSidebarProps {
   appCount: number;
   apps?: {
     id: string;
+    slug?: string;
     name: string;
     clientId: string;
     enableAuth?: boolean;
@@ -337,14 +339,18 @@ export function DeveloperSidebar({
               {apps && apps.length > 0 ? (
                 <div className="space-y-0.5 pt-1">
                   {apps.map((proj) => {
+                    const appSlug = getAppSlug(proj);
                     const isSelected =
                       currentAppId === proj.id ||
+                      currentAppId === appSlug ||
                       pathname === `/apps/${proj.id}` ||
-                      pathname.startsWith(`/apps/${proj.id}/`);
+                      pathname.startsWith(`/apps/${proj.id}/`) ||
+                      pathname === `/apps/${appSlug}` ||
+                      pathname.startsWith(`/apps/${appSlug}/`);
                     return (
                       <Link
                         key={proj.id}
-                        href={`/apps/${proj.id}`}
+                        href={`/apps/${appSlug}`}
                         onClick={onMobileClose}
                         className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all min-h-[36px] group/item ${
                           isSelected

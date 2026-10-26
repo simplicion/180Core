@@ -48,6 +48,10 @@ router.post('/reset-password/verify-otp', authRateLimiter, AuthApiController.ver
 router.post('/reset-password', authRateLimiter, AuthApiController.resetPassword);
 router.post('/google-continue', authRateLimiter, AuthApiController.googleContinue);
 router.get('/google-config', AuthApiController.getGoogleConfig);
+router.post('/linkedin-continue', authRateLimiter, AuthApiController.linkedinContinue);
+router.get('/linkedin-config', AuthApiController.getLinkedInConfig);
+router.post('/github-continue', authRateLimiter, AuthApiController.githubContinue);
+router.get('/github-config', AuthApiController.getGitHubConfig);
 router.get('/smtp-status', AuthApiController.getSmtpStatus);
 
 // ─── OTP & Verification ──────────────────────────────────────────────────────

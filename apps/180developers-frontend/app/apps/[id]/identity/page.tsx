@@ -1,21 +1,21 @@
 'use client';
 
-import React from 'react';
-import { AppShellLayout } from '@/components/common/AppShellLayout';
-import { IdentitySidebar } from '@/components/identity/IdentitySidebar';
-import { IdentityBottomNav } from '@/components/identity/IdentityBottomNav';
-import { IdentityOverviewView } from '@/components/identity/IdentityOverviewView';
+import { useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 
-export default function IdentityOverviewPage() {
+export default function IdentityIndexRedirectPage() {
+  const params = useParams();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (params?.id) {
+      router.replace(`/apps/${params.id}/identity/users`);
+    }
+  }, [params?.id, router]);
+
   return (
-    <AppShellLayout
-      sidebar={<IdentitySidebar />}
-      bottomNav={<IdentityBottomNav />}
-      title="180 Identity Overview"
-      badge="OAuth 2.0 / OIDC"
-      badgeColor="blue"
-    >
-      <IdentityOverviewView />
-    </AppShellLayout>
+    <div className="min-h-screen bg-zinc-50 dark:bg-black flex items-center justify-center">
+      <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+    </div>
   );
 }

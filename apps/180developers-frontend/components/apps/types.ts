@@ -22,6 +22,12 @@ export interface DeveloperAppDetail {
   payMobileDefault?: string;
   accessTokenTtl?: number;
   refreshTokenDays?: number;
+  enableGoogleAuth?: boolean;
+  enableLinkedInAuth?: boolean;
+  enableGitHubAuth?: boolean;
+  enableEmailAuth?: boolean;
+  enableWhatsappAuth?: boolean;
+  enableSmsAuth?: boolean;
   createdAt: string;
 }
 
@@ -124,7 +130,11 @@ export interface WebhookTestResult {
   statusCode: number;
   latencyMs: number;
   signature: string;
+  timestamp?: string;
   targetUrl: string;
+  event?: string;
+  headersSent?: Record<string, string>;
+  requestPayload?: any;
   message: string;
   response: string;
 }

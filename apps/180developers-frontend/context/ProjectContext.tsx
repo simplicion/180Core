@@ -6,10 +6,12 @@ import toast from 'react-hot-toast';
 import { DeveloperAppDetail, PaymentAnalyticsData, BankDetailsData, PayoutRecord, WebhookTestResult } from '@/components/apps/types';
 import { purgeAuthSession, getStoredAuthToken } from '@/lib/auth';
 import { cachedFetch, invalidateCache } from '@/lib/cache';
+import { getAppSlug } from '@/lib/slug';
 
 interface ProjectContextValue {
   project: DeveloperAppDetail | null;
   projectId: string;
+  projectSlug?: string;
   loading: boolean;
   refreshProject: (forceBypass?: boolean | unknown) => Promise<void>;
   userProfile: any;
@@ -73,7 +75,7 @@ interface ProjectContextValue {
   webhookSecret: string;
   testResult: WebhookTestResult | null;
   isTestingWebhook: boolean;
-  handleTestWebhook: () => Promise<void>;
+  handleTestWebhook: (options?: any) => Promise<void>;
   handleRotateWebhookSecret: () => Promise<void>;
 }
 
@@ -135,6 +137,17 @@ export function ProjectProvider({
       setLoading(false);
     }, 5000);
     return () => clearTimeout(timer);
+  }, [projectId]);
+
+  // Strict Project Isolation: Immediately purge all project-scoped state when navigating between projects
+  useEffect(() => {
+    setProject(null);
+    setPaymentAnalytics(null);
+    setAuthLogs(null);
+    setBankDetails(null);
+    setPayoutHistory([]);
+    setPayoutBalance(0);
+    setTestResult(null);
   }, [projectId]);
 
   // Identity states
@@ -247,6 +260,21 @@ export function ProjectProvider({
         setEnablePay(appData.enablePay ?? true);
         setWebhookUrl(appData.webhookUrl || '');
         setWebhookSecret(appData.webhookSecret || '');
+
+        // Automatically replace any legacy raw UUID or ClientID in the URL address bar with the clean slug
+        const appSlug = getAppSlug(appData);
+        if (appSlug && typeof window !== 'undefined') {
+          const currentPath = window.location.pathname;
+          if (
+            currentPath.includes(`/apps/${appData.id}`) ||
+            (appData.clientId && currentPath.includes(`/apps/${appData.clientId}`))
+          ) {
+            const newPath = currentPath
+              .replace(`/apps/${appData.id}`, `/apps/${appSlug}`)
+              .replace(`/apps/${appData.clientId}`, `/apps/${appSlug}`);
+            window.history.replaceState(null, '', newPath + window.location.search + window.location.hash);
+          }
+        }
       }
     } catch (err: any) {
       console.warn('[ProjectContext] Failed to load project:', err?.message);
@@ -599,8 +627,11 @@ export function ProjectProvider({
   }, [projectId]);
 
   // Webhook Test & Rotate
-  const handleTestWebhook = async () => {
-    if (!webhookUrl.trim()) {
+  const handleTestWebhook = async (options?: any) => {
+    const isSyntheticEvent = options && typeof options === 'object' && ('nativeEvent' in options || 'target' in options);
+    const opts = isSyntheticEvent ? undefined : options;
+    const target = opts?.url || webhookUrl.trim();
+    if (!target) {
       toast.error('Please configure a destination webhook URL first');
       return;
     }
@@ -609,13 +640,18 @@ export function ProjectProvider({
     try {
       const token = getAuthToken();
       const apiBase = getApiBase();
+      const eventToTest = opts?.event || 'identity.user.signup';
       const res = await fetch(`${apiBase}/api/v1/identity/developer/apps/${projectId}/test-webhook`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ url: webhookUrl.trim() }),
+        body: JSON.stringify({
+          url: target,
+          event: eventToTest,
+          customPayload: options?.customPayload,
+        }),
       });
       const data = await res.json();
       setTestResult({
@@ -623,7 +659,11 @@ export function ProjectProvider({
         statusCode: data.statusCode || (res.ok ? 200 : 500),
         latencyMs: data.latencyMs || 0,
         signature: data.signature || '',
-        targetUrl: data.targetUrl || webhookUrl,
+        timestamp: data.timestamp || '',
+        targetUrl: data.targetUrl || target,
+        event: data.event || eventToTest,
+        headersSent: data.headersSent || undefined,
+        requestPayload: data.requestPayload || undefined,
         message: data.message || '',
         response: typeof data.response === 'string' ? data.response : JSON.stringify(data.response || ''),
       });
@@ -707,11 +747,14 @@ export function ProjectProvider({
     fetchAllProjectsAndProfile();
   }, [refreshProject, fetchAllProjectsAndProfile]);
 
+  const projectSlug = (project ? getAppSlug(project) : '') || (params?.id as string) || projectId;
+
   return (
     <ProjectContext.Provider
       value={{
         project,
-        projectId,
+        projectId: projectSlug || projectId,
+        projectSlug,
         loading,
         refreshProject,
         userProfile,

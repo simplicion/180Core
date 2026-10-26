@@ -46,6 +46,7 @@ export default function Navbar() {
 
   const getProfileUrl = () => {
     if (typeof window === 'undefined') return 'http://localhost:3009';
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     return isLocal ? 'http://localhost:3009' : 'https://profile.180core.cloud';
   };
 

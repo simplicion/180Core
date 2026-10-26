@@ -77,8 +77,44 @@ export function OAuthErrorCard({
     return `180-AUTH-${rand}`;
   });
 
-  const isUriError = details?.type === 'REDIRECT_URI_MISMATCH' || errorDescription.toLowerCase().includes('redirect uri');
-  const isOriginError = details?.type === 'ORIGIN_MISMATCH' || errorDescription.toLowerCase().includes('origin');
+  const isUriError =
+    details?.type === 'REDIRECT_URI_MISMATCH' ||
+    (errorDescription || '').toLowerCase().includes('redirect');
+  const isOriginError =
+    details?.type === 'ORIGIN_MISMATCH' ||
+    (errorDescription || '').toLowerCase().includes('origin');
+  const isDomainWhitelistError =
+    isUriError ||
+    isOriginError ||
+    details?.type === 'REDIRECT_URI_MISMATCH' ||
+    details?.type === 'ORIGIN_MISMATCH' ||
+    (errorDescription || '').toLowerCase().includes('not whitelisted') ||
+    (errorDescription || '').toLowerCase().includes('not registered') ||
+    (errorDescription || '').toLowerCase().includes('redirect') ||
+    (errorDescription || '').toLowerCase().includes('origin') ||
+    (error === 'invalid_request' && (
+      (errorDescription || '').toLowerCase().includes('redirect') ||
+      (errorDescription || '').toLowerCase().includes('origin') ||
+      (errorDescription || '').toLowerCase().includes('whitelisted') ||
+      (errorDescription || '').toLowerCase().includes('domain')
+    ));
+
+  // Lock outer SDK modal and prevent closing when domain is not whitelisted
+  React.useEffect(() => {
+    if (isDomainWhitelistError && typeof window !== 'undefined') {
+      const lockPayload = {
+        type: '180_MODAL_LOCK_CLOSE',
+        reason: 'DOMAIN_NOT_WHITELISTED',
+        error,
+        errorDescription,
+        referenceCode,
+      };
+      try { window.postMessage(lockPayload, '*'); } catch (_) {}
+      if (window.parent && window.parent !== window) {
+        try { window.parent.postMessage(lockPayload, '*'); } catch (_) {}
+      }
+    }
+  }, [isDomainWhitelistError, error, errorDescription, referenceCode]);
 
   const title = isUriError
     ? 'Redirect URI Not Whitelisted'
@@ -127,6 +163,8 @@ export function OAuthErrorCard({
   };
 
   const handleClose = () => {
+    // If domain is unwhitelisted, do not permit dismissing the security diagnostic
+    if (isDomainWhitelistError) return;
     if (onClose) {
       onClose();
       return;
@@ -194,14 +232,26 @@ export function OAuthErrorCard({
             </button>
           ) : null}
 
-          <button
-            type="button"
-            onClick={handleClose}
-            className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 active:scale-[0.99] font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[42px]"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Return to Application</span>
-          </button>
+          {isDomainWhitelistError ? (
+            <a
+              href={isProduction ? 'https://developer.180core.cloud' : 'http://localhost:3008'}
+              target="_blank"
+              rel="noreferrer"
+              className="w-full py-2.5 px-4 rounded-xl bg-blue-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-blue-700 active:scale-[0.99] transition-all cursor-pointer shadow-sm min-h-[42px]"
+            >
+              <span>Developer Console</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          ) : (
+            <button
+              type="button"
+              onClick={handleClose}
+              className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 active:scale-[0.99] font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[42px]"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Return to Application</span>
+            </button>
+          )}
         </div>
 
         {/* Reference Code Telemetry Box */}
@@ -393,13 +443,15 @@ export function OAuthErrorCard({
           <ExternalLink className="w-3.5 h-3.5" />
         </a>
 
-        <button
-          type="button"
-          onClick={handleClose}
-          className="py-2 px-3 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 active:scale-[0.99] font-bold text-xs transition-all cursor-pointer min-h-[38px]"
-        >
-          Close
-        </button>
+        {!isDomainWhitelistError ? (
+          <button
+            type="button"
+            onClick={handleClose}
+            className="py-2 px-3 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 active:scale-[0.99] font-bold text-xs transition-all cursor-pointer min-h-[38px]"
+          >
+            Close
+          </button>
+        ) : null}
       </div>
 
       {isProduction && showDevInspector ? (

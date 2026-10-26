@@ -195,12 +195,16 @@ export class CheckoutApiController {
         const isOriginAllowed = app.allowedOrigins.some((ao: string) => {
           const cleanAo = ao.trim().toLowerCase().replace(/\/$/, '');
           return cleanAo === '*' || cleanAo === cleanOrigin;
-        });
-        const isInternalDomain = cleanOrigin.endsWith('180core.cloud') ||
-                                 cleanOrigin.includes('localhost') ||
-                                 cleanOrigin.includes('127.0.0.1');
+        }) || (app.redirectUris && app.redirectUris.some((ru: string) => {
+          try {
+            return new URL(ru).origin.toLowerCase() === cleanOrigin;
+          } catch (_) {
+            return false;
+          }
+        }));
+        const isPlatform = app.name === '180 Core' || cleanOrigin.endsWith('180core.cloud');
 
-        if (!isOriginAllowed && !isInternalDomain) {
+        if (!isOriginAllowed && !isPlatform) {
           return res.status(403).json({
             success: false,
             error: 'forbidden_origin',
@@ -208,7 +212,10 @@ export class CheckoutApiController {
             details: {
               type: 'ORIGIN_NOT_ALLOWED',
               origin: rawOrigin,
+              appName: app.name,
+              clientId: app.clientId,
               allowedOrigins: app.allowedOrigins,
+              registeredUris: app.redirectUris || [],
               hint: `Add '${rawOrigin}' to Allowed Web Origins (CORS) in Project Settings.`,
             },
           });
@@ -441,6 +448,60 @@ export class CheckoutApiController {
     try {
       const id = String(req.params.id);
       const session = await CheckoutService.getSession(id);
+      if (!session) {
+        return res.status(404).json({ success: false, error: 'Checkout session not found or expired.' });
+      }
+
+      // Security Validation: Strict Domain Whitelisting for 180 Pay
+      const rawOrigin = (req.headers.origin as string) || (req.headers.referer ? (() => {
+        try { return new URL(req.headers.referer as string).origin; } catch (_) { return ''; }
+      })() : '');
+      const cleanOrigin = rawOrigin ? rawOrigin.toLowerCase().replace(/\/$/, '') : '';
+
+      if (cleanOrigin && session.appId) {
+        const app = await prisma.oAuthApp.findUnique({
+          where: { id: session.appId },
+          select: {
+            id: true,
+            name: true,
+            clientId: true,
+            allowedOrigins: true,
+            redirectUris: true,
+          },
+        });
+
+        if (app && app.allowedOrigins && app.allowedOrigins.length > 0) {
+          const isAllowed = app.allowedOrigins.some((ao: string) => {
+            const cleanAo = ao.trim().toLowerCase().replace(/\/$/, '');
+            return cleanAo === '*' || cleanAo === cleanOrigin;
+          }) || (app.redirectUris && app.redirectUris.some((ru: string) => {
+            try {
+              return new URL(ru).origin.toLowerCase() === cleanOrigin;
+            } catch (_) {
+              return false;
+            }
+          }));
+
+          const isPlatform = app.name === '180 Core' || cleanOrigin.endsWith('180core.cloud');
+          if (!isAllowed && !isPlatform) {
+            return res.status(403).json({
+              success: false,
+              error: 'forbidden_origin',
+              message: `Origin '${rawOrigin}' is not authorized to load 180 Pay for application '${app.name}'.`,
+              details: {
+                type: 'ORIGIN_NOT_ALLOWED',
+                origin: rawOrigin,
+                appName: app.name,
+                clientId: app.clientId,
+                allowedOrigins: app.allowedOrigins,
+                registeredUris: app.redirectUris || [],
+                hint: `Add '${rawOrigin}' to Allowed Web Origins in Project Settings of '${app.name}'.`,
+              },
+            });
+          }
+        }
+      }
+
       return res.json({ success: true, session, data: session });
     } catch (err: any) {
       console.error('[CheckoutApiController:getCheckoutSession] Error:', err);

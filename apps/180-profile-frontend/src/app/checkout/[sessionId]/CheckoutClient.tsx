@@ -10,6 +10,7 @@ import {
   CreditCard,
   Lock,
   Sparkles,
+  ShieldAlert,
   ArrowRight,
   ArrowLeft,
   ExternalLink,
@@ -239,6 +240,15 @@ export function CheckoutClient({
   const [copiedDetails, setCopiedDetails] = useState(false);
   const [showDevInspector, setShowDevInspector] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
+  const [domainError, setDomainError] = useState<{
+    type?: string;
+    origin?: string;
+    appName?: string;
+    clientId?: string;
+    allowedOrigins?: string[];
+    registeredUris?: string[];
+    message?: string;
+  } | null>(null);
 
   useEffect(() => {
     setLogoFailed(false);
@@ -852,12 +862,42 @@ export function CheckoutClient({
       ]);
 
       let sessionInfo: any = null;
+      let caughtDomainError: any = null;
       try {
         const sessionData = await sessionRes.json();
         if (sessionData && sessionData.success) {
-          sessionInfo = sessionData.data;
+          sessionInfo = sessionData.data || sessionData.session;
+          setDomainError(null);
+        } else if (sessionData && (sessionData.error === 'forbidden_origin' || sessionData.details?.type === 'ORIGIN_NOT_ALLOWED' || sessionData.details?.type === 'REDIRECT_URI_MISMATCH')) {
+          caughtDomainError = {
+            type: sessionData.details?.type || 'ORIGIN_NOT_ALLOWED',
+            origin: sessionData.details?.origin || (typeof window !== 'undefined' ? window.location.origin : ''),
+            appName: sessionData.details?.appName || 'Merchant Application',
+            clientId: sessionData.details?.clientId,
+            allowedOrigins: sessionData.details?.allowedOrigins || [],
+            registeredUris: sessionData.details?.registeredUris || [],
+            message: sessionData.message || sessionData.error,
+          };
+          setDomainError(caughtDomainError);
         }
       } catch (_) {}
+
+      // If domain whitelist error occurred, DO NOT fallback to mock sandbox parameters
+      if (caughtDomainError) {
+        if (typeof window !== 'undefined') {
+          const lockPayload = {
+            type: '180_MODAL_LOCK_CLOSE',
+            reason: 'DOMAIN_NOT_WHITELISTED',
+            details: caughtDomainError,
+          };
+          try { window.postMessage(lockPayload, '*'); } catch (_) {}
+          if (window.parent && window.parent !== window) {
+            try { window.parent.postMessage(lockPayload, '*'); } catch (_) {}
+          }
+        }
+        setLoading(false);
+        return;
+      }
 
       const isSandboxSession = Boolean(
         sessionId && (
@@ -1590,6 +1630,143 @@ export function CheckoutClient({
         ) : (
           <p className="text-[11px] text-slate-500">Redirecting back to application...</p>
         )}
+      </div>
+    );
+  }
+
+  // ─── STRICT UNWHITELISTED DOMAIN ERROR SCREEN (NO CLOSE OPTION) ─────────
+  if (domainError) {
+    return (
+      <div 
+        role="alert" 
+        aria-live="assertive"
+        className="w-full py-4 space-y-5 font-sans text-left animate-in zoom-in-95"
+      >
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-slate-900 relative overflow-hidden">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0 text-amber-600">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700">
+                  180 PAY DEV DIAGNOSTIC
+                </span>
+                <span className="text-[10px] font-mono text-slate-600">
+                  {domainError.type || 'ORIGIN_NOT_ALLOWED'}
+                </span>
+              </div>
+              <h2 className="text-base font-bold text-slate-900 leading-snug">
+                Domain / Origin Not Whitelisted
+              </h2>
+              <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                The domain &apos;{domainError.origin}&apos; is not registered for application &apos;{domainError.appName || 'Merchant'}&apos;{domainError.clientId ? ` (${domainError.clientId})` : ''}.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Diagnostics Summary */}
+        <div className="rounded-xl bg-slate-50 border border-slate-200/80 p-3.5 space-y-2.5 text-xs">
+          <div className="flex items-center justify-between pb-1.5 border-b border-slate-200/60">
+            <span className="font-bold text-slate-700 flex items-center gap-1.5">
+              <Terminal className="w-3.5 h-3.5 text-slate-500" />
+              Diagnostics Summary
+            </span>
+            <button
+              type="button"
+              onClick={handleCopyErrorDetails}
+              className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
+            >
+              {copiedDetails ? (
+                <>
+                  <Check className="w-3 h-3 text-emerald-600" />
+                  <span className="text-emerald-600">Copied</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3 h-3" />
+                  <span>Copy Details</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[10px] uppercase tracking-wider text-slate-600 font-semibold">REFERENCE CODE</span>
+            <code className="bg-white px-2 py-1 rounded border border-slate-200 font-mono text-[11px] text-blue-700 font-bold break-all select-all">
+              {payReferenceCode}
+            </code>
+          </div>
+
+          {domainError.clientId && (
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] uppercase tracking-wider text-slate-600 font-semibold">CLIENT ID</span>
+              <code className="bg-white px-2 py-1 rounded border border-slate-200 font-mono text-[11px] text-slate-700 break-all select-all">
+                {domainError.clientId}
+              </code>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[10px] uppercase tracking-wider text-rose-500 font-semibold">UNREGISTERED DOMAIN / ORIGIN</span>
+            <code className="bg-rose-50/80 border border-rose-200 px-2 py-1 rounded font-mono text-[11px] text-rose-700 break-all select-all font-semibold">
+              {domainError.origin || 'N/A'}
+            </code>
+          </div>
+
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[10px] uppercase tracking-wider text-slate-600 font-semibold">
+              CURRENTLY ALLOWED DOMAINS ({domainError.allowedOrigins?.length || 0})
+            </span>
+            {domainError.allowedOrigins && domainError.allowedOrigins.length > 0 ? (
+              <div className="bg-white rounded border border-slate-200 p-2 space-y-1">
+                {domainError.allowedOrigins.map((ao: string, idx: number) => (
+                  <div key={idx} className="font-mono text-[11px] text-slate-700 flex items-center gap-1.5">
+                    <span className="text-slate-400">•</span> {ao}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-white rounded border border-slate-200 p-2 font-mono text-[11px] text-slate-400 italic">
+                None registered yet
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* How to Fix This */}
+        <div className="p-3 rounded-xl bg-blue-50/80 border border-blue-100 flex items-start gap-2.5 text-xs text-blue-900">
+          <HelpCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-bold text-blue-950">How to Fix This</p>
+            <p className="text-blue-800/90 leading-relaxed text-[11px]">
+              Add &apos;{domainError.origin}&apos; to the Allowed Web Origins list of &apos;{domainError.appName || 'Application'}&apos; in your 180 Developer Portal.
+            </p>
+          </div>
+        </div>
+
+        {/* Action Controls - STRICTLY NO CLOSE OPTION */}
+        <div className="flex items-center gap-2 pt-1">
+          <button
+            type="button"
+            onClick={fetchSessionAndWallet}
+            className="flex-1 py-2 px-3 rounded-xl bg-slate-900 text-white font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-slate-800 active:scale-[0.99] transition-all cursor-pointer shadow-xs min-h-[38px]"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Re-verify</span>
+          </button>
+
+          <a
+            href={isProduction ? 'https://developer.180core.cloud' : 'http://localhost:3008'}
+            target="_blank"
+            rel="noreferrer"
+            className="flex-1 py-2 px-3 rounded-xl bg-blue-600 text-white font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-blue-700 active:scale-[0.99] transition-all cursor-pointer shadow-xs min-h-[38px]"
+          >
+            <span>Developer Console</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
       </div>
     );
   }

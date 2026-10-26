@@ -44,6 +44,7 @@ import DeveloperHeader from '@/components/layout/DeveloperHeader';
 import { OneEightyCoreLogo } from '@/components/OneEightyCoreLogo';
 import ThemeToggle from '@/components/ThemeToggle';
 import { purgeAuthSession, getStoredAuthToken } from '@/lib/auth';
+import { getAppSlug } from '@/lib/slug';
 
 export interface DeveloperBillingStatus {
   totalProjects: number;
@@ -1215,7 +1216,7 @@ function DeveloperDashboardContent() {
                   {filteredApps.map((app) => (
                     <div
                       key={app.id}
-                      onClick={() => router.push(`/apps/${app.id}`)}
+                      onClick={() => router.push(`/apps/${getAppSlug(app)}`)}
                       className="rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#101012] p-5 shadow-xs hover:border-zinc-300 dark:hover:border-white/20 hover:shadow-md hover:-translate-y-0.5 transition-all group flex flex-col justify-between cursor-pointer"
                     >
                       <div className="space-y-3.5">
@@ -1262,7 +1263,7 @@ function DeveloperDashboardContent() {
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                router.push(`/apps/${app.id}/identity`);
+                                router.push(`/apps/${getAppSlug(app)}/identity/users`);
                               }}
                               className="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 transition-colors cursor-pointer"
                             >
@@ -1274,7 +1275,7 @@ function DeveloperDashboardContent() {
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                router.push(`/apps/${app.id}/pay`);
+                                router.push(`/apps/${getAppSlug(app)}/pay`);
                               }}
                               className="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 transition-colors cursor-pointer"
                             >

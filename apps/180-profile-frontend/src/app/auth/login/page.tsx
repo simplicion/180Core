@@ -25,6 +25,8 @@ import {
 } from '@/components/auth/OAuthDispatchHelper';
 import { OAuthAppHeader } from '@/components/auth/OAuthAppHeader';
 import { GoogleSSOButton } from '@/components/auth/GoogleSSOButton';
+import { LinkedInSSOButton } from '@/components/auth/LinkedInSSOButton';
+import { GitHubSSOButton } from '@/components/auth/GitHubSSOButton';
 import { OAuthErrorCard, OAuthErrorDetails } from '@/components/auth/OAuthErrorCard';
 import { ForgotPasswordModal } from '@/components/auth/ForgotPasswordModal';
 import { getCoreApiUrl } from '@/lib/api';
@@ -54,6 +56,10 @@ function LoginFormContent() {
     description?: string;
     isVerified?: boolean;
     clientId: string;
+    enableGoogleAuth?: boolean;
+    enableLinkedInAuth?: boolean;
+    enableGitHubAuth?: boolean;
+    enableEmailAuth?: boolean;
   } | null>(null);
 
   // Cached User Session (for 1-click return)
@@ -202,6 +208,10 @@ function LoginFormContent() {
             description: appData.description || '',
             isVerified: appData.isVerified || false,
             clientId: appData.clientId || oauthParams.clientId,
+            enableGoogleAuth: appData.enableGoogleAuth !== false,
+            enableLinkedInAuth: appData.enableLinkedInAuth !== false,
+            enableGitHubAuth: appData.enableGitHubAuth !== false,
+            enableEmailAuth: appData.enableEmailAuth !== false,
           });
         }
         setOauthValidationError(null);
@@ -937,20 +947,44 @@ function LoginFormContent() {
             </div>
           )}
 
-          {/* Genuine Google OAuth Button (No sub-modal) */}
-          <GoogleSSOButton
-            oauthParams={oauthParams}
-            label="Continue with Google"
-            onSuccess={handleGoogleSuccess}
-          />
+          {/* Social Auth Providers (Google, LinkedIn & GitHub) */}
+          {(oauthApp?.enableGoogleAuth !== false || oauthApp?.enableLinkedInAuth !== false || oauthApp?.enableGitHubAuth !== false) && (
+            <>
+              <div className="space-y-2.5">
+                {oauthApp?.enableGoogleAuth !== false && (
+                  <GoogleSSOButton
+                    oauthParams={oauthParams}
+                    label="Continue with Google"
+                    onSuccess={handleGoogleSuccess}
+                  />
+                )}
 
-          {/* Divider */}
-          <div className="relative flex items-center justify-center my-3">
-            <div className="border-t border-slate-200/80 w-full" />
-            <span className="bg-white px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider relative">
-              or continue with email
-            </span>
-          </div>
+                {oauthApp?.enableLinkedInAuth !== false && (
+                  <LinkedInSSOButton
+                    oauthParams={oauthParams}
+                    label="Continue with LinkedIn"
+                    onSuccess={handleGoogleSuccess}
+                  />
+                )}
+
+                {oauthApp?.enableGitHubAuth !== false && (
+                  <GitHubSSOButton
+                    oauthParams={oauthParams}
+                    label="Continue with GitHub"
+                    onSuccess={handleGoogleSuccess}
+                  />
+                )}
+              </div>
+
+              {/* Divider */}
+              <div className="relative flex items-center justify-center my-3">
+                <div className="border-t border-slate-200/80 w-full" />
+                <span className="bg-white px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider relative">
+                  or continue with email
+                </span>
+              </div>
+            </>
+          )}
 
           {/* Single Unified Sign-in Form */}
           <form onSubmit={handleLoginSubmit} className="space-y-3.5">
@@ -1051,20 +1085,44 @@ function LoginFormContent() {
             </div>
           )}
 
-          {/* Genuine Google OAuth Button */}
-          <GoogleSSOButton
-            oauthParams={oauthParams}
-            label="Sign up with Google"
-            onSuccess={handleGoogleSuccess}
-          />
+          {/* Social Auth Providers (Google, LinkedIn & GitHub) */}
+          {(oauthApp?.enableGoogleAuth !== false || oauthApp?.enableLinkedInAuth !== false || oauthApp?.enableGitHubAuth !== false) && (
+            <>
+              <div className="space-y-2.5">
+                {oauthApp?.enableGoogleAuth !== false && (
+                  <GoogleSSOButton
+                    oauthParams={oauthParams}
+                    label="Sign up with Google"
+                    onSuccess={handleGoogleSuccess}
+                  />
+                )}
 
-          {/* Divider */}
-          <div className="relative flex items-center justify-center my-3">
-            <div className="border-t border-slate-200/80 w-full" />
-            <span className="bg-white px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider relative">
-              or register with email
-            </span>
-          </div>
+                {oauthApp?.enableLinkedInAuth !== false && (
+                  <LinkedInSSOButton
+                    oauthParams={oauthParams}
+                    label="Sign up with LinkedIn"
+                    onSuccess={handleGoogleSuccess}
+                  />
+                )}
+
+                {oauthApp?.enableGitHubAuth !== false && (
+                  <GitHubSSOButton
+                    oauthParams={oauthParams}
+                    label="Sign up with GitHub"
+                    onSuccess={handleGoogleSuccess}
+                  />
+                )}
+              </div>
+
+              {/* Divider */}
+              <div className="relative flex items-center justify-center my-3">
+                <div className="border-t border-slate-200/80 w-full" />
+                <span className="bg-white px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider relative">
+                  or register with email
+                </span>
+              </div>
+            </>
+          )}
 
           {/* Step 1 Sign Up Form */}
           <form onSubmit={handleInitiateSignup} className="space-y-3.5">

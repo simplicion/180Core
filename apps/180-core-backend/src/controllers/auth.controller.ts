@@ -35,6 +35,10 @@ export class AuthApiController {
   static resetPassword = DomainIdentityAuthController.resetPassword;
   static googleContinue = DomainIdentityAuthController.googleContinue;
   static getGoogleConfig = DomainIdentityAuthController.getGoogleConfig;
+  static linkedinContinue = DomainIdentityAuthController.linkedinContinue;
+  static getLinkedInConfig = DomainIdentityAuthController.getLinkedInConfig;
+  static githubContinue = DomainIdentityAuthController.githubContinue;
+  static getGitHubConfig = DomainIdentityAuthController.getGitHubConfig;
 
   static async getSmtpStatus(req: Request, res: Response) {
     try {

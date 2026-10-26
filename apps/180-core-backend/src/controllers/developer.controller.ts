@@ -11,21 +11,40 @@ import { uploadBufferToR2, buildR2Key, deleteObjectFromR2 } from '@workspace/int
 import { inspectLogoBuffer, SUPPORTED_LOGO_MIMES } from '../middleware/logo-upload.middleware';
 import axios from 'axios';
 
+function slugify(text: string): string {
+  return String(text || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 /**
- * Resolves an OAuth application by internal UUID or public Client ID,
+ * Resolves an OAuth application by internal UUID, public Client ID, name, or slug,
  * optionally verifying ownership against userId.
  */
 async function resolveApp(idOrClientId: string, userId?: string) {
   if (!idOrClientId) return null;
-  return prisma.oAuthApp.findFirst({
+  const direct = await prisma.oAuthApp.findFirst({
     where: {
       OR: [
         { id: idOrClientId },
         { clientId: idOrClientId },
+        { name: { equals: idOrClientId, mode: 'insensitive' } },
       ],
       ...(userId ? { userId } : {}),
     },
   });
+  if (direct) return direct;
+
+  const targetSlug = slugify(idOrClientId);
+  if (!targetSlug) return null;
+
+  const userApps = await prisma.oAuthApp.findMany({
+    where: userId ? { userId } : {},
+  });
+  return userApps.find((a: any) => slugify(a.name) === targetSlug) || null;
 }
 
 export class DeveloperApiController {
@@ -1024,8 +1043,9 @@ export class DeveloperApiController {
         withdrawableBalance: Math.round(withdrawableBalance * 100) / 100,
         currency: appWallet?.currency || 'INR',
         totalTransactionsCount: capturedSessions.length,
-        // Conversion funnel metrics
-        totalIntentsCount: allSessions.length,
+        // Conversion funnel metrics: Canonical deduplicated customer sessions
+        totalIntentsCount: unifiedSessions.length,
+        rawSessionsCount: allSessions.length,
         totalIntentsVolume: Math.round(totalIntentsVolume * 100) / 100,
         gatewayAttemptsCount: gatewayAttemptSessions.length,
         gatewayAttemptsVolume: Math.round(gatewayAttemptsVolume * 100) / 100,
@@ -1384,8 +1404,9 @@ export class DeveloperApiController {
    */
   static async getGatewaySettings(req: Request, res: Response) {
     try {
+      const userId = (req as any).user?.id;
       const appId = String(req.params.id);
-      const app = await resolveApp(appId);
+      const app = await resolveApp(appId, userId);
 
       if (!app) {
         return res.status(404).json({ success: false, error: 'App not found' });
@@ -1413,8 +1434,9 @@ export class DeveloperApiController {
    */
   static async saveGatewaySettings(req: Request, res: Response) {
     try {
+      const userId = (req as any).user?.id;
       const appId = String(req.params.id);
-      const app = await resolveApp(appId);
+      const app = await resolveApp(appId, userId);
       if (!app) {
         return res.status(404).json({ success: false, error: 'App not found' });
       }
@@ -1463,11 +1485,12 @@ export class DeveloperApiController {
    */
   static async verifyGatewayCredentials(req: Request, res: Response) {
     try {
+      const userId = (req as any).user?.id;
       const { keyId, keySecret, gatewayType = 'RAZORPAY' } = req.body;
       let resolvedSecret = keySecret;
 
       if (!resolvedSecret && req.params.id) {
-        const app = await resolveApp(String(req.params.id));
+        const app = await resolveApp(String(req.params.id), userId);
         if (app && (app as any).customGatewaySecret) {
           resolvedSecret = (app as any).customGatewaySecret;
         }
@@ -1517,8 +1540,9 @@ export class DeveloperApiController {
    */
   static async verifyCustomDomain(req: Request, res: Response) {
     try {
+      const userId = (req as any).user?.id;
       const appId = String(req.params.id);
-      const app = await resolveApp(appId);
+      const app = await resolveApp(appId, userId);
 
       if (!app || !app.customPayDomain) {
         return res.status(400).json({ success: false, error: 'No custom pay domain configured for this app' });
