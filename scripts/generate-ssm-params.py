@@ -80,6 +80,9 @@ def main():
         "ghcr.io/simplicion/180core-core-backend:latest"
     )
 
+    def clean_val(v):
+        return v.strip().strip('\ufeff') if isinstance(v, str) else v
+
     # .env update commands using a robust python inline helper on the instance
     env_updates = {
         "PROFILE_FRONTEND_URL": "https://profile.180core.cloud",
@@ -87,25 +90,27 @@ def main():
     }
     for k, v in optional_vars:
         if v:
-            env_updates[k] = v
+            env_updates[k] = clean_val(v)
 
     env_updater_py = (
         "import os\n"
         "p = '/home/ubuntu/app/.env'\n"
         "if os.path.exists(p):\n"
-        "    with open(p, 'r') as f: lines = f.read().splitlines()\n"
+        "    with open(p, 'r', encoding='utf-8') as f: lines = f.read().splitlines()\n"
         "    d = {}\n"
         "    for l in lines:\n"
         "        if '=' in l and not l.startswith('#'):\n"
         "            k, v = l.split('=', 1)\n"
-        "            d[k.strip()] = v\n"
+        "            d[k.strip().strip('\\ufeff')] = v.strip().strip('\\ufeff')\n"
         f"    updates = {json.dumps(env_updates)}\n"
-        "    d.update(updates)\n"
-        "    with open(p, 'w') as f:\n"
+        "    for uk, uv in updates.items():\n"
+        "        d[uk.strip().strip('\\ufeff')] = str(uv).strip().strip('\\ufeff')\n"
+        "    with open(p, 'w', encoding='utf-8') as f:\n"
         "        for k, v in d.items():\n"
         "            f.write(f'{k}={v}\\n')\n"
         "    print('[env-sync] Updated /home/ubuntu/app/.env successfully')\n"
     )
+
     env_updater_b64 = base64.b64encode(env_updater_py.encode('utf-8')).decode('ascii')
 
     commands = [
