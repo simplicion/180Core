@@ -995,22 +995,80 @@ export class CheckoutApiController {
       const signature = req.headers['x-razorpay-signature'] as string;
 
       if (webhookSecret && signature) {
-        const body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
-        const expected = crypto.createHmac('sha256', webhookSecret).update(body).digest('hex');
-        const expectedBuf = Buffer.from(expected, 'utf-8');
-        const signatureBuf = Buffer.from(signature, 'utf-8');
-        if (expectedBuf.length !== signatureBuf.length || !crypto.timingSafeEqual(expectedBuf, signatureBuf)) {
+        // Use rawBody buffer if available for 100% cryptographic precision
+        const rawBody = (req as any).rawBody;
+        let isValid = false;
+        if (rawBody && Buffer.isBuffer(rawBody)) {
+          const expected = crypto.createHmac('sha256', webhookSecret).update(rawBody).digest('hex');
+          const expectedBuf = Buffer.from(expected, 'utf-8');
+          const signatureBuf = Buffer.from(signature, 'utf-8');
+          isValid = expectedBuf.length === signatureBuf.length && crypto.timingSafeEqual(expectedBuf, signatureBuf);
+        }
+        if (!isValid) {
+          // Fallback to string body check
+          const bodyStr = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+          const expectedStr = crypto.createHmac('sha256', webhookSecret).update(bodyStr).digest('hex');
+          const expectedBuf = Buffer.from(expectedStr, 'utf-8');
+          const signatureBuf = Buffer.from(signature, 'utf-8');
+          isValid = expectedBuf.length === signatureBuf.length && crypto.timingSafeEqual(expectedBuf, signatureBuf);
+        }
+        if (!isValid) {
+          console.warn('[CheckoutWebhook] Invalid signature received');
           return res.status(400).json({ error: 'Invalid webhook signature' });
         }
       }
 
       const event = req.body.event;
-      if (event === 'payment.captured' || event === 'order.paid') {
-        const payment = req.body.payload?.payment?.entity;
-        const notes = payment?.notes || {};
-        const sessionId = notes.sessionId;
-        const orderId = payment?.order_id;
-        const paymentId = payment?.id;
+      if (
+        event === 'payment.captured' ||
+        event === 'payment.authorized' ||
+        event === 'order.paid'
+      ) {
+        let payment = req.body.payload?.payment?.entity;
+        let order = req.body.payload?.order?.entity;
+        let orderId = payment?.order_id || order?.id;
+        let paymentId = payment?.id;
+        const notes = payment?.notes || order?.notes || {};
+        let sessionId = notes.sessionId;
+
+        // If order.paid event came without payment entity, fetch order payments from Razorpay
+        if (orderId && !paymentId) {
+          try {
+            const { keyId, keySecret } = CheckoutService.resolveGatewayConfig();
+            if (keyId && keySecret) {
+              const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+              const axios = require('axios');
+              const rzpRes = await axios.get(`https://api.razorpay.com/v1/orders/${orderId}/payments`, {
+                headers: { Authorization: `Basic ${auth}` },
+                timeout: 5000,
+              });
+              const items = rzpRes.data?.items || [];
+              const captured = items.find((p: any) => p.status === 'captured' || p.status === 'authorized');
+              if (captured) {
+                paymentId = captured.id;
+                payment = captured;
+              }
+            }
+          } catch (fetchErr: any) {
+            console.warn('[CheckoutWebhook] Could not fetch payments for order:', fetchErr.message);
+          }
+        }
+
+        // If sessionId was not in notes, locate session from database by razorpayOrderId
+        if (!sessionId && orderId) {
+          const matchingSession = await prisma.checkoutSession.findFirst({
+            where: {
+              status: { in: ['PENDING', 'EXPIRED'] },
+              metadata: {
+                path: ['razorpayOrderId'],
+                equals: orderId,
+              },
+            },
+          });
+          if (matchingSession) {
+            sessionId = matchingSession.id;
+          }
+        }
 
         if (sessionId && paymentId) {
           await CheckoutService.verifyDirectPayment({
@@ -1056,6 +1114,7 @@ export class CheckoutApiController {
         success: true,
         status: session.status,
         isPaid,
+        transactionId: (session.metadata as any)?.paymentId || (session.metadata as any)?.transactionId,
         returnUrl: session.returnUrl,
       });
     } catch (err: any) {

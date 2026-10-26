@@ -6,7 +6,7 @@
   "scripts": {
     "build": "pnpm build:sdk && turbo run build",
     "build:sdk": "pnpm --filter @workspace/identity-sdk build && node scripts/deploy-180-core-sdk.mjs",
-    "test:sdk": "node scripts/test-180-core-sdk-e2e.mjs",
+    "test:sdk": "pnpm build:sdk && node scripts/test-180-core-sdk-e2e.mjs",
     "dev": "node scripts/dev-runner.js",
     "dev:all": "node scripts/dev-runner.js all",
     "dev:backend": "pnpm --filter 180-core-backend dev",

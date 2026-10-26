@@ -31,6 +31,7 @@ import { AuthApiController } from './controllers/auth.controller';
 import { generalApiLimiter } from './middleware/rate-limiter.middleware';
 import { RsaKeysService, seedFirstPartyOAuthApps, DeveloperBillingService } from '@workspace/identity-provider';
 import { RecurringBillingEngine } from '@workspace/payment-provider';
+import { PaymentReconcilerService } from './services/payment-reconciler.service';
 
 const app = express();
 const server = http.createServer(app);
@@ -103,7 +104,14 @@ app.use(
 );
 app.use(compression() as any);
 app.use(morgan('dev') as any);
-app.use(express.json({ limit: '10mb' }));
+app.use(
+  express.json({
+    limit: '10mb',
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(generalApiLimiter);
 
@@ -327,6 +335,9 @@ server.listen(PORT, '0.0.0.0', async () => {
         console.error('[180-core-backend] Error during recurring billing cycle:', e.message);
       }
     }, BILLING_CYCLE_INTERVAL);
+
+    // 180 Pay Real-Time Auto-Reconciliation Worker (runs every 60s)
+    PaymentReconcilerService.start(60 * 1000);
   } catch (err: any) {
     console.warn('[180-core-backend] Bootstrapping note:', err.message);
   }
@@ -335,6 +346,7 @@ server.listen(PORT, '0.0.0.0', async () => {
 // Graceful Shutdown on zero-downtime deploy
 const gracefulShutdown = (signal: string) => {
   console.log(`[180-core-backend] Received ${signal}. Draining connections and shutting down cleanly...`);
+  PaymentReconcilerService.stop();
   server.close(() => {
     console.log('[180-core-backend] HTTP server closed cleanly.');
     process.exit(0);

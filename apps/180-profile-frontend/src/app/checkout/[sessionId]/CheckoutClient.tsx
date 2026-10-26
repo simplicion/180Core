@@ -846,6 +846,114 @@ export function CheckoutClient({
     }
   };
 
+  const handlePaymentCompletion = useCallback((details: {
+    transactionId?: string;
+    creditedUserBalance?: number;
+    fulfillment?: any;
+    customReturnUrl?: string;
+  } = {}) => {
+    if (completed) return;
+    setCompleted(true);
+    setPaying(false);
+    setTopupLoading(false);
+
+    if (details.fulfillment || session?.metadata?.fulfillment) {
+      setSession((prev: any) => ({
+        ...prev,
+        metadata: {
+          ...(prev?.metadata || {}),
+          fulfillment: details.fulfillment || prev?.metadata?.fulfillment,
+        },
+      }));
+    }
+
+    if (typeof details.creditedUserBalance === 'number') {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('180_wallet_updated', { detail: { balance: details.creditedUserBalance } })
+        );
+      }
+      if (onSuccess) {
+        onSuccess(details.creditedUserBalance);
+      }
+    }
+
+    const txId = details.transactionId || session?.metadata?.transactionId || 'tx_' + Math.random().toString(36).substring(2, 10);
+    const liveSuccessPayload = {
+      type: '180_PAYMENT_SUCCESS',
+      sessionId,
+      transactionId: txId,
+      amount: activeFinalAmount,
+      currency: activeCurrency,
+      creditedUserBalance: details.creditedUserBalance,
+      newBalance: details.creditedUserBalance,
+    };
+    const liveSuccessPayloadPay = {
+      type: '180_PAY_SUCCESS',
+      ...liveSuccessPayload,
+    };
+
+    if (typeof window !== 'undefined') {
+      dispatchMobilePaymentEvent(liveSuccessPayload);
+      dispatchMobilePaymentEvent(liveSuccessPayloadPay);
+      if (window.opener) {
+        window.opener.postMessage(liveSuccessPayload, '*');
+        window.opener.postMessage(liveSuccessPayloadPay, '*');
+      }
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage(liveSuccessPayload, '*');
+        window.parent.postMessage(liveSuccessPayloadPay, '*');
+      }
+    }
+
+    setTimeout(() => {
+      const destUrl = details.customReturnUrl || session?.returnUrl;
+      if (destUrl) {
+        window.location.href = formatReturnUrl(destUrl, {
+          sessionId,
+          status: 'success',
+          transactionId: txId,
+          orderId: (session?.metadata as any)?.orderId,
+          amount: activeFinalAmount,
+          currency: activeCurrency,
+        });
+      } else if (onClose) {
+        onClose();
+      } else if (typeof window !== 'undefined') {
+        if (window.opener) {
+          window.close();
+        } else if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: '180_PAYMENT_CLOSE', sessionId }, '*');
+          window.parent.postMessage({ type: '180_PAY_CLOSE', sessionId }, '*');
+        }
+      }
+    }, 1500);
+  }, [completed, session, sessionId, activeFinalAmount, activeCurrency, onSuccess, onClose]);
+
+  const checkStatusRef = React.useRef(false);
+  const checkSessionStatus = useCallback(async (isSilent = true) => {
+    if (!sessionId || sessionId === 'default' || completed || checkStatusRef.current) return false;
+    checkStatusRef.current = true;
+    try {
+      const res = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/status`));
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (data && (data.status === 'CAPTURED' || data.status === 'COMPLETED')) {
+        if (!isSilent) toast.success('Payment verified & captured!');
+        handlePaymentCompletion({
+          transactionId: data.transactionId,
+          fulfillment: data.fulfillment,
+        });
+        return true;
+      }
+    } catch (_) {
+      // Ignore background network errors during polling
+    } finally {
+      checkStatusRef.current = false;
+    }
+    return false;
+  }, [sessionId, completed, handlePaymentCompletion]);
+
   const fetchSessionAndWallet = async () => {
     try {
       const token =
@@ -901,11 +1009,7 @@ export function CheckoutClient({
 
       const isSandboxSession = Boolean(
         sessionId && (
-          sessionId.startsWith('sess_sandbox_') ||
-          sessionId.startsWith('sess_demo_') ||
-          sessionId.startsWith('sess_180pay_') ||
-          sessionId.startsWith('sess_dev_') ||
-          sessionId.startsWith('sess_topup_') ||
+          sessionId.startsWith('sess_') ||
           sessionId.startsWith('cs_') ||
           sessionId === 'default'
         )
@@ -976,6 +1080,12 @@ export function CheckoutClient({
         setSession(sessionInfo);
         if (sessionInfo.id && sessionInfo.id !== sessionId) {
           setSessionId(sessionInfo.id);
+        }
+        if (sessionInfo.status === 'COMPLETED' || sessionInfo.status === 'CAPTURED') {
+          handlePaymentCompletion({
+            transactionId: sessionInfo.metadata?.transactionId,
+            fulfillment: sessionInfo.metadata?.fulfillment,
+          });
         }
       } else {
         throw new Error('Failed to load checkout details');
@@ -1394,6 +1504,58 @@ export function CheckoutClient({
         storedUser = JSON.parse(localStorage.getItem('user') || '{}');
       } catch (_) {}
 
+      let rzpInstance: any = null;
+      let pollInterval: any = null;
+      let cleanupListeners: (() => void) | null = null;
+
+      const stopPolling = () => {
+        if (pollInterval) {
+          clearInterval(pollInterval);
+          pollInterval = null;
+        }
+        if (cleanupListeners) {
+          cleanupListeners();
+          cleanupListeners = null;
+        }
+      };
+
+      const startPolling = () => {
+        stopPolling();
+        pollInterval = setInterval(async () => {
+          const isDone = await checkSessionStatus(true);
+          if (isDone) {
+            stopPolling();
+            try { rzpInstance?.close?.(); } catch (_) {}
+          }
+        }, 2500);
+
+        const onVisibilityChange = async () => {
+          if (document.visibilityState === 'visible') {
+            const isDone = await checkSessionStatus(true);
+            if (isDone) {
+              stopPolling();
+              try { rzpInstance?.close?.(); } catch (_) {}
+            }
+          }
+        };
+
+        const onWindowFocus = async () => {
+          const isDone = await checkSessionStatus(true);
+          if (isDone) {
+            stopPolling();
+            try { rzpInstance?.close?.(); } catch (_) {}
+          }
+        };
+
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        window.addEventListener('focus', onWindowFocus);
+
+        cleanupListeners = () => {
+          document.removeEventListener('visibilitychange', onVisibilityChange);
+          window.removeEventListener('focus', onWindowFocus);
+        };
+      };
+
       // Exact parameter match: options.amount and options.currency match the server order 100%
       const options: any = {
         key: keyId,
@@ -1419,6 +1581,7 @@ export function CheckoutClient({
           },
         } : {}),
         handler: async function (response: any) {
+          stopPolling();
           const verifyToastId = toast.loading('Verifying payment signature...');
           try {
             const verifyRes = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/direct-verify`), {
@@ -1437,78 +1600,12 @@ export function CheckoutClient({
             }
 
             toast.success('Payment authorized & completed!', { id: verifyToastId });
-            if (verifyData.fulfillment || verifyData.session?.metadata?.fulfillment) {
-              setSession((prev: any) => ({
-                ...prev,
-                metadata: {
-                  ...(prev?.metadata || {}),
-                  fulfillment: verifyData.fulfillment || verifyData.session?.metadata?.fulfillment,
-                },
-              }));
-            }
-            setCompleted(true);
-
-            const creditedBalance = verifyData.creditedUserBalance;
-            if (typeof creditedBalance === 'number') {
-              if (typeof window !== 'undefined') {
-                window.dispatchEvent(
-                  new CustomEvent('180_wallet_updated', { detail: { balance: creditedBalance } })
-                );
-              }
-              if (onSuccess) {
-                onSuccess(creditedBalance);
-              }
-            }
-
-            const liveSuccessPayload = {
-              type: '180_PAYMENT_SUCCESS',
-              sessionId,
+            handlePaymentCompletion({
               transactionId: response.razorpay_payment_id,
-              amount: activeFinalAmount,
-              currency: activeCurrency,
               creditedUserBalance: verifyData.creditedUserBalance,
-              newBalance: verifyData.creditedUserBalance,
-            };
-            const liveSuccessPayloadPay = {
-              type: '180_PAY_SUCCESS',
-              ...liveSuccessPayload,
-            };
-
-            if (typeof window !== 'undefined') {
-              dispatchMobilePaymentEvent(liveSuccessPayload);
-              dispatchMobilePaymentEvent(liveSuccessPayloadPay);
-              if (window.opener) {
-                window.opener.postMessage(liveSuccessPayload, '*');
-                window.opener.postMessage(liveSuccessPayloadPay, '*');
-              }
-              if (window.parent && window.parent !== window) {
-                window.parent.postMessage(liveSuccessPayload, '*');
-                window.parent.postMessage(liveSuccessPayloadPay, '*');
-              }
-            }
-
-            setTimeout(() => {
-              const destUrl = verifyData.returnUrl || session?.returnUrl;
-              if (destUrl) {
-                window.location.href = formatReturnUrl(destUrl, {
-                  sessionId,
-                  status: 'success',
-                  transactionId: response.razorpay_payment_id,
-                  orderId: (session?.metadata as any)?.orderId,
-                  amount: activeFinalAmount,
-                  currency: activeCurrency,
-                });
-              } else if (onClose) {
-                onClose();
-              } else if (typeof window !== 'undefined') {
-                if (window.opener) {
-                  window.close();
-                } else if (window.parent && window.parent !== window) {
-                  window.parent.postMessage({ type: '180_PAYMENT_CLOSE', sessionId }, '*');
-                  window.parent.postMessage({ type: '180_PAY_CLOSE', sessionId }, '*');
-                }
-              }
-            }, 1500);
+              fulfillment: verifyData.fulfillment || verifyData.session?.metadata?.fulfillment,
+              customReturnUrl: verifyData.returnUrl,
+            });
           } catch (e: any) {
             toast.error(e.message || 'Payment verification failed', { id: verifyToastId });
           } finally {
@@ -1516,10 +1613,13 @@ export function CheckoutClient({
           }
         },
         modal: {
-          ondismiss: () => {
+          ondismiss: async () => {
             toast.dismiss(directToastId);
             setTopupLoading(false);
-            if (sessionId && sessionId !== 'default') {
+            // Polling check: did the user complete payment in UPI app before returning and dismissing?
+            const isDone = await checkSessionStatus(false);
+            stopPolling();
+            if (!isDone && sessionId && sessionId !== 'default') {
               fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/track-event`), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1531,12 +1631,16 @@ export function CheckoutClient({
       };
 
       const rzp = new window.Razorpay(options);
+      rzpInstance = rzp;
       rzp.on('payment.failed', function (resp: any) {
+        stopPolling();
         const desc = resp.error?.description || resp.error?.reason || 'Payment failed or declined.';
         toast.error(desc);
         setTopupLoading(false);
       });
       rzp.open();
+      startPolling();
+
       if (sessionId && sessionId !== 'default') {
         fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/track-event`), {
           method: 'POST',

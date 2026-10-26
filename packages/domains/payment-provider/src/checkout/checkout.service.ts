@@ -565,6 +565,27 @@ export class CheckoutService {
       throw new Error('Checkout session not found');
     }
 
+    // 1. If session has an active gateway order and is not yet CAPTURED, ALWAYS attempt live reconciliation FIRST!
+    // This guarantees that if a customer completed payment in UPI / bank app, the session is captured immediately,
+    // even if client callbacks dropped or the nominal 30-minute window passed while user was completing 3DS/UPI.
+    if (
+      session.status !== 'CAPTURED' &&
+      ((session.metadata as any)?.razorpayOrderId || (session.metadata as any)?.stripePaymentIntentId)
+    ) {
+      try {
+        const reconcileRes = await this.reconcileSession(session.id);
+        if (reconcileRes.reconciled && reconcileRes.session) {
+          return {
+            ...reconcileRes.session,
+            isExpired: false,
+          };
+        }
+      } catch (recErr: any) {
+        console.warn('[CheckoutService:getSession] Reconciliation check warning:', recErr.message);
+      }
+    }
+
+    // 2. Only if no payment was made at gateway and session has expired, mark as EXPIRED
     if (session.status === 'EXPIRED' || session.expiresAt < new Date()) {
       if (session.status !== 'EXPIRED' && session.status === 'PENDING') {
         await prisma.checkoutSession.update({
@@ -579,31 +600,95 @@ export class CheckoutService {
       };
     }
 
-    if (session.status === 'PENDING' && (session.metadata as any)?.razorpayOrderId) {
-      const orderId = (session.metadata as any).razorpayOrderId;
+    return {
+      ...session,
+      isExpired: false,
+    };
+  }
+
+  /**
+   * Actively reconciles a checkout session against Razorpay / Stripe.
+   * If a payment was authorized or captured at the gateway, captures the session,
+   * credits the developer app wallet, writes ledger records, fulfills any payment link,
+   * and dispatches webhooks.
+   */
+  static async reconcileSession(sessionId: string): Promise<{
+    reconciled: boolean;
+    alreadyCaptured?: boolean;
+    session: any;
+    transactionId?: string;
+  }> {
+    let session = await prisma.checkoutSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        app: true,
+      },
+    });
+
+    if (!session) {
+      throw new Error(`Checkout session ${sessionId} not found`);
+    }
+
+    if (session.status === 'CAPTURED') {
+      return { reconciled: false, alreadyCaptured: true, session };
+    }
+
+    const sessionMeta = (session.metadata as any) || {};
+
+    // 1. Reconcile Razorpay Order if present
+    const razorpayOrderId = sessionMeta.razorpayOrderId;
+    if (razorpayOrderId && razorpayOrderId.startsWith('order_')) {
       const { keyId, keySecret } = this.resolveGatewayConfig(session.app);
-      if (keyId && keySecret && !keySecret.includes('simulated') && orderId.startsWith('order_')) {
+      if (keyId && keySecret && !keySecret.includes('simulated')) {
         try {
           const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
-          const rzpRes = await axios.get(`https://api.razorpay.com/v1/orders/${orderId}/payments`, {
+          const rzpRes = await axios.get(`https://api.razorpay.com/v1/orders/${razorpayOrderId}/payments`, {
             headers: { Authorization: `Basic ${auth}` },
-            timeout: 4000,
+            timeout: 5000,
           });
           const items = rzpRes.data?.items || [];
-          const captured = items.find((p: any) => p.status === 'captured');
-          if (captured) {
+          let targetPayment = items.find((p: any) => p.status === 'captured');
+
+          // If authorized but not captured, auto-capture it directly via Razorpay API
+          if (!targetPayment) {
+            const authorizedPayment = items.find((p: any) => p.status === 'authorized');
+            if (authorizedPayment) {
+              try {
+                const capRes = await axios.post(
+                  `https://api.razorpay.com/v1/payments/${authorizedPayment.id}/capture`,
+                  {
+                    amount: authorizedPayment.amount,
+                    currency: authorizedPayment.currency,
+                  },
+                  {
+                    headers: { Authorization: `Basic ${auth}` },
+                    timeout: 5000,
+                  }
+                );
+                if (capRes.data?.status === 'captured') {
+                  targetPayment = capRes.data;
+                }
+              } catch (capErr: any) {
+                console.warn('[CheckoutService:reconcileSession] Failed to auto-capture authorized payment:', capErr.message);
+              }
+            }
+          }
+
+          if (targetPayment) {
             await this.verifyDirectPayment({
               sessionId: session.id,
-              orderId,
-              paymentId: captured.id,
+              orderId: razorpayOrderId,
+              paymentId: targetPayment.id,
               signature: 'auto_polled_capture',
             });
+
             const refreshed = await prisma.checkoutSession.findUnique({
-              where: { id: sessionId },
+              where: { id: session.id },
               include: {
                 app: {
                   select: {
                     id: true,
+                    clientId: true,
                     name: true,
                     description: true,
                     logoUrl: true,
@@ -612,17 +697,115 @@ export class CheckoutService {
                 },
               },
             });
-            if (refreshed) {
-              return { ...refreshed, isExpired: false };
-            }
+
+            return {
+              reconciled: true,
+              alreadyCaptured: false,
+              session: refreshed,
+              transactionId: targetPayment.id,
+            };
           }
-        } catch (_) {}
+        } catch (rzpErr: any) {
+          console.warn('[CheckoutService:reconcileSession] Razorpay query error:', rzpErr.message);
+        }
+      }
+    }
+
+    // 2. Reconcile Stripe PaymentIntent if present
+    const stripePiId = sessionMeta.stripePaymentIntentId;
+    if (stripePiId && stripePiId.startsWith('pi_')) {
+      const { keySecret } = this.resolveGatewayConfig(session.app);
+      if (keySecret && !keySecret.includes('simulated') && keySecret.startsWith('sk_')) {
+        try {
+          const stripeRes = await axios.get(`https://api.stripe.com/v1/payment_intents/${stripePiId}`, {
+            headers: { Authorization: `Bearer ${keySecret}` },
+            timeout: 5000,
+          });
+          const pi = stripeRes.data;
+          if (pi.status === 'succeeded' || pi.status === 'requires_capture') {
+            await this.verifyDirectPayment({
+              sessionId: session.id,
+              orderId: stripePiId,
+              paymentId: pi.latest_charge || stripePiId,
+              signature: 'auto_polled_capture',
+            });
+
+            const refreshed = await prisma.checkoutSession.findUnique({
+              where: { id: session.id },
+              include: {
+                app: {
+                  select: {
+                    id: true,
+                    clientId: true,
+                    name: true,
+                    description: true,
+                    logoUrl: true,
+                    isVerified: true,
+                  },
+                },
+              },
+            });
+
+            return {
+              reconciled: true,
+              alreadyCaptured: false,
+              session: refreshed,
+              transactionId: pi.latest_charge || stripePiId,
+            };
+          }
+        } catch (stripeErr: any) {
+          console.warn('[CheckoutService:reconcileSession] Stripe query error:', stripeErr.message);
+        }
+      }
+    }
+
+    return { reconciled: false, session };
+  }
+
+  /**
+   * Scans and auto-reconciles all recent PENDING or EXPIRED sessions that have gateway orders.
+   * Invoked periodically by the background reconciler worker or administrative repair scripts.
+   */
+  static async reconcilePendingSessions(limit: number = 50): Promise<{
+    scanned: number;
+    reconciledCount: number;
+    reconciledIds: string[];
+  }> {
+    const candidateSessions = await prisma.checkoutSession.findMany({
+      where: {
+        status: { in: ['PENDING', 'EXPIRED'] },
+        createdAt: { gt: new Date(Date.now() - 48 * 60 * 60 * 1000) }, // last 48 hours
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: { id: true, metadata: true },
+    });
+
+    const sessionsWithOrders = candidateSessions.filter((s) => {
+      const meta = (s.metadata as any) || {};
+      return Boolean(meta.razorpayOrderId || meta.stripePaymentIntentId);
+    });
+
+    let reconciledCount = 0;
+    const reconciledIds: string[] = [];
+
+    for (const item of sessionsWithOrders) {
+      try {
+        const res = await this.reconcileSession(item.id);
+        if (res.reconciled) {
+          reconciledCount++;
+          reconciledIds.push(item.id);
+          console.log(`[Reconciler] Auto-reconciled stranded payment for session: ${item.id}`);
+        }
+      } catch (err: any) {
+        // continue scanning
       }
     }
 
     return {
-      ...session,
-      isExpired: false,
+      scanned: sessionsWithOrders.length,
+      reconciledCount,
+      reconciledIds,
     };
   }
 
@@ -1299,6 +1482,7 @@ export class CheckoutService {
           amount: amountSmallestUnit,
           currency: targetCurrency,
           receipt: `cs_${session.id.replace(/-/g, '').slice(0, 36)}`,
+          payment_capture: 1,
           notes: {
             sessionId: session.id,
             appId: session.appId,
@@ -1332,6 +1516,7 @@ export class CheckoutService {
               amount: inrPaise,
               currency: 'INR',
               receipt: `cs_${session.id.replace(/-/g, '').slice(0, 36)}`,
+              payment_capture: 1,
               notes: {
                 sessionId: session.id,
                 appId: session.appId,

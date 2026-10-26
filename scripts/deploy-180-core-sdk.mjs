@@ -6,9 +6,34 @@ const srcJs = path.join(rootDir, 'packages', 'identity-sdk', 'src', '180-core-sd
 const srcMinJs = path.join(rootDir, 'packages', 'identity-sdk', 'src', '180-core-sdk.min.js');
 const srcDts = path.join(rootDir, 'packages', 'identity-sdk', 'src', '180-core-sdk.d.ts');
 
-if (!fs.existsSync(srcJs) || !fs.existsSync(srcMinJs)) {
+const distDir = path.join(rootDir, 'packages', 'identity-sdk', 'dist');
+
+if (!fs.existsSync(srcJs)) {
   console.error('Source files missing in packages/identity-sdk/src');
   process.exit(1);
+}
+
+// 0. Automatically minify SDK with esbuild if available
+try {
+  const esbuild = await import('esbuild');
+  const rawJs = fs.readFileSync(srcJs, 'utf8');
+  const banner = '/*! 180 Core SDK v1.0.0 (c) 180 Core Platform - https://profile.180core.cloud */\n';
+  const minified = esbuild.transformSync(rawJs, {
+    minify: true,
+    target: 'es2018',
+    banner,
+  }).code;
+  fs.writeFileSync(srcMinJs, minified, 'utf8');
+  if (fs.existsSync(distDir)) {
+    fs.writeFileSync(path.join(distDir, '180-core-sdk.min.js'), minified, 'utf8');
+    fs.copyFileSync(srcJs, path.join(distDir, '180-core-sdk.js'));
+    if (fs.existsSync(srcDts)) {
+      fs.copyFileSync(srcDts, path.join(distDir, '180-core-sdk.d.ts'));
+    }
+  }
+  console.log(`⚡ Minified 180 Core SDK: ${(rawJs.length / 1024).toFixed(1)}KB -> ${(minified.length / 1024).toFixed(1)}KB`);
+} catch (minErr) {
+  console.warn('⚠️ esbuild minification skipped or failed:', minErr.message);
 }
 
 const targetDirs = [

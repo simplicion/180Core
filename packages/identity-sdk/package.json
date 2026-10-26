@@ -19,7 +19,7 @@
     }
   },
   "scripts": {
-    "build": "tsc && node -e \"const fs=require('fs'); fs.copyFileSync('./src/180-core-sdk.js', './dist/180-core-sdk.js'); fs.copyFileSync('./src/180-core-sdk.min.js', './dist/180-core-sdk.min.js'); fs.copyFileSync('./src/180-core-sdk.d.ts', './dist/180-core-sdk.d.ts');\""
+    "build": "tsc && node -e \"const fs=require('fs'); const esbuild=require('esbuild'); const code=fs.readFileSync('./src/180-core-sdk.js','utf8'); const min=esbuild.transformSync(code,{minify:true,target:'es2018'}).code; fs.writeFileSync('./src/180-core-sdk.min.js',min); fs.writeFileSync('./dist/180-core-sdk.min.js',min); fs.copyFileSync('./src/180-core-sdk.js','./dist/180-core-sdk.js'); fs.copyFileSync('./src/180-core-sdk.d.ts','./dist/180-core-sdk.d.ts');\""
   },
   "dependencies": {
     "jsonwebtoken": "^9.0.2"
@@ -28,6 +28,7 @@
     "@types/jsonwebtoken": "^9.0.8",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.0",
+    "esbuild": "^0.28.2",
     "typescript": "^5.9.3"
   },
   "peerDependencies": {
