@@ -318,88 +318,29 @@ export function IdentityAppDetail({
               <span>180 Identity Presentation & UX Modes</span>
             </h3>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              Define the auth presentation styles supported by your application and customize device defaults for desktop vs mobile.
+              180 Identity uses an adaptive in-DOM presentation model that is fully responsive across mobile and desktop.
             </p>
           </div>
           <span className="self-start sm:self-auto text-[10px] font-mono px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 font-semibold">
-            OAuth 2.0 UX
+            Zero-Config UX
           </span>
         </div>
 
-        <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/5 space-y-4">
-          <div className="flex items-center gap-2 pb-2 border-b border-zinc-200 dark:border-white/5">
-            <Shield className="w-3.5 h-3.5 text-blue-500" />
-            <span className="text-xs font-bold text-zinc-900 dark:text-white">Supported Display Modes</span>
+        {/* Presentation Model */}
+        <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/5 space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-zinc-200 dark:border-white/5">
+            <div className="flex items-center gap-2">
+              <Shield className="w-3.5 h-3.5 text-blue-500" />
+              <span className="text-xs font-bold text-zinc-900 dark:text-white">Adaptive Display Model</span>
+            </div>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/20">
+              Active Standard
+            </span>
           </div>
 
-          <div className="space-y-2">
-            <div className="flex flex-wrap gap-2">
-              {[
-                { id: 'popup', label: 'Popup Window' },
-                { id: 'bottom_sheet', label: 'Bottom Sheet (Drawer)' },
-                { id: 'full_page', label: 'Full Page Redirect' },
-              ].map((mode) => {
-                const isSelected = authUxModes.includes(mode.id);
-                return (
-                  <button
-                    key={mode.id}
-                    type="button"
-                    onClick={() => {
-                      if (isSelected) {
-                        if (authUxModes.length > 1) {
-                          setAuthUxModes(authUxModes.filter((m) => m !== mode.id));
-                        }
-                      } else {
-                        setAuthUxModes([...authUxModes, mode.id]);
-                      }
-                    }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                        : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-white/10 hover:border-zinc-300'
-                    }`}
-                  >
-                    {mode.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Device Defaults */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-            <div className="space-y-1">
-              <label className="text-[11px] font-medium text-zinc-500 flex items-center gap-1">
-                <Monitor className="w-3 h-3 text-zinc-400" />
-                <span>Desktop Default</span>
-              </label>
-              <select
-                value={authDesktopDefault}
-                onChange={(e) => setAuthDesktopDefault(e.target.value)}
-                className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-white/10 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-blue-500"
-              >
-                <option value="popup">Popup Window (Recommended)</option>
-                <option value="bottom_sheet">Bottom Sheet</option>
-                <option value="full_page">Full Page Redirect</option>
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[11px] font-medium text-zinc-500 flex items-center gap-1">
-                <Smartphone className="w-3 h-3 text-zinc-400" />
-                <span>Mobile Default</span>
-              </label>
-              <select
-                value={authMobileDefault}
-                onChange={(e) => setAuthMobileDefault(e.target.value)}
-                className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-white/10 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-blue-500"
-              >
-                <option value="bottom_sheet">Bottom Sheet (Recommended)</option>
-                <option value="popup">Popup Window</option>
-                <option value="full_page">Full Page Redirect</option>
-              </select>
-            </div>
-          </div>
+          <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+            180 Identity automatically renders as an in-DOM <span className="font-semibold text-zinc-900 dark:text-white">Bottom Sheet</span> on mobile devices and a sleek centered <span className="font-semibold text-zinc-900 dark:text-white">Modal Card</span> on desktop. Zero popup-blockers, no callback redirect URLs needed.
+          </p>
         </div>
 
         {/* Interactive Live Sandbox Preview */}
@@ -411,7 +352,7 @@ export function IdentityAppDetail({
                 <span>Interactive Live Auth Sandbox</span>
               </h4>
               <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                Trigger your configured 180 Identity auth flows in real time using the 180 SDK.
+                Trigger your sovereign auth flow in real time using the 180 SDK.
               </p>
             </div>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-semibold self-start sm:self-auto">
@@ -422,19 +363,11 @@ export function IdentityAppDetail({
           <div className="flex flex-wrap items-center gap-2.5 pt-1">
             <button
               type="button"
-              onClick={onTestPopup}
+              onClick={onTestBottomSheet || onTestPopup}
               className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
             >
-              <Shield className="w-3.5 h-3.5" />
-              <span>Test Popup Modal</span>
-            </button>
-            <button
-              type="button"
-              onClick={onTestBottomSheet}
-              className="px-3.5 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-semibold border border-zinc-200 dark:border-white/10 transition-all flex items-center gap-1.5 cursor-pointer"
-            >
               <Smartphone className="w-3.5 h-3.5" />
-              <span>Test Bottom Sheet</span>
+              <span>Launch Sovereign Auth Sheet</span>
             </button>
           </div>
         </div>

@@ -713,193 +713,23 @@ export const OneEightyIdentity = {
     const state = options.state || Math.random().toString(36).substring(2, 15);
     const responseType = options.responseType || 'code';
 
-    // Resolve UX mode: 'bottom_sheet' | 'popup' | 'fullscreen' | 'redirect' | 'auto'
-    const isMobile = isMobileDevice();
-    let effectiveMode: 'bottom_sheet' | 'popup' | 'fullscreen' = 'bottom_sheet';
+    // Always use adaptive in-DOM bottom sheet (bottom sheet on mobile, centered modal card on desktop)
+    const authUrl = `${authServer}/auth/login?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(state)}&response_type=${encodeURIComponent(responseType)}&ux_mode=bottom_sheet&env=${encodeURIComponent(env)}&app=auth`;
 
-    if (options.uxMode === 'bottom_sheet') {
-      effectiveMode = 'bottom_sheet';
-    } else if (options.uxMode === 'fullscreen' || options.uxMode === 'redirect') {
-      effectiveMode = 'fullscreen';
-    } else if (options.uxMode === 'popup') {
-      effectiveMode = 'popup';
-    } else {
-      // 'auto' or undefined:
-      const cachedAppConfig = getCachedAppConfig(clientId);
-      const configuredMode = isMobile
-        ? cachedAppConfig?.authMobileDefault
-        : cachedAppConfig?.authDesktopDefault;
-
-      if (configuredMode === 'popup' || configuredMode === 'bottom_sheet' || configuredMode === 'fullscreen') {
-        effectiveMode = configuredMode;
-      } else {
-        // Default to in-DOM bottom_sheet / modal so it is NEVER blocked by browser popup blockers!
-        effectiveMode = 'bottom_sheet';
-      }
-    }
-
-    // Trigger non-blocking background prefetch for subsequent calls if not already cached
-    if (typeof window !== 'undefined' && !getCachedAppConfig(clientId)) {
-      prefetchAppConfig(clientId, options.authServerUrl).catch(() => {});
-    }
-
-    const authUrl = `${authServer}/auth/login?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(state)}&response_type=${encodeURIComponent(responseType)}&ux_mode=${effectiveMode}&env=${encodeURIComponent(env)}&app=auth`;
-
-    // 1. Fullscreen / Redirect Mode
-    if (effectiveMode === 'fullscreen') {
-      if (typeof window !== 'undefined') {
-        window.location.href = authUrl;
-      }
-      return Promise.resolve({ code: '', state });
-    }
-
-    // 2. Bottom Sheet Mode
-    if (effectiveMode === 'bottom_sheet') {
-      return openInBottomSheet<AuthResponse>({
-        url: authUrl,
-        title: '180 Sovereign Identity',
-        successTypes: ['180_IDENTITY_SUCCESS', '180_AUTH_SUCCESS'],
-        closeTypes: ['180_IDENTITY_CLOSE'],
-        mapSuccess: (data) => {
-          const bestToken = data.authToken || data.accessToken || data.token || null;
-          const result: AuthResponse = {
-            code: data.code,
-            state: data.state || state,
-            token: bestToken,
-            id_token: data.id_token || null,
-            user: data.user || null,
-          };
-          if (typeof window !== 'undefined') {
-            try {
-              if (bestToken) {
-                localStorage.setItem('platform_auth_token', bestToken);
-                localStorage.setItem('token', bestToken);
-                const isProd = window.location.protocol === 'https:';
-                const isCore = window.location.hostname.endsWith('180core.cloud');
-                const domainAttr = isCore ? '; domain=.180core.cloud' : '';
-                const secureAttr = isProd ? '; Secure' : '';
-                document.cookie = `platform_auth_token=${bestToken}; path=/; max-age=604800; SameSite=Lax${secureAttr}${domainAttr}`;
-              }
-              if (result.user) {
-                localStorage.setItem('user', JSON.stringify(result.user));
-              }
-            } catch (_) {}
-          }
-          return result;
-        },
-        onSuccess: options.onSuccess,
-        onError: options.onError,
-        onCancel: options.onCancel,
-        onDefaultCancelResult: () => ({
-          code: '',
-          state,
-          token: null,
-          id_token: null,
-          user: null,
-        }),
-      });
-    }
-
-    // 3. Popup Mode
-    const width = 450;
-    const height = 680;
-    const left = typeof window !== 'undefined' && window.screen.width ? (window.screen.width - width) / 2 : 100;
-    const top = typeof window !== 'undefined' && window.screen.height ? (window.screen.height - height) / 2 : 100;
-
-    const popup = typeof window !== 'undefined'
-      ? window.open(
-          authUrl,
-          '180_identity_auth',
-          `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,status=no,toolbar=no,resizable=yes`
-        )
-      : null;
-
-    if (popup && typeof popup.focus === 'function') {
-      try {
-        popup.focus();
-      } catch (_) {}
-    }
-
-    if (!popup || popup.closed || typeof popup.closed === 'undefined') {
-      // Fallback: If popup is blocked by browser, degrade seamlessly to bottom sheet
-      return openInBottomSheet<AuthResponse>({
-        url: authUrl.replace('ux_mode=popup', 'ux_mode=bottom_sheet'),
-        title: '180 Sovereign Identity',
-        successTypes: ['180_IDENTITY_SUCCESS', '180_AUTH_SUCCESS'],
-        closeTypes: ['180_IDENTITY_CLOSE'],
-        mapSuccess: (data) => {
-          const bestToken = data.authToken || data.accessToken || data.token || null;
-          const result: AuthResponse = {
-            code: data.code,
-            state: data.state || state,
-            token: bestToken,
-            id_token: data.id_token || null,
-            user: data.user || null,
-          };
-          if (typeof window !== 'undefined') {
-            try {
-              if (bestToken) {
-                localStorage.setItem('platform_auth_token', bestToken);
-                localStorage.setItem('token', bestToken);
-                const isProd = window.location.protocol === 'https:';
-                const isCore = window.location.hostname.endsWith('180core.cloud');
-                const domainAttr = isCore ? '; domain=.180core.cloud' : '';
-                const secureAttr = isProd ? '; Secure' : '';
-                document.cookie = `platform_auth_token=${bestToken}; path=/; max-age=604800; SameSite=Lax${secureAttr}${domainAttr}`;
-              }
-              if (result.user) {
-                localStorage.setItem('user', JSON.stringify(result.user));
-              }
-            } catch (_) {}
-          }
-          return result;
-        },
-        onSuccess: options.onSuccess,
-        onError: options.onError,
-        onCancel: options.onCancel,
-        onDefaultCancelResult: () => ({
-          code: '',
-          state,
-          token: null,
-          id_token: null,
-          user: null,
-        }),
-      });
-    }
-
-    return new Promise((resolve, reject) => {
-      let isResolved = false;
-
-      const messageListener = (event: MessageEvent) => {
-        if (!event.data) return;
-
-        if (event.data.type === '180_IDENTITY_ERROR' || event.data.type === '180_AUTH_ERROR') {
-          const errMessage = event.data.error_description || event.data.error || 'Authentication failed';
-          const err = new Error(errMessage);
-          (err as any).data = event.data;
-          options.onError?.(err);
-          return;
-        }
-
-        if (event.data.type !== '180_IDENTITY_SUCCESS' && event.data.type !== '180_AUTH_SUCCESS') {
-          return;
-        }
-
-        isResolved = true;
-        if (typeof window !== 'undefined') {
-          window.removeEventListener('message', messageListener);
-        }
-        clearInterval(pollTimer);
-
-        const bestToken = event.data.authToken || event.data.accessToken || event.data.token || null;
+    return openInBottomSheet<AuthResponse>({
+      url: authUrl,
+      title: '180 Sovereign Identity',
+      successTypes: ['180_IDENTITY_SUCCESS', '180_AUTH_SUCCESS'],
+      closeTypes: ['180_IDENTITY_CLOSE'],
+      mapSuccess: (data) => {
+        const bestToken = data.authToken || data.accessToken || data.token || null;
         const result: AuthResponse = {
-          code: event.data.code,
-          state: event.data.state || state,
+          code: data.code,
+          state: data.state || state,
           token: bestToken,
-          id_token: event.data.id_token || null,
-          user: event.data.user || null,
+          id_token: data.id_token || null,
+          user: data.user || null,
         };
-
         if (typeof window !== 'undefined') {
           try {
             if (bestToken) {
@@ -916,48 +746,33 @@ export const OneEightyIdentity = {
             }
           } catch (_) {}
         }
-
-        options.onSuccess?.(result);
-        resolve(result);
-      };
-
-      if (typeof window !== 'undefined') {
-        window.addEventListener('message', messageListener);
-      }
-
-      const pollTimer = setInterval(() => {
-        if (popup.closed) {
-          clearInterval(pollTimer);
-          if (typeof window !== 'undefined') {
-            window.removeEventListener('message', messageListener);
-          }
-          if (!isResolved) {
-            options.onCancel?.();
-            resolve({
-              code: '',
-              state,
-              token: null,
-              id_token: null,
-              user: null,
-            });
-          }
-        }
-      }, 500);
+        return result;
+      },
+      onSuccess: options.onSuccess,
+      onError: options.onError,
+      onCancel: options.onCancel,
+      onDefaultCancelResult: () => ({
+        code: '',
+        state,
+        token: null,
+        id_token: null,
+        user: null,
+      }),
     });
   },
 
   /**
-   * Opens 180 Identity Dynamic Sovereign Auth in a centered modal popup (delegates to openAuth)
+   * Opens 180 Identity Dynamic Sovereign Auth in an adaptive in-DOM sheet
    */
   openPopup(options: OpenPopupOptions): Promise<AuthResponse> {
-    return OneEightyIdentity.openAuth({ ...options, uxMode: options.uxMode || 'popup' });
+    return OneEightyIdentity.openAuth(options);
   },
 
   /**
    * Opens 180 Identity directly in an in-DOM slide-up bottom sheet
    */
   openBottomSheet(options: OpenPopupOptions): Promise<AuthResponse> {
-    return OneEightyIdentity.openAuth({ ...options, uxMode: 'bottom_sheet' });
+    return OneEightyIdentity.openAuth(options);
   },
 
   /**
@@ -1287,26 +1102,6 @@ export const OneEightyPay = {
 
     const env = resolveEnvironmentMode(options.environment);
     const payServer = getPayServerUrl(options.checkoutServerUrl || options.payServerUrl, env);
-    const isMobile = isMobileDevice();
-
-    let effectiveMode: 'bottom_sheet' | 'full_page' | 'popup' = 'bottom_sheet';
-    if (options.uxMode === 'full_page' || options.uxMode === 'redirect') {
-      effectiveMode = 'full_page';
-    } else if (options.uxMode === 'popup') {
-      effectiveMode = 'popup';
-    } else if (options.uxMode === 'bottom_sheet') {
-      effectiveMode = 'bottom_sheet';
-    } else {
-      const clientId = options.clientId || options.metadata?.clientId || (typeof process !== 'undefined' ? (process.env?.NEXT_PUBLIC_180_CLIENT_ID || process.env?.NEXT_PUBLIC_IDENTITY_CLIENT_ID) : undefined);
-      const cached = clientId ? getCachedAppConfig(clientId) : null;
-      const configuredMode = isMobile ? cached?.payMobileDefault : cached?.payDesktopDefault;
-      if (configuredMode === 'popup' || configuredMode === 'bottom_sheet' || configuredMode === 'full_page') {
-        effectiveMode = configuredMode;
-      } else {
-        effectiveMode = isMobile ? 'bottom_sheet' : 'bottom_sheet';
-      }
-    }
-
     const returnUrl = options.returnUrl || (options as any).return_url;
     const cancelUrl = options.cancelUrl || (options as any).cancel_url;
     const customerEmail = options.customerEmail || (options as any).customer_email || (options as any).email;
@@ -1337,164 +1132,57 @@ export const OneEightyPay = {
       options.orderId ? `orderId=${encodeURIComponent(options.orderId)}` : '',
       options.metadata ? `metadata=${encodeURIComponent(typeof options.metadata === 'string' ? options.metadata : JSON.stringify(options.metadata))}` : '',
       'app=pay',
-      `ux_mode=${encodeURIComponent(effectiveMode)}`,
+      'ux_mode=bottom_sheet',
       `env=${encodeURIComponent(env)}`,
     ].filter(Boolean).join('&');
 
     const checkoutUrl = `${payServer}/checkout/${encodeURIComponent(sessionId)}${query ? `?${query}` : ''}`;
 
-    // 1. Full Page Redirect Mode
-    if (effectiveMode === 'full_page') {
-      if (typeof window !== 'undefined') {
-        window.location.href = checkoutUrl;
-      }
-      return Promise.resolve({
+    // Always use adaptive in-DOM bottom sheet (bottom sheet on mobile, centered modal card on desktop)
+    return openInBottomSheet<CheckoutResponse>({
+      url: checkoutUrl,
+      title: options.title || 'Secure Payment',
+      successTypes: ['180_PAYMENT_SUCCESS', '180_PAY_SUCCESS'],
+      closeTypes: ['180_PAYMENT_CLOSE', '180_PAY_CLOSE', '180_IDENTITY_CLOSE', '180_MODAL_CLOSE'],
+      mapSuccess: (data) => ({
+        sessionId: data.sessionId || sessionId,
+        transactionId: data.transactionId,
+        amount: data.amount ?? options.amount,
+        currency: data.currency || options.currency,
+        isFree: Boolean(data.isFree),
+      }),
+      onSuccess: options.onSuccess,
+      onError: options.onError,
+      onCancel: options.onCancel,
+      onDefaultCancelResult: () => ({
         sessionId,
         transactionId: undefined,
         amount: options.amount,
         currency: options.currency,
         isFree: false,
-      });
-    }
-
-    // 2. Bottom Sheet Mode
-    if (effectiveMode === 'bottom_sheet') {
-      return openInBottomSheet<CheckoutResponse>({
-        url: checkoutUrl,
-        title: options.title || 'Secure Payment',
-        successTypes: ['180_PAYMENT_SUCCESS', '180_PAY_SUCCESS'],
-        closeTypes: ['180_PAYMENT_CLOSE', '180_PAY_CLOSE', '180_IDENTITY_CLOSE', '180_MODAL_CLOSE'],
-        mapSuccess: (data) => ({
-          sessionId: data.sessionId || sessionId,
-          transactionId: data.transactionId,
-          amount: data.amount ?? options.amount,
-          currency: data.currency || options.currency,
-          isFree: Boolean(data.isFree),
-        }),
-        onSuccess: options.onSuccess,
-        onError: options.onError,
-        onCancel: options.onCancel,
-        onDefaultCancelResult: () => ({
-          sessionId,
-          transactionId: undefined,
-          amount: options.amount,
-          currency: options.currency,
-          isFree: false,
-        }),
-      });
-    }
-
-    // 3. Popup Mode
-    const width = 460;
-    const height = 700;
-    const left = typeof window !== 'undefined' && window.screen.width ? (window.screen.width - width) / 2 : 100;
-    const top = typeof window !== 'undefined' && window.screen.height ? (window.screen.height - height) / 2 : 100;
-
-    const popup = typeof window !== 'undefined'
-      ? window.open(
-          checkoutUrl,
-          '180_pay_checkout',
-          `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,status=no,toolbar=no,resizable=yes`
-        )
-      : null;
-
-    if (!popup || popup.closed || typeof popup.closed === 'undefined') {
-      // Fallback: Degrade gracefully to bottom sheet if popup is blocked
-      return openInBottomSheet<CheckoutResponse>({
-        url: checkoutUrl.replace('ux_mode=popup', 'ux_mode=bottom_sheet'),
-        title: options.title || 'Secure Payment',
-        successTypes: ['180_PAYMENT_SUCCESS', '180_PAY_SUCCESS'],
-        closeTypes: ['180_PAYMENT_CLOSE', '180_PAY_CLOSE', '180_IDENTITY_CLOSE', '180_MODAL_CLOSE'],
-        mapSuccess: (data) => ({
-          sessionId: data.sessionId || sessionId,
-          transactionId: data.transactionId,
-          amount: data.amount ?? options.amount,
-          currency: data.currency || options.currency,
-          isFree: Boolean(data.isFree),
-        }),
-        onSuccess: options.onSuccess,
-        onError: options.onError,
-        onCancel: options.onCancel,
-        onDefaultCancelResult: () => ({
-          sessionId,
-          transactionId: undefined,
-          amount: options.amount,
-          currency: options.currency,
-          isFree: false,
-        }),
-      });
-    }
-
-    return new Promise((resolve, reject) => {
-      let isResolved = false;
-
-      const messageListener = (event: MessageEvent) => {
-        if (!event.data || (event.data.type !== '180_PAYMENT_SUCCESS' && event.data.type !== '180_PAY_SUCCESS')) {
-          return;
-        }
-
-        isResolved = true;
-        if (typeof window !== 'undefined') {
-          window.removeEventListener('message', messageListener);
-        }
-        clearInterval(pollTimer);
-
-        const result: CheckoutResponse = {
-          sessionId: event.data.sessionId || sessionId,
-          transactionId: event.data.transactionId,
-          amount: options.amount,
-          currency: options.currency,
-          isFree: Boolean(event.data.isFree),
-        };
-
-        options.onSuccess?.(result);
-        resolve(result);
-      };
-
-      if (typeof window !== 'undefined') {
-        window.addEventListener('message', messageListener);
-      }
-
-      const pollTimer = setInterval(() => {
-        if (popup.closed) {
-          clearInterval(pollTimer);
-          if (typeof window !== 'undefined') {
-            window.removeEventListener('message', messageListener);
-          }
-          if (!isResolved) {
-            options.onCancel?.();
-            resolve({
-              sessionId,
-              transactionId: undefined,
-              amount: options.amount,
-              currency: options.currency,
-              isFree: false,
-            });
-          }
-        }
-      }, 500);
+      }),
     });
   },
 
   /**
-   * Opens 180 Profile Sovereign Checkout in a centered desktop popup window
+   * Opens 180 Profile Sovereign Checkout in an adaptive in-DOM sheet (bottom sheet on mobile, modal on desktop)
    */
   openPopup(options: CheckoutOptions): Promise<CheckoutResponse> {
-    return OneEightyPay.checkout({ ...options, uxMode: 'popup' });
+    return OneEightyPay.checkout(options);
   },
 
   /**
    * Opens 180 Profile Sovereign Checkout directly in an in-DOM slide-up bottom sheet
    */
   openBottomSheet(options: CheckoutOptions): Promise<CheckoutResponse> {
-    return OneEightyPay.checkout({ ...options, uxMode: 'bottom_sheet' });
+    return OneEightyPay.checkout(options);
   },
 
   /**
-   * Redirects user directly to 180 Pay Sovereign Checkout in full-page mode
+   * Opens 180 Pay Sovereign Checkout in an in-DOM sheet
    */
   openFullPage(options: CheckoutOptions): Promise<CheckoutResponse> {
-    return OneEightyPay.checkout({ ...options, uxMode: 'full_page' });
+    return OneEightyPay.checkout(options);
   },
 
   /**
@@ -1943,7 +1631,7 @@ export const OneEightyIdentityButton: React.FC<OneEightyIdentityButtonProps> = (
         </div>
         {(isProcessing || isOpeningIdentity || subtitle) && (
           <div className="text-[10px] font-medium mt-0.5 leading-tight text-gray-500">
-            {isProcessing ? 'Verifying sovereign session & redirecting…' : isOpeningIdentity ? 'Authenticate in the popup window' : subtitle}
+            {isProcessing ? 'Verifying sovereign session…' : isOpeningIdentity ? 'Authenticate in the secure sheet' : subtitle}
           </div>
         )}
       </div>

@@ -158,7 +158,6 @@
     return new Promise(function (resolve, reject) {
       var isResolved = false;
       var isMobile = isMobileViewport();
-      var isFullScreen = options.uxMode === 'full_page' || options.uxMode === 'fullscreen';
 
       // 1. Root Overlay
       var root = document.createElement('div');
@@ -169,7 +168,7 @@
         'z-index: 9999999',
         'display: flex',
         'flex-direction: column',
-        isMobile && !isFullScreen ? 'justify-content: flex-end' : 'justify-content: center',
+        isMobile ? 'justify-content: flex-end' : 'justify-content: center',
         'align-items: center',
         'pointer-events: auto',
         'font-family: \'Satoshi\', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
@@ -202,9 +201,7 @@
         'transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1)'
       ];
 
-      if (isFullScreen) {
-        cardStyle.push('height: 100vh', 'max-height: 100vh', 'border-radius: 0', 'border: none');
-      } else if (isMobile) {
+      if (isMobile) {
         cardStyle.push(
           'height: 88vh',
           'max-height: 92vh',
@@ -229,7 +226,7 @@
       var header = document.createElement('div');
       header.style.cssText = [
         'flex-shrink: 0',
-        'padding: ' + (isMobile && !isFullScreen ? '8px 16px 8px 16px' : '12px 16px'),
+        'padding: ' + (isMobile ? '8px 16px 8px 16px' : '12px 16px'),
         'display: flex',
         'flex-direction: column',
         'align-items: center',
@@ -238,7 +235,7 @@
         'position: relative'
       ].join(';');
 
-      if (isMobile && !isFullScreen) {
+      if (isMobile) {
         var grabHandle = document.createElement('div');
         grabHandle.style.cssText = 'width: 40px; height: 4px; border-radius: 9999px; background: rgba(255, 255, 255, 0.22); margin-bottom: 6px;';
         header.appendChild(grabHandle);
@@ -259,32 +256,6 @@
       var actionGroup = document.createElement('div');
       actionGroup.style.cssText = 'display: flex; align-items: center; gap: 6px;';
 
-      // Fullscreen expand toggle
-      var expandBtn = document.createElement('button');
-      expandBtn.type = 'button';
-      expandBtn.setAttribute('aria-label', isFullScreen ? 'Collapse view' : 'Expand full page');
-      expandBtn.style.cssText = 'width: 28px; height: 28px; border-radius: 50%; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); color: #a1a1aa; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; outline: none;';
-      expandBtn.innerHTML = isFullScreen
-        ? '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 9L4 4m0 0l5 0m-5 0l0 5M15 9l5-5m0 0l-5 0m5 0l0 5M9 15l-5 5m0 0l5 0m-5 0l0-5M15 15l5 5m0 0l-5 0m5 0l0-5"/></svg>'
-        : '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>';
-
-      expandBtn.onclick = function () {
-        isFullScreen = !isFullScreen;
-        if (isFullScreen) {
-          card.style.height = '100vh';
-          card.style.maxHeight = '100vh';
-          card.style.maxWidth = '100%';
-          card.style.borderRadius = '0';
-          card.style.border = 'none';
-        } else {
-          card.style.height = isMobile ? '88vh' : '720px';
-          card.style.maxHeight = isMobile ? '92vh' : '90vh';
-          card.style.maxWidth = isMobile ? '100%' : '480px';
-          card.style.borderRadius = isMobile ? '24px 24px 0 0' : '20px';
-          card.style.border = '1px solid rgba(255, 255, 255, 0.12)';
-        }
-      };
-
       // Close button
       var closeBtn = document.createElement('button');
       closeBtn.type = 'button';
@@ -292,7 +263,6 @@
       closeBtn.style.cssText = 'width: 28px; height: 28px; border-radius: 50%; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); color: #a1a1aa; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; outline: none;';
       closeBtn.innerHTML = '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>';
 
-      actionGroup.appendChild(expandBtn);
       actionGroup.appendChild(closeBtn);
       navBar.appendChild(brandWrap);
       navBar.appendChild(actionGroup);
@@ -384,7 +354,7 @@
       }, { passive: true });
 
       header.addEventListener('touchend', function () {
-        if (isFullScreen || !isMobile) return;
+        if (!isMobile) return;
         var diff = currentY - startY;
         if (diff > 80) {
           handleCancel();
@@ -403,7 +373,7 @@
       }
 
       function closeModal() {
-        if (isMobile && !isFullScreen) {
+        if (isMobile) {
           card.style.animation = 'one-eighty-slide-down 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards';
         }
         backdrop.style.animation = 'one-eighty-fade-out 0.2s ease-in forwards';
@@ -569,9 +539,7 @@
     },
 
     openPopup: function (options) {
-      var isMobile = isMobileViewport();
-      var targetMode = isMobile ? 'bottom_sheet' : (options && options.uxMode ? options.uxMode : 'bottom_sheet');
-      return OneEightyAuth.signIn(Object.assign({}, options, { uxMode: targetMode }));
+      return OneEightyAuth.signIn(Object.assign({}, options, { uxMode: 'bottom_sheet' }));
     },
 
     resolveEnvironmentMode: resolveEnvironmentMode,
@@ -648,14 +616,13 @@
       return OneEightyPay.checkout(options);
     },
     openPopup: function (options) {
-      var isMobile = isMobileViewport();
-      return OneEightyPay.checkout(Object.assign({}, options, { uxMode: isMobile ? 'bottom_sheet' : 'popup' }));
+      return OneEightyPay.checkout(options);
     },
     openBottomSheet: function (options) {
-      return OneEightyPay.checkout(Object.assign({}, options, { uxMode: 'bottom_sheet' }));
+      return OneEightyPay.checkout(options);
     },
     openFullPage: function (options) {
-      return OneEightyPay.checkout(Object.assign({}, options, { uxMode: 'full_page' }));
+      return OneEightyPay.checkout(options);
     },
     resolveEnvironmentMode: resolveEnvironmentMode,
     generateReferenceCode: generateReferenceCode,
@@ -774,13 +741,13 @@
   // Wire auth aliases
   OneEightyAuth.openAuthModal = OneEightyAuth.signIn;
   OneEightyAuth.openLoginPopup = function (options) {
-    return OneEightyAuth.signIn(Object.assign({}, options, { uxMode: (options && options.uxMode) || 'popup' }));
+    return OneEightyAuth.signIn(Object.assign({}, options, { uxMode: 'bottom_sheet' }));
   };
   OneEightyAuth.openBottomSheet = function (options) {
     return OneEightyAuth.signIn(Object.assign({}, options, { uxMode: 'bottom_sheet' }));
   };
   OneEightyAuth.openPopup = function (options) {
-    return OneEightyAuth.signIn(Object.assign({}, options, { uxMode: 'popup' }));
+    return OneEightyAuth.signIn(Object.assign({}, options, { uxMode: 'bottom_sheet' }));
   };
 
   // ─── UNIFIED ONE-EIGHTY CORE ROOT OBJECT ──────────────────────────────────

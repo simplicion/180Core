@@ -48,31 +48,17 @@ export function IdentityOverviewView() {
     });
   };
 
-  const onTestPopup = () => {
+  const onTestAuth = () => {
     if (!project) return;
     try {
-      OneEightyIdentity.openPopup({
-        clientId: project.clientId,
-        uxMode: 'popup',
-        onSuccess: (res: any) => toast.success(`Auth modal test passed! Code: ${res?.code ? res.code.slice(0, 10) : 'OK'}`),
-        onCancel: () => toast('Auth modal closed', { icon: 'ℹ️' }),
-      });
-    } catch (e: any) {
-      toast.error(e.message || 'Popup test failed');
-    }
-  };
-
-  const onTestBottomSheet = () => {
-    if (!project) return;
-    try {
-      OneEightyIdentity.openBottomSheet({
+      OneEightyIdentity.openAuth({
         clientId: project.clientId,
         uxMode: 'bottom_sheet',
-        onSuccess: (res: any) => toast.success(`Auth bottom sheet test passed! User: ${res?.user?.name || res?.code?.slice(0, 8) || 'OK'}`),
-        onCancel: () => toast('Auth bottom sheet closed', { icon: 'ℹ️' }),
+        onSuccess: (res: any) => toast.success(`Auth sheet test passed! User: ${res?.user?.name || res?.code?.slice(0, 8) || 'OK'}`),
+        onCancel: () => toast('Auth sheet closed', { icon: 'ℹ️' }),
       });
     } catch (e: any) {
-      toast.error(e.message || 'Bottom sheet test failed');
+      toast.error(e.message || 'Auth test failed');
     }
   };
 
@@ -137,91 +123,32 @@ export function IdentityOverviewView() {
           <div>
             <h3 className="text-sm font-bold text-zinc-950 dark:text-white flex items-center gap-2">
               <Sliders className="w-4 h-4 text-blue-500" />
-              <span>Authentication Presentation & UX Modes</span>
+              <span>180 Identity Presentation & UX Modes</span>
             </h3>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              Customize auth display behaviors for desktop vs mobile devices.
+              180 Identity uses an adaptive in-DOM presentation model that is fully responsive across mobile and desktop.
             </p>
           </div>
           <span className="self-start sm:self-auto text-[10px] font-mono px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 font-semibold">
-            OAuth 2.0 UX
+            Zero-Config UX
           </span>
         </div>
 
-        <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/5 space-y-4">
-          <div className="flex items-center gap-2 pb-2 border-b border-zinc-200 dark:border-white/5">
-            <Shield className="w-3.5 h-3.5 text-blue-500" />
-            <span className="text-xs font-bold text-zinc-900 dark:text-white">Supported Display Modes</span>
+        {/* Presentation Model */}
+        <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/5 space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-zinc-200 dark:border-white/5">
+            <div className="flex items-center gap-2">
+              <Shield className="w-3.5 h-3.5 text-blue-500" />
+              <span className="text-xs font-bold text-zinc-900 dark:text-white">Adaptive Display Model</span>
+            </div>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/20">
+              Active Standard
+            </span>
           </div>
 
-          <div className="space-y-2">
-            <div className="flex flex-wrap gap-2">
-              {[
-                { id: 'popup', label: 'Popup Window' },
-                { id: 'bottom_sheet', label: 'Bottom Sheet (Drawer)' },
-                { id: 'full_page', label: 'Full Page Redirect' },
-              ].map((mode) => {
-                const isSelected = authUxModes.includes(mode.id);
-                return (
-                  <button
-                    key={mode.id}
-                    type="button"
-                    onClick={() => {
-                      if (isSelected) {
-                        if (authUxModes.length > 1) {
-                          setAuthUxModes(authUxModes.filter((m) => m !== mode.id));
-                        }
-                      } else {
-                        setAuthUxModes([...authUxModes, mode.id]);
-                      }
-                    }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                        : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-white/10 hover:border-zinc-300'
-                    }`}
-                  >
-                    {mode.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Device Defaults */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-            <div className="space-y-1">
-              <label className="text-[11px] font-medium text-zinc-500 flex items-center gap-1">
-                <Monitor className="w-3 h-3 text-zinc-400" />
-                <span>Desktop Default</span>
-              </label>
-              <select
-                value={authDesktopDefault}
-                onChange={(e) => setAuthDesktopDefault(e.target.value)}
-                className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-white/10 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-blue-500"
-              >
-                <option value="popup">Popup Window (Recommended)</option>
-                <option value="bottom_sheet">Bottom Sheet</option>
-                <option value="full_page">Full Page Redirect</option>
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[11px] font-medium text-zinc-500 flex items-center gap-1">
-                <Smartphone className="w-3 h-3 text-zinc-400" />
-                <span>Mobile Default</span>
-              </label>
-              <select
-                value={authMobileDefault}
-                onChange={(e) => setAuthMobileDefault(e.target.value)}
-                className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-white/10 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-blue-500"
-              >
-                <option value="bottom_sheet">Bottom Sheet (Recommended)</option>
-                <option value="popup">Popup Window</option>
-                <option value="full_page">Full Page Redirect</option>
-              </select>
-            </div>
-          </div>
+          <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+            180 Identity automatically renders as an in-DOM <span className="font-semibold text-zinc-900 dark:text-white">Bottom Sheet</span> on mobile devices and a sleek centered <span className="font-semibold text-zinc-900 dark:text-white">Modal Card</span> on desktop. Zero popup-blockers, no callback redirect URLs needed.
+          </p>
         </div>
 
         {/* Live Simulator Test Triggers */}
@@ -237,20 +164,11 @@ export function IdentityOverviewView() {
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
-              onClick={onTestPopup}
-              className="px-3.5 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-white/10 hover:border-blue-500/50 text-xs font-semibold text-zinc-700 dark:text-zinc-200 shadow-xs flex items-center gap-1.5 cursor-pointer transition-all hover:scale-102"
+              onClick={onTestAuth}
+              className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-xs font-semibold text-white shadow-xs flex items-center gap-1.5 cursor-pointer transition-all hover:scale-102"
             >
-              <Monitor className="w-3.5 h-3.5 text-blue-500" />
-              <span>Launch Popup Flow</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={onTestBottomSheet}
-              className="px-3.5 py-2 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-white/10 hover:border-blue-500/50 text-xs font-semibold text-zinc-700 dark:text-zinc-200 shadow-xs flex items-center gap-1.5 cursor-pointer transition-all hover:scale-102"
-            >
-              <Smartphone className="w-3.5 h-3.5 text-blue-500" />
-              <span>Launch Bottom Sheet Flow</span>
+              <Smartphone className="w-3.5 h-3.5 text-white" />
+              <span>Launch Sovereign Auth Sheet</span>
             </button>
           </div>
         </div>
