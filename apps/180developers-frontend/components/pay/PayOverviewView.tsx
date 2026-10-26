@@ -133,7 +133,7 @@ function LazyTransactionsSection() {
   );
 }
 
-export function PayOverviewView({ onOpenUxDrawer }: { onOpenUxDrawer?: () => void } = {}) {
+export function PayOverviewView() {
   const {
     project,
     enablePay,
@@ -149,78 +149,26 @@ export function PayOverviewView({ onOpenUxDrawer }: { onOpenUxDrawer?: () => voi
   const { formatAmount, activeCurrency, activeMeta, openCurrencyModal } = usePlatformCurrency();
   const baseCurrency = (paymentAnalytics?.currency || 'USD').toUpperCase();
 
-  const [payUxModes, setPayUxModes] = useState<string[]>(
-    project?.payUxModes || ['bottom_sheet', 'popup']
-  );
-  const [payDesktopDefault, setPayDesktopDefault] = useState<string>(
-    project?.payDesktopDefault || 'bottom_sheet'
-  );
-  const [payMobileDefault, setPayMobileDefault] = useState<string>(
-    project?.payMobileDefault || 'bottom_sheet'
-  );
-
   useEffect(() => {
     fetchPaymentAnalytics();
   }, [fetchPaymentAnalytics]);
 
-  useEffect(() => {
-    if (project) {
-      if (project.payUxModes && Array.isArray(project.payUxModes) && project.payUxModes.length > 0) {
-        setPayUxModes(project.payUxModes);
-      }
-      if (project.payDesktopDefault) {
-        setPayDesktopDefault(project.payDesktopDefault);
-      }
-      if (project.payMobileDefault) {
-        setPayMobileDefault(project.payMobileDefault);
-      }
-    }
-  }, [project?.payUxModes, project?.payDesktopDefault, project?.payMobileDefault]);
-
-  const handleSaveUxModes = async (e?: React.SyntheticEvent) => {
-    if (e) e.preventDefault();
-    await saveSettings({
-      payUxModes,
-      payDesktopDefault,
-      payMobileDefault,
-    });
-  };
-
-  const onTestPopup = () => {
+  const onTestCheckout = () => {
     try {
       const cur = ((project as any)?.currency || 'USD').toUpperCase();
       const amt = (project as any)?.defaultAmount !== undefined ? (project as any).defaultAmount : 49.0;
-      OneEightyPay.openPopup({
+      OneEightyPay.checkout({
         amount: amt,
         currency: cur,
         title: `${project?.name || 'Developer Project'} Checkout`,
-        description: 'Sandbox verification session (Popup)',
+        description: 'Sandbox verification session (Adaptive Sheet)',
         onSuccess: (res: any) => toast.success(`Payment test passed! TxID: ${res?.transactionId || res?.sessionId || 'SUCCESS'}`),
         onCancel: () => toast('Pay checkout closed', { icon: 'ℹ️' }),
       });
     } catch (e: any) {
-      toast.error(e.message || 'Popup test failed');
+      toast.error(e.message || 'Checkout test failed');
     }
   };
-
-  const onTestBottomSheet = () => {
-    try {
-      const cur = ((project as any)?.currency || 'USD').toUpperCase();
-      const amt = (project as any)?.defaultAmount !== undefined ? (project as any).defaultAmount : 49.0;
-      OneEightyPay.openBottomSheet({
-        amount: amt,
-        currency: cur,
-        title: `${project?.name || 'Developer Project'} Checkout`,
-        description: 'Sandbox verification session (Bottom Sheet)',
-        onSuccess: (res: any) => toast.success(`Payment test passed! TxID: ${res?.transactionId || res?.sessionId || 'SUCCESS'}`),
-        onCancel: () => toast('Pay checkout closed', { icon: 'ℹ️' }),
-      });
-    } catch (e: any) {
-      toast.error(e.message || 'Bottom sheet test failed');
-    }
-  };
-
-  const onTestPayDrawer = onTestBottomSheet;
 
   const totalIntentsCount = paymentAnalytics?.totalIntentsCount || (paymentAnalytics?.transactions || []).length;
   const totalIntentsVolume = paymentAnalytics?.totalIntentsVolume || paymentAnalytics?.grossVolume || 0;
@@ -238,7 +186,7 @@ export function PayOverviewView({ onOpenUxDrawer }: { onOpenUxDrawer?: () => voi
 
   return (
     <div className="space-y-6">
-      {/* 1. Quick Checkout UX Modes Ribbon */}
+      {/* 1. Adaptive Sovereign Checkout Banner */}
       <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-purple-500/5 via-indigo-500/5 to-transparent border border-purple-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
         <div className="flex items-start sm:items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
@@ -247,17 +195,14 @@ export function PayOverviewView({ onOpenUxDrawer }: { onOpenUxDrawer?: () => voi
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-sm font-bold text-zinc-950 dark:text-white">
-                Checkout Presentation &amp; UX Modes
+                Adaptive Sovereign Checkout
               </h3>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 font-semibold border border-purple-500/20">
-                Desktop: {payDesktopDefault === 'bottom_sheet' ? 'Drawer' : payDesktopDefault === 'popup' ? 'Popup' : 'Redirect'}
-              </span>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-semibold border border-indigo-500/20">
-                Mobile: {payMobileDefault === 'bottom_sheet' ? 'Drawer' : payMobileDefault === 'popup' ? 'Popup' : 'Redirect'}
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/20">
+                Active Standard: Zero-Config In-DOM Sheet
               </span>
             </div>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              Customize display behaviors for desktop vs mobile devices or test flows in the UX drawer.
+              180 Pay automatically renders as an in-DOM Bottom Sheet on mobile and a sleek centered Modal Card on desktop. Zero popup blockers, 100% gateway return rate.
             </p>
           </div>
         </div>
@@ -265,23 +210,13 @@ export function PayOverviewView({ onOpenUxDrawer }: { onOpenUxDrawer?: () => voi
         <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
           <button
             type="button"
-            onClick={onTestBottomSheet}
-            className="px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-white/10 hover:border-purple-500/50 text-xs font-semibold text-zinc-700 dark:text-zinc-200 shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-            title="Launch test drawer flow"
+            onClick={onTestCheckout}
+            className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+            title="Launch test checkout sheet"
           >
-            <Smartphone className="w-3.5 h-3.5 text-purple-500" />
-            <span>Test Drawer</span>
+            <Smartphone className="w-3.5 h-3.5 text-white" />
+            <span>Launch Sovereign Checkout Sheet</span>
           </button>
-          {onOpenUxDrawer && (
-            <button
-              type="button"
-              onClick={onOpenUxDrawer}
-              className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-            >
-              <Settings className="w-3.5 h-3.5" />
-              <span>Configure UX</span>
-            </button>
-          )}
         </div>
       </div>
 
