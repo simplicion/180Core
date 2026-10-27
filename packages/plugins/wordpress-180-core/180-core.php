@@ -73,6 +73,14 @@ class OneEighty_Core_Plugin {
             true
         );
 
+        wp_enqueue_script(
+            '180-core-wp-bridge',
+            ONE_EIGHTY_CORE_PLUGIN_URL . 'assets/js/180-core-wordpress.js',
+            array('180-core-sdk'),
+            ONE_EIGHTY_CORE_VERSION,
+            true
+        );
+
         $client_id = get_option('180_core_client_id', '');
         $api_base = get_option('180_core_api_base', 'https://api.180core.cloud');
         $profile_base = get_option('180_core_profile_base', 'https://profile.180core.cloud');
@@ -110,24 +118,47 @@ class OneEighty_Core_Plugin {
     }
 
     public function register_settings() {
-        // General options
-        register_setting('180_core_general_group', '180_core_client_id');
-        register_setting('180_core_general_group', '180_core_client_secret');
-        register_setting('180_core_general_group', '180_core_api_base');
-        register_setting('180_core_general_group', '180_core_profile_base');
+        // General options with strict validation & sanitization
+        register_setting('180_core_general_group', '180_core_client_id', array(
+            'type'              => 'string',
+            'sanitize_callback' => 'sanitize_text_field',
+        ));
+        register_setting('180_core_general_group', '180_core_client_secret', array(
+            'type'              => 'string',
+            'sanitize_callback' => 'sanitize_text_field',
+        ));
+        register_setting('180_core_general_group', '180_core_api_base', array(
+            'type'              => 'string',
+            'sanitize_callback' => 'esc_url_raw',
+            'default'           => 'https://api.180core.cloud',
+        ));
+        register_setting('180_core_general_group', '180_core_profile_base', array(
+            'type'              => 'string',
+            'sanitize_callback' => 'esc_url_raw',
+            'default'           => 'https://profile.180core.cloud',
+        ));
 
-        // Identity options
-        register_setting('180_core_identity_group', '180_identity_enabled');
-        register_setting('180_core_identity_group', '180_identity_button_text');
-        register_setting('180_core_identity_group', '180_identity_auto_register');
-        register_setting('180_core_identity_group', '180_identity_default_role');
-        register_setting('180_core_identity_group', '180_identity_show_on_wp_login');
-        register_setting('180_core_identity_group', '180_identity_show_on_wc_login');
+        // Identity options with input sanitization
+        register_setting('180_core_identity_group', '180_identity_enabled', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean'));
+        register_setting('180_core_identity_group', '180_identity_button_text', array('type' => 'string', 'sanitize_callback' => 'sanitize_text_field'));
+        register_setting('180_core_identity_group', '180_identity_auto_register', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean'));
+        register_setting('180_core_identity_group', '180_identity_default_role', array('type' => 'string', 'sanitize_callback' => array($this, 'sanitize_role')));
+        register_setting('180_core_identity_group', '180_identity_show_on_wp_login', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean'));
+        register_setting('180_core_identity_group', '180_identity_show_on_wc_login', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean'));
 
-        // Pay options
-        register_setting('180_core_pay_group', '180_pay_enabled');
-        register_setting('180_core_pay_group', '180_pay_title');
-        register_setting('180_core_pay_group', '180_pay_description');
+        // Pay options with input sanitization
+        register_setting('180_core_pay_group', '180_pay_enabled', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean'));
+        register_setting('180_core_pay_group', '180_pay_title', array('type' => 'string', 'sanitize_callback' => 'sanitize_text_field'));
+        register_setting('180_core_pay_group', '180_pay_description', array('type' => 'string', 'sanitize_callback' => 'sanitize_textarea_field'));
+    }
+
+    public function sanitize_role($role) {
+        $role = sanitize_text_field($role);
+        $forbidden = array('administrator', 'editor', 'author');
+        if (in_array(strtolower($role), $forbidden, true)) {
+            return 'customer';
+        }
+        return $role;
     }
 
     public function add_action_links($links) {

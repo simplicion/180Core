@@ -55,7 +55,9 @@ class OneEighty_Identity_Module {
             <a href="<?php echo esc_url($auth_url); ?>" 
                class="one-eighty-sso-button" 
                id="one-eighty-sso-btn"
-               onclick="if(window.OneEighty && window.OneEighty.auth){event.preventDefault();window.OneEighty.auth.openBottomSheet({clientId:'<?php echo esc_js($client_id); ?>',redirectUri:'<?php echo esc_js(home_url('/?180core_auth=callback')); ?>',uxMode:'bottom_sheet'}).then(function(res){if(res&&res.code){window.location.href='<?php echo esc_js(home_url('/?180core_auth=callback&code=')); ?>'+encodeURIComponent(res.code)+'&state='+encodeURIComponent(res.state||'');}});}">
+               data-180-auth-trigger="true"
+               data-180-client-id="<?php echo esc_attr($client_id); ?>"
+               data-180-redirect-uri="<?php echo esc_url(home_url('/?180core_auth=callback')); ?>">
                 <span class="one-eighty-btn-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -79,7 +81,9 @@ class OneEighty_Identity_Module {
             <span><?php _e('Have a 180 Core or 180 Wallet account?', '180-core'); ?></span>
             <a href="<?php echo esc_url($auth_url); ?>" 
                class="button one-eighty-btn-sm"
-               onclick="if(window.OneEighty && window.OneEighty.auth){event.preventDefault();window.OneEighty.auth.openBottomSheet({clientId:'<?php echo esc_js($client_id); ?>',redirectUri:'<?php echo esc_js(home_url('/?180core_auth=callback')); ?>',uxMode:'bottom_sheet'}).then(function(res){if(res&&res.code){window.location.href='<?php echo esc_js(home_url('/?180core_auth=callback&code=')); ?>'+encodeURIComponent(res.code)+'&state='+encodeURIComponent(res.state||'');}});}">
+               data-180-auth-trigger="true"
+               data-180-client-id="<?php echo esc_attr($client_id); ?>"
+               data-180-redirect-uri="<?php echo esc_url(home_url('/?180core_auth=callback')); ?>">
                 <?php _e('1-Click Sign In', '180-core'); ?>
             </a>
         </div>
@@ -105,7 +109,9 @@ class OneEighty_Identity_Module {
         <div class="one-eighty-shortcode-wrapper <?php echo esc_attr($atts['class']); ?>">
             <a href="<?php echo esc_url($auth_url); ?>" 
                class="one-eighty-sso-button"
-               onclick="if(window.OneEighty && window.OneEighty.auth){event.preventDefault();window.OneEighty.auth.openBottomSheet({clientId:'<?php echo esc_js($client_id); ?>',redirectUri:'<?php echo esc_js(home_url('/?180core_auth=callback')); ?>',uxMode:'bottom_sheet'}).then(function(res){if(res&&res.code){window.location.href='<?php echo esc_js(home_url('/?180core_auth=callback&code=')); ?>'+encodeURIComponent(res.code)+'&state='+encodeURIComponent(res.state||'');}});}">
+               data-180-auth-trigger="true"
+               data-180-client-id="<?php echo esc_attr($client_id); ?>"
+               data-180-redirect-uri="<?php echo esc_url(home_url('/?180core_auth=callback')); ?>">
                 <span class="one-eighty-btn-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -127,9 +133,17 @@ class OneEighty_Identity_Module {
             $redirect_to = isset($_REQUEST['redirect_to']) ? esc_url_raw($_REQUEST['redirect_to']) : home_url();
         }
 
+        $redirect_to = wp_validate_redirect($redirect_to, home_url());
+        $nonce = wp_create_nonce('180_auth_nonce');
+        $ts = time();
+        $salt = function_exists('wp_salt') ? wp_salt('auth') : '180_core_salt_auth';
+        $sig = hash_hmac('sha256', $ts . '.' . $nonce . '.' . $redirect_to, $salt);
+
         $state_data = array(
-            'nonce'       => wp_create_nonce('180_auth_nonce'),
+            'ts'          => $ts,
+            'nonce'       => $nonce,
             'redirect_to' => $redirect_to,
+            'sig'         => $sig,
         );
         $state = base64_encode(wp_json_encode($state_data));
 
@@ -161,9 +175,24 @@ class OneEighty_Identity_Module {
             wp_die(__('Authorization code not provided.', '180-core'));
         }
 
-        // Validate state
+        // Validate state cryptographically to prevent CSRF and parameter tampering
         $state = json_decode(base64_decode($raw_state), true);
-        $redirect_to = !empty($state['redirect_to']) ? esc_url_raw($state['redirect_to']) : home_url();
+        if (!$state || !is_array($state) || empty($state['sig']) || empty($state['ts']) || empty($state['nonce'])) {
+            wp_die(__('Security Error: Invalid or tampered OAuth state parameter.', '180-core'));
+        }
+
+        // Check 15-minute replay window
+        if (abs(time() - intval($state['ts'])) > 900) {
+            wp_die(__('Authentication session expired. Please return and try logging in again.', '180-core'));
+        }
+
+        $salt = function_exists('wp_salt') ? wp_salt('auth') : '180_core_salt_auth';
+        $expected_sig = hash_hmac('sha256', $state['ts'] . '.' . $state['nonce'] . '.' . (isset($state['redirect_to']) ? $state['redirect_to'] : ''), $salt);
+        if (!hash_equals($expected_sig, $state['sig'])) {
+            wp_die(__('Security Error: OAuth cryptographic signature mismatch.', '180-core'));
+        }
+
+        $redirect_to = !empty($state['redirect_to']) ? wp_validate_redirect($state['redirect_to'], home_url()) : home_url();
 
         // Exchange code for user details
         $user_info = $this->exchange_code_for_user($code);
@@ -275,6 +304,10 @@ class OneEighty_Identity_Module {
 
         $random_password = wp_generate_password(24, true);
         $role = get_option('180_identity_default_role', 'customer');
+        $forbidden_roles = array('administrator', 'editor', 'author');
+        if (in_array(strtolower($role), $forbidden_roles, true)) {
+            $role = 'customer';
+        }
 
         $user_id = wp_create_user($username, $random_password, $email);
         if (is_wp_error($user_id)) {

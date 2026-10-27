@@ -713,7 +713,13 @@
       options = options || {};
       var env = resolveEnvironmentMode(options.environment);
       var payServer = options.payServerUrl || (env === 'production' ? 'https://profile.180core.cloud' : DEFAULT_PAY_SERVER);
-      var sessionId = options.sessionId || 'cs_' + generateRandomString(24);
+      var isSandboxOpt = Boolean(
+        (options.description && options.description.toLowerCase().indexOf('sandbox') !== -1) ||
+        (options.description && options.description.toLowerCase().indexOf('demo') !== -1) ||
+        (options.title && options.title.toLowerCase().indexOf('sandbox') !== -1) ||
+        env !== 'production'
+      );
+      var sessionId = options.sessionId || (isSandboxOpt ? 'sess_sandbox_' + generateRandomString(16) : 'cs_' + generateRandomString(24));
 
       var returnUrl = options.returnUrl || options.return_url;
       var cancelUrl = options.cancelUrl || options.cancel_url;

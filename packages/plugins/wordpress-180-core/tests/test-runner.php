@@ -130,14 +130,19 @@ function esc_html($text) { return htmlspecialchars($text, ENT_QUOTES, 'UTF-8'); 
 function esc_attr($text) { return htmlspecialchars($text, ENT_QUOTES, 'UTF-8'); }
 function esc_url($url) { return filter_var($url, FILTER_SANITIZE_URL); }
 function esc_url_raw($url) { return filter_var($url, FILTER_SANITIZE_URL); }
+function esc_js($text) { return addslashes($text); }
 function sanitize_text_field($str) { return trim(strip_tags($str)); }
 function sanitize_email($email) { return filter_var($email, FILTER_SANITIZE_EMAIL); }
 function sanitize_user($username, $strict = false) { return preg_replace('/[^a-zA-Z0-9_\-\.]/', '', $username); }
+function sanitize_textarea_field($str) { return trim(strip_tags($str)); }
+function rest_sanitize_boolean($val) { return (bool) $val; }
 function wp_unslash($val) { return $val; }
 function is_admin() { return true; }
 function admin_url($path = '') { return 'https://example.com/wp-admin/' . $path; }
 function home_url($path = '') { return 'https://example.com/' . ltrim($path, '/'); }
 function wp_login_url($redirect = '') { return 'https://example.com/wp-login.php?redirect_to=' . urlencode($redirect); }
+function wp_salt($scheme = 'auth') { return 'test_salt_secret_180_core_platform_mock'; }
+function wp_validate_redirect($url, $default = '') { return !empty($url) ? $url : $default; }
 
 function wp_redirect($url, $status = 302) {
     $GLOBALS['_wp_redirect_url'] = $url;
@@ -574,14 +579,15 @@ $GLOBALS['_wp_remote_mocks'][$userinfo_endpoint] = array(
     ))
 );
 
-// Prepare callback state
-$state_data = array(
-    'nonce' => wp_create_nonce('180_auth_nonce'),
-    'redirect_to' => 'https://example.com/dashboard',
-);
+// Prepare callback state with legitimate cryptographic HMAC signature
+$redirect_target = 'https://example.com/dashboard';
+$auth_url = $identity->get_authorization_url($redirect_target);
+parse_str(parse_url($auth_url, PHP_URL_QUERY), $query_params);
+$signed_state = $query_params['state'];
+
 $_GET['180core_auth'] = 'callback';
 $_GET['code']         = 'sim_code_123';
-$_GET['state']        = base64_encode(json_encode($state_data));
+$_GET['state']        = $signed_state;
 
 // Execute auth callback with exit interception
 try {
@@ -596,6 +602,25 @@ assert_test($user !== false, '180 Identity auto-provisioned WordPress user from 
 assert_test($user->user_email === 'aarav@180workspace.com', 'User email correctly set');
 assert_test($GLOBALS['_wp_auth_cookie_user_id'] === $user->ID, 'WordPress auth session cookie issued');
 assert_test($GLOBALS['_wp_redirect_url'] === 'https://example.com/dashboard', 'User redirected to requested destination');
+
+// ----------------------------------------------------
+// TEST 4b: Security Audit Test - Tampered OAuth State Rejection
+// ----------------------------------------------------
+$_GET['state'] = base64_encode(json_encode(array(
+    'ts' => time(),
+    'nonce' => 'forged_nonce',
+    'redirect_to' => 'https://attacker.com/evil',
+    'sig' => 'fake_forged_signature_0000',
+)));
+$state_tamper_rejected = false;
+try {
+    $identity->handle_auth_callback();
+} catch (Exception $e) {
+    if (strpos($e->getMessage(), 'signature mismatch') !== false || strpos($e->getMessage(), 'Security Error') !== false) {
+        $state_tamper_rejected = true;
+    }
+}
+assert_test($state_tamper_rejected, 'Security: Forged/tampered OAuth state rejected with cryptographic error');
 
 // ----------------------------------------------------
 // TEST 5: WooCommerce Gateway Registration
@@ -661,13 +686,32 @@ $webhook_payload = array(
     'status' => 'COMPLETED'
 );
 
-$GLOBALS['_mock_raw_input'] = json_encode($webhook_payload);
+$raw_webhook_json = json_encode($webhook_payload);
+$GLOBALS['_mock_raw_input'] = $raw_webhook_json;
 
-// Verify order is pending before webhook
+// Subtest 7a: Anti-Spoofing - Unsigned webhook must be rejected with 401 Unauthorized
+unset($_SERVER['HTTP_X_180_SIGNATURE']);
+unset($_SERVER['HTTP_X_SIGNATURE']);
+ob_start();
+try {
+    $gateway->handle_webhook();
+} catch (Exception $e) {}
+$unauth_output = ob_get_clean();
+
+assert_test($GLOBALS['_http_status_header'] === 401, 'Security: Unsigned webhook rejected with HTTP 401 Unauthorized');
+
+// Subtest 7b: Valid HMAC Signature verification
+$client_secret = get_option('180_core_client_secret');
+$now_ts = time();
+$sig_hash = hash_hmac('sha256', $now_ts . '.' . $raw_webhook_json, $client_secret);
+$_SERVER['HTTP_X_180_SIGNATURE'] = "t={$now_ts},v1={$sig_hash}";
+$_SERVER['HTTP_X_180_TIMESTAMP'] = $now_ts;
+
+// Verify order is pending before valid webhook
 $order_before = wc_get_order(1001);
 assert_test($order_before->get_status() === 'pending', 'Order is pending before webhook');
 
-// Trigger webhook method
+// Trigger webhook method with valid cryptographic HMAC
 ob_start();
 try {
     $gateway->handle_webhook();
@@ -677,10 +721,10 @@ $webhook_output = ob_get_clean();
 $order_after = wc_get_order(1001);
 assert_test($order_after->get_status() === 'processing', 'Order status seamlessly transitioned to processing upon payment.succeeded');
 assert_test($order_after->get_transaction_id() === 'txn_180_live_confirmed_7781', 'Transaction ID txn_180_live_confirmed_7781 recorded on WooCommerce order');
-assert_test($GLOBALS['_http_status_header'] === 200, 'Webhook replied with HTTP 200 OK status');
+assert_test($GLOBALS['_http_status_header'] === 200, 'Security: Valid HMAC-signed webhook accepted with HTTP 200 OK status');
 
 // ----------------------------------------------------
-// TEST 8: Webhook Payment Failure Handling
+// TEST 8: Webhook Payment Failure Handling with Valid HMAC
 // ----------------------------------------------------
 $order_fail = new Mock_WC_Order(1002, 1299.00, 'INR');
 $order_fail->save();
@@ -692,7 +736,10 @@ $fail_payload = array(
     'failureReason' => 'UPI PIN limit exceeded or cancelled by customer.'
 );
 
-$GLOBALS['_mock_raw_input'] = json_encode($fail_payload);
+$fail_raw_json = json_encode($fail_payload);
+$GLOBALS['_mock_raw_input'] = $fail_raw_json;
+$_SERVER['HTTP_X_180_SIGNATURE'] = hash_hmac('sha256', $fail_raw_json, $client_secret);
+unset($_SERVER['HTTP_X_180_TIMESTAMP']);
 
 ob_start();
 try {

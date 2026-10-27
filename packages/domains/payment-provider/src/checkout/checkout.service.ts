@@ -1315,30 +1315,18 @@ export class CheckoutService {
    */
   static async createDirectOrder(
     sessionId: string,
-    options?: { targetCurrency?: string; targetAmount?: number }
+    options?: {
+      targetCurrency?: string;
+      targetAmount?: number;
+      title?: string;
+      description?: string;
+      appId?: string;
+      returnUrl?: string;
+      cancelUrl?: string;
+      metadata?: any;
+    }
   ) {
-    let session = await prisma.checkoutSession.findUnique({
-      where: { id: sessionId },
-      include: {
-        app: true,
-      },
-    });
-
-    if (!session && (sessionId.startsWith('sess_dev_') || sessionId.startsWith('sess_topup_'))) {
-      try {
-        await this.getSession(sessionId);
-        session = await prisma.checkoutSession.findUnique({
-          where: { id: sessionId },
-          include: { app: true },
-        });
-      } catch (autoHealErr) {
-        console.warn('[CheckoutService:createDirectOrder] Auto-heal failed:', autoHealErr);
-      }
-    }
-
-    if (!session) {
-      throw new Error('Checkout session not found');
-    }
+    const session = await this.getSession(sessionId, options);
 
     if (session.status === 'CAPTURED') {
       throw new Error('This checkout session has already been completed.');
@@ -1653,24 +1641,7 @@ export class CheckoutService {
   }) {
     const { sessionId, orderId, paymentId, signature } = input;
 
-    let session = await prisma.checkoutSession.findUnique({
-      where: { id: sessionId },
-      include: { app: true },
-    });
-
-    if (!session && (sessionId.startsWith('sess_dev_') || sessionId.startsWith('sess_topup_'))) {
-      try {
-        await this.getSession(sessionId);
-        session = await prisma.checkoutSession.findUnique({
-          where: { id: sessionId },
-          include: { app: true },
-        });
-      } catch (e) {}
-    }
-
-    if (!session) {
-      throw new Error('Checkout session not found');
-    }
+    let session = await this.getSession(sessionId);
 
     const { gatewayType, keySecret } = this.resolveGatewayConfig(session.app);
     const isStripe = gatewayType === 'STRIPE' || orderId.startsWith('pi_') || paymentId.startsWith('pi_');
@@ -1723,14 +1694,16 @@ export class CheckoutService {
     const activeGatewayName = isStripe ? 'STRIPE' : 'RAZORPAY';
 
     const result = await prisma.$transaction(async (tx: any) => {
-      const session = await tx.checkoutSession.findUnique({
-        where: { id: sessionId },
+      const liveSession = await tx.checkoutSession.findUnique({
+        where: { id: session.id },
         include: { app: true },
       });
 
-      if (!session) {
+      if (!liveSession) {
         throw new Error('Checkout session not found');
       }
+
+      session = liveSession;
 
       if (session.status === 'CAPTURED') {
         return { session, transactionId: paymentId, alreadyCaptured: true };
@@ -1927,14 +1900,7 @@ export class CheckoutService {
   }) {
     const { sessionId, paymentMethod = '180_PAY', customerEmail, customerPhone, upiId, userId } = input;
 
-    const session = await prisma.checkoutSession.findUnique({
-      where: { id: sessionId },
-      include: { app: true },
-    });
-
-    if (!session) {
-      throw new Error('Checkout session not found');
-    }
+    const session = await this.getSession(sessionId);
 
     if (session.status === 'CAPTURED') {
       return {
@@ -1963,7 +1929,7 @@ export class CheckoutService {
 
     const result = await prisma.$transaction(async (tx: any) => {
       const liveSession = await tx.checkoutSession.findUnique({
-        where: { id: sessionId },
+        where: { id: session.id },
         include: { app: true },
       });
 

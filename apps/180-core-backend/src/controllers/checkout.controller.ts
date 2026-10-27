@@ -524,11 +524,7 @@ export class CheckoutApiController {
         return res.status(400).json({ success: false, error: 'Coupon code is required' });
       }
 
-      const session = await prisma.checkoutSession.findUnique({
-        where: { id },
-        include: { app: true },
-      });
-
+      const session = await CheckoutService.getSession(id);
       if (!session) {
         return res.status(404).json({ success: false, error: 'Checkout session not found' });
       }
@@ -653,10 +649,7 @@ export class CheckoutApiController {
   static async removeCoupon(req: Request, res: Response) {
     try {
       const id = String(req.params.id);
-      const session = await prisma.checkoutSession.findUnique({
-        where: { id },
-        include: { app: true },
-      });
+      const session = await CheckoutService.getSession(id);
 
       if (!session) {
         return res.status(404).json({ success: false, error: 'Checkout session not found' });
@@ -764,10 +757,16 @@ export class CheckoutApiController {
   static async createDirectOrder(req: Request, res: Response) {
     try {
       const id = String(req.params.id);
-      const { currency, amount } = req.body || {};
+      const { currency, amount, title, description, appId, metadata, returnUrl, cancelUrl } = req.body || {};
       const order = await CheckoutService.createDirectOrder(id, {
         targetCurrency: currency,
         targetAmount: typeof amount === 'number' ? amount : undefined,
+        title,
+        description,
+        appId,
+        metadata,
+        returnUrl,
+        cancelUrl,
       });
       return res.json({ success: true, ...order, data: order });
     } catch (err: any) {

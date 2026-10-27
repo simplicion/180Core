@@ -1385,12 +1385,30 @@ export function CheckoutClient({
       }
     }
 
+    const isSandboxEnv = !isProduction || (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('env') === 'sandbox');
+    const isSandboxSession = Boolean(
+      sessionId && (
+        sessionId.startsWith('sess_') ||
+        sessionId.startsWith('cs_') ||
+        sessionId === 'default'
+      )
+    );
     const isPureDemoSession = Boolean(
-      sessionId && (sessionId === 'default' || sessionId.startsWith('sess_demo_') || sessionId.startsWith('sess_sandbox_'))
+      sessionId && (
+        sessionId === 'default' ||
+        sessionId.startsWith('sess_demo_') ||
+        sessionId.startsWith('sess_sandbox_') ||
+        (isSandboxSession && (
+          session?.description?.toLowerCase().includes('sandbox') ||
+          session?.description?.toLowerCase().includes('demo') ||
+          session?.title?.toLowerCase().includes('sandbox') ||
+          session?.title?.toLowerCase().includes('demo')
+        ))
+      )
     );
 
     // In pure sandbox demo without backend, complete directly
-    if (isPureDemoSession && !isProduction) {
+    if (isPureDemoSession && isSandboxEnv) {
       setTopupLoading(true);
       const toastId = 'direct-pay-action';
       toast.loading('Initializing demo payment...', { id: toastId });
@@ -1447,6 +1465,12 @@ export function CheckoutClient({
             body: JSON.stringify({
               currency: chargeCurrency,
               amount: chargeAmount,
+              title: session?.title,
+              description: session?.description,
+              appId: session?.app?.id || session?.appId,
+              returnUrl: session?.returnUrl,
+              cancelUrl: session?.cancelUrl,
+              metadata: session?.metadata,
             }),
           });
           const data = await res.json();

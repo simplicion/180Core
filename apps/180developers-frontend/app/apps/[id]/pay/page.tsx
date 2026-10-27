@@ -21,10 +21,13 @@ export default function PayOverviewPage() {
       const cur = ((project as any)?.currency || activeCurrency || 'USD').toUpperCase();
       const amt = (project as any)?.defaultAmount !== undefined ? (project as any).defaultAmount : 49.0;
       OneEightyPay.checkout({
+        sessionId: `sess_sandbox_${Math.random().toString(36).substring(2, 10)}_${Date.now()}`,
         amount: amt,
         currency: cur,
+        appId: project?.id,
         title: `${project?.name || 'Developer Project'} Checkout`,
         description: 'Sandbox verification session (Adaptive Sheet)',
+        environment: 'sandbox',
         onSuccess: (res: any) => toast.success(`Payment test passed! TxID: ${res?.transactionId || res?.sessionId || 'SUCCESS'}`),
         onCancel: () => toast('Pay checkout closed', { icon: 'ℹ️' }),
       });

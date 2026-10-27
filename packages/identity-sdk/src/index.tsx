@@ -1098,9 +1098,19 @@ export const OneEightyPay = {
    * Opens 180 Profile Sovereign Checkout with the configured UX mode (bottom_sheet, popup, or full_page/redirect)
    */
   checkout(options: CheckoutOptions): Promise<CheckoutResponse> {
-    const sessionId = options.sessionId || `sess_${Math.random().toString(36).substring(2, 12)}_${Date.now()}`;
-
     const env = resolveEnvironmentMode(options.environment);
+    const isSandboxOpt = Boolean(
+      options.description?.toLowerCase().includes('sandbox') ||
+      options.description?.toLowerCase().includes('demo') ||
+      options.title?.toLowerCase().includes('sandbox') ||
+      options.title?.toLowerCase().includes('demo') ||
+      env !== 'production'
+    );
+    const sessionId = options.sessionId || (
+      isSandboxOpt
+        ? `sess_sandbox_${Math.random().toString(36).substring(2, 10)}_${Date.now()}`
+        : `sess_${Math.random().toString(36).substring(2, 12)}_${Date.now()}`
+    );
     const payServer = getPayServerUrl(options.checkoutServerUrl || options.payServerUrl, env);
     const returnUrl = options.returnUrl || (options as any).return_url;
     const cancelUrl = options.cancelUrl || (options as any).cancel_url;

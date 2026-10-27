@@ -191,11 +191,75 @@ function one_eighty_init_wc_gateway_class() {
                 );
             }
 
+            public function verify_webhook_signature($raw_body) {
+                $client_secret = get_option('180_core_client_secret');
+                if (empty($client_secret)) {
+                    return false;
+                }
+
+                $signature_header = '';
+                if (!empty($_SERVER['HTTP_X_180_SIGNATURE'])) {
+                    $signature_header = sanitize_text_field($_SERVER['HTTP_X_180_SIGNATURE']);
+                } elseif (!empty($_SERVER['HTTP_X_SIGNATURE'])) {
+                    $signature_header = sanitize_text_field($_SERVER['HTTP_X_SIGNATURE']);
+                }
+
+                if (empty($signature_header)) {
+                    return false;
+                }
+
+                $timestamp = '';
+                if (!empty($_SERVER['HTTP_X_180_TIMESTAMP'])) {
+                    $timestamp = sanitize_text_field($_SERVER['HTTP_X_180_TIMESTAMP']);
+                }
+
+                $received_hash = $signature_header;
+
+                if (strpos($signature_header, 't=') !== false && strpos($signature_header, 'v1=') !== false) {
+                    $parts = explode(',', $signature_header);
+                    foreach ($parts as $part) {
+                        $part = trim($part);
+                        if (strpos($part, 't=') === 0 && empty($timestamp)) {
+                            $timestamp = substr($part, 2);
+                        } elseif (strpos($part, 'v1=') === 0) {
+                            $received_hash = substr($part, 3);
+                        }
+                    }
+                }
+
+                // Verify timestamp tolerance (within 300 seconds) to prevent replay attacks
+                if (!empty($timestamp)) {
+                    $ts = intval($timestamp);
+                    if (abs(time() - $ts) > 300) {
+                        return false;
+                    }
+                    $payload_to_sign = $timestamp . '.' . $raw_body;
+                    $expected_hash = hash_hmac('sha256', $payload_to_sign, $client_secret);
+                    if (hash_equals($expected_hash, $received_hash)) {
+                        return true;
+                    }
+                }
+
+                // Fallback to direct payload signature check
+                $direct_hash = hash_hmac('sha256', $raw_body, $client_secret);
+                return hash_equals($direct_hash, $received_hash);
+            }
+
             public function handle_webhook() {
                 $raw_body = file_get_contents('php://input');
                 if (empty($raw_body)) {
                     status_header(400);
                     echo 'Missing body';
+                    if (!defined('ONE_EIGHTY_TEST_MODE')) {
+                        exit;
+                    }
+                    return;
+                }
+
+                // Strict Cryptographic Authentication: Reject unauthenticated webhook calls
+                if (!$this->verify_webhook_signature($raw_body)) {
+                    status_header(401);
+                    echo 'Unauthorized: Invalid or missing webhook signature';
                     if (!defined('ONE_EIGHTY_TEST_MODE')) {
                         exit;
                     }

@@ -267,6 +267,8 @@ app.use('/api/oauth/checkout', checkoutRoutes);
 app.use('/api/v1/payment/checkout', checkoutRoutes);
 app.use('/api/v1/pay/checkout', checkoutRoutes);
 app.use('/api/v1/pay', checkoutRoutes);
+app.use('/api/v1/identity/checkout', checkoutRoutes);
+app.use('/api/v1/identity/pay', checkoutRoutes);
 
 app.use('/api/v1/subscriptions', subscriptionRoutes);
 app.use('/api/oauth/subscriptions', subscriptionRoutes);
