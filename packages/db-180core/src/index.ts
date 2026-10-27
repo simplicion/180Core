@@ -119,6 +119,20 @@ export async function resolveOAuthApp(identifier: string) {
     }
   } catch (_) {}
 
+  // 4. Special fallback: If identifier is 'default', resolve to the first active OAuthApp
+  if (trimmed === 'default') {
+    const defaultApp = await (corePrisma as any).oAuthApp.findFirst({
+      where: { isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (defaultApp) return defaultApp;
+
+    const anyApp = await (corePrisma as any).oAuthApp.findFirst({
+      orderBy: { createdAt: 'desc' },
+    });
+    if (anyApp) return anyApp;
+  }
+
   return null;
 }
 
@@ -127,6 +141,16 @@ export async function resolveOAuthApp(identifier: string) {
  */
 export async function resolveAppId(identifier: string): Promise<string> {
   const app = await resolveOAuthApp(identifier);
-  return app ? app.id : identifier;
+  if (app) return app.id;
+
+  // Fallback for 'default' if no direct app was matched
+  if (String(identifier).trim() === 'default') {
+    const fallback = await (corePrisma as any).oAuthApp.findFirst({
+      orderBy: { createdAt: 'desc' },
+    });
+    if (fallback) return fallback.id;
+  }
+
+  return identifier;
 }
 

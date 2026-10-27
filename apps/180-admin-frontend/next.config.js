@@ -17,6 +17,13 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  experimental: {
+    optimizePackageImports: [
+      'lucide-react',
+      'react-hot-toast',
+      '@workspace/ui',
+    ],
+  },
   webpack: (config, { dev }) => {
     if (dev) {
       config.watchOptions = {

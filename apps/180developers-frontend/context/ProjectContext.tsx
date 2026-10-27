@@ -374,7 +374,16 @@ export function ProjectProvider({
 
       if (payload) {
         if (payload.user) setUserProfile(payload.user);
-        if (payload.apps) setAllProjects(payload.apps);
+        if (payload.apps) {
+          setAllProjects(payload.apps);
+          // If current projectId is empty or 'default', automatically bind to the user's active project
+          if ((!projectId || projectId === 'default') && payload.apps.length > 0) {
+            const firstApp = payload.apps[0];
+            const firstAppSlug = getAppSlug(firstApp) || firstApp.id;
+            setProjectId(firstAppSlug);
+            setProject(firstApp);
+          }
+        }
       }
     } catch (_) {}
   }, [router]);

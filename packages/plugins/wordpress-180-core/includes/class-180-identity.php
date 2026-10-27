@@ -52,7 +52,10 @@ class OneEighty_Identity_Module {
             <div class="one-eighty-divider">
                 <span><?php _e('OR', '180-core'); ?></span>
             </div>
-            <a href="<?php echo esc_url($auth_url); ?>" class="one-eighty-sso-button" id="one-eighty-sso-btn">
+            <a href="<?php echo esc_url($auth_url); ?>" 
+               class="one-eighty-sso-button" 
+               id="one-eighty-sso-btn"
+               onclick="if(window.OneEighty && window.OneEighty.auth){event.preventDefault();window.OneEighty.auth.openBottomSheet({clientId:'<?php echo esc_js($client_id); ?>',redirectUri:'<?php echo esc_js(home_url('/?180core_auth=callback')); ?>',uxMode:'bottom_sheet'}).then(function(res){if(res&&res.code){window.location.href='<?php echo esc_js(home_url('/?180core_auth=callback&code=')); ?>'+encodeURIComponent(res.code)+'&state='+encodeURIComponent(res.state||'');}});}">
                 <span class="one-eighty-btn-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -69,11 +72,14 @@ class OneEighty_Identity_Module {
         if (is_user_logged_in() || !get_option('180_core_client_id')) {
             return;
         }
+        $client_id = get_option('180_core_client_id');
         $auth_url = $this->get_authorization_url(wc_get_checkout_url());
         ?>
         <div class="woocommerce-info one-eighty-checkout-login-banner">
             <span><?php _e('Have a 180 Core or 180 Wallet account?', '180-core'); ?></span>
-            <a href="<?php echo esc_url($auth_url); ?>" class="button one-eighty-btn-sm">
+            <a href="<?php echo esc_url($auth_url); ?>" 
+               class="button one-eighty-btn-sm"
+               onclick="if(window.OneEighty && window.OneEighty.auth){event.preventDefault();window.OneEighty.auth.openBottomSheet({clientId:'<?php echo esc_js($client_id); ?>',redirectUri:'<?php echo esc_js(home_url('/?180core_auth=callback')); ?>',uxMode:'bottom_sheet'}).then(function(res){if(res&&res.code){window.location.href='<?php echo esc_js(home_url('/?180core_auth=callback&code=')); ?>'+encodeURIComponent(res.code)+'&state='+encodeURIComponent(res.state||'');}});}">
                 <?php _e('1-Click Sign In', '180-core'); ?>
             </a>
         </div>
@@ -91,12 +97,15 @@ class OneEighty_Identity_Module {
             'class'    => '',
         ), $atts, '180_login');
 
+        $client_id = get_option('180_core_client_id');
         $auth_url = $this->get_authorization_url($atts['redirect']);
         
         ob_start();
         ?>
         <div class="one-eighty-shortcode-wrapper <?php echo esc_attr($atts['class']); ?>">
-            <a href="<?php echo esc_url($auth_url); ?>" class="one-eighty-sso-button">
+            <a href="<?php echo esc_url($auth_url); ?>" 
+               class="one-eighty-sso-button"
+               onclick="if(window.OneEighty && window.OneEighty.auth){event.preventDefault();window.OneEighty.auth.openBottomSheet({clientId:'<?php echo esc_js($client_id); ?>',redirectUri:'<?php echo esc_js(home_url('/?180core_auth=callback')); ?>',uxMode:'bottom_sheet'}).then(function(res){if(res&&res.code){window.location.href='<?php echo esc_js(home_url('/?180core_auth=callback&code=')); ?>'+encodeURIComponent(res.code)+'&state='+encodeURIComponent(res.state||'');}});}">
                 <span class="one-eighty-btn-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>

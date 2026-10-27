@@ -64,6 +64,26 @@ class OneEighty_Core_Plugin {
             array(),
             ONE_EIGHTY_CORE_VERSION
         );
+
+        wp_enqueue_script(
+            '180-core-sdk',
+            ONE_EIGHTY_CORE_PLUGIN_URL . 'assets/js/180-core-sdk.js',
+            array(),
+            ONE_EIGHTY_CORE_VERSION,
+            true
+        );
+
+        $client_id = get_option('180_core_client_id', '');
+        $api_base = get_option('180_core_api_base', 'https://api.180core.cloud');
+        $profile_base = get_option('180_core_profile_base', 'https://profile.180core.cloud');
+
+        wp_localize_script('180-core-sdk', 'oneEightyCoreConfig', array(
+            'clientId'      => $client_id,
+            'apiServerUrl'  => $api_base,
+            'authServerUrl' => $profile_base,
+            'payServerUrl'  => $profile_base,
+            'uxMode'        => 'bottom_sheet',
+        ));
     }
 
     public function enqueue_admin_assets($hook) {

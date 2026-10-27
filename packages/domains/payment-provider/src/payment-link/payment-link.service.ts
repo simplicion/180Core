@@ -2,7 +2,7 @@
 
 import crypto from 'crypto';
 import axios from 'axios';
-import { developersPrisma as prisma, resolveAppId } from '@workspace/db-180core';
+import { developersPrisma as prisma, resolveAppId, resolveOAuthApp } from '@workspace/db-180core';
 import { WebhookDispatcherService } from '../webhook/webhook-dispatcher.service';
 import { GeoPricingService, COUNTRY_DIRECTORY } from '../geo/geo-pricing.service';
 import { CheckoutService } from '../checkout/checkout.service';
@@ -109,7 +109,12 @@ export class PaymentLinkService {
    * 1. Creates a shareable Payment Link.
    */
   static async createPaymentLink(appId: string, data: CreatePaymentLinkInput) {
-    const targetAppId = await resolveAppId(appId);
+    const targetApp = await resolveOAuthApp(appId);
+    if (!targetApp) {
+      throw new Error(`Application '${appId}' was not found. Please select or create an active project before generating payment links.`);
+    }
+    const targetAppId = targetApp.id;
+
     if (!data.title || !data.title.trim()) {
       throw new Error('Payment link title is required');
     }
@@ -376,8 +381,12 @@ export class PaymentLinkService {
    * 4. Developer Management: Update Payment Link
    */
   static async updatePaymentLink(appId: string, linkId: string, data: UpdatePaymentLinkInput) {
+    const targetAppId = await resolveAppId(appId);
     const link = await (prisma as any).paymentLink.findFirst({
-      where: { id: linkId, appId },
+      where: {
+        id: linkId,
+        OR: [{ appId: targetAppId }, { appId }],
+      },
     });
 
     if (!link) {
@@ -413,8 +422,12 @@ export class PaymentLinkService {
    * 5. Developer Management: Delete Payment Link
    */
   static async deletePaymentLink(appId: string, linkId: string) {
+    const targetAppId = await resolveAppId(appId);
     const link = await (prisma as any).paymentLink.findFirst({
-      where: { id: linkId, appId },
+      where: {
+        id: linkId,
+        OR: [{ appId: targetAppId }, { appId }],
+      },
     });
 
     if (!link) {
@@ -430,19 +443,24 @@ export class PaymentLinkService {
    * 6. Developer Management: List Payment Links
    */
   static async listPaymentLinks(appId: string, options?: { page?: number; limit?: number }) {
+    const targetAppId = await resolveAppId(appId);
     const page = Math.max(1, options?.page || 1);
     const limit = Math.min(100, Math.max(1, options?.limit || 20));
     const skip = (page - 1) * limit;
 
     const [links, total] = await Promise.all([
       (prisma as any).paymentLink.findMany({
-        where: { appId },
+        where: {
+          OR: [{ appId: targetAppId }, { appId }],
+        },
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
       }),
       (prisma as any).paymentLink.count({
-        where: { appId },
+        where: {
+          OR: [{ appId: targetAppId }, { appId }],
+        },
       }),
     ]);
 
@@ -459,8 +477,12 @@ export class PaymentLinkService {
    * 7. Developer Management: Fetch single link by ID
    */
   static async getPaymentLinkById(appId: string, linkId: string) {
+    const targetAppId = await resolveAppId(appId);
     const link = await (prisma as any).paymentLink.findFirst({
-      where: { id: linkId, appId },
+      where: {
+        id: linkId,
+        OR: [{ appId: targetAppId }, { appId }],
+      },
     });
 
     if (!link) {
