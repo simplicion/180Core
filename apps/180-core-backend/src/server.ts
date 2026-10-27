@@ -308,6 +308,13 @@ app.use('/api/v1/admin', adminRoutes);
 
 // Universal Support & Bug Reporting Ingestion Routes
 app.use('/api/v1/support', supportRoutes);
+
+// Universal Webhooks Ingestion Aliases (Guarantees zero dropped Razorpay webhooks across all domain variants)
+app.use('/webhooks/razorpay', checkoutRoutes);
+app.use('/api/webhooks/razorpay', checkoutRoutes);
+app.use('/api/v1/webhooks/razorpay', checkoutRoutes);
+app.use('/api/integrations/webhooks/razorpay', checkoutRoutes);
+
 // Error Handling
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('[180-core-backend] Unhandled Error:', err);

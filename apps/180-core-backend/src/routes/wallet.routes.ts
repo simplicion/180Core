@@ -15,6 +15,8 @@ router.get('/topup/status/:orderId', protect, WalletApiController.checkTopupOrde
 router.post('/topup/verify', protect, WalletApiController.verifyTopup);
 router.post('/topup/webhook', WalletApiController.handleWebhook);
 router.post('/webhook', WalletApiController.handleWebhook);
+router.post('/webhook/razorpay', WalletApiController.handleWebhook);
+router.post('/razorpay-webhook', WalletApiController.handleWebhook);
 router.get('/ledger', protect, WalletApiController.getLedger);
 
 export default router;

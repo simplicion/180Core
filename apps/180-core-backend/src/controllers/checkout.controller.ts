@@ -1048,34 +1048,46 @@ export class CheckoutApiController {
   static async handleWebhook(req: Request, res: Response) {
     try {
       const crypto = require('crypto');
-      const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET;
       const signature = req.headers['x-razorpay-signature'] as string;
+      const candidateSecrets = [
+        process.env.RAZORPAY_WEBHOOK_SECRET,
+        process.env.CORE_WEBHOOK_SECRET,
+        process.env.RAZORPAY_KEY_SECRET,
+      ].filter(Boolean) as string[];
 
-      if (webhookSecret && signature) {
-        // Use rawBody buffer if available for 100% cryptographic precision
+      if (signature && candidateSecrets.length > 0) {
         const rawBody = (req as any).rawBody;
         let isValid = false;
-        if (rawBody && Buffer.isBuffer(rawBody)) {
-          const expected = crypto.createHmac('sha256', webhookSecret).update(rawBody).digest('hex');
-          const expectedBuf = Buffer.from(expected, 'utf-8');
-          const signatureBuf = Buffer.from(signature, 'utf-8');
-          isValid = expectedBuf.length === signatureBuf.length && crypto.timingSafeEqual(expectedBuf, signatureBuf);
-        }
-        if (!isValid) {
-          // Fallback to string body check
+
+        for (const secret of candidateSecrets) {
+          if (rawBody && Buffer.isBuffer(rawBody)) {
+            const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+            const expectedBuf = Buffer.from(expected, 'utf-8');
+            const signatureBuf = Buffer.from(signature, 'utf-8');
+            if (expectedBuf.length === signatureBuf.length && crypto.timingSafeEqual(expectedBuf, signatureBuf)) {
+              isValid = true;
+              break;
+            }
+          }
           const bodyStr = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
-          const expectedStr = crypto.createHmac('sha256', webhookSecret).update(bodyStr).digest('hex');
+          const expectedStr = crypto.createHmac('sha256', secret).update(bodyStr).digest('hex');
           const expectedBuf = Buffer.from(expectedStr, 'utf-8');
           const signatureBuf = Buffer.from(signature, 'utf-8');
-          isValid = expectedBuf.length === signatureBuf.length && crypto.timingSafeEqual(expectedBuf, signatureBuf);
+          if (expectedBuf.length === signatureBuf.length && crypto.timingSafeEqual(expectedBuf, signatureBuf)) {
+            isValid = true;
+            break;
+          }
         }
+
         if (!isValid) {
-          console.warn('[CheckoutWebhook] Invalid signature received');
+          console.warn('[CheckoutWebhook] Invalid signature received from Razorpay. Checked secrets count:', candidateSecrets.length);
           return res.status(400).json({ error: 'Invalid webhook signature' });
         }
       }
 
       const event = req.body.event;
+      console.log(`[CheckoutWebhook] Received Razorpay event: ${event}`);
+
       if (
         event === 'payment.captured' ||
         event === 'payment.authorized' ||
@@ -1086,7 +1098,7 @@ export class CheckoutApiController {
         let orderId = payment?.order_id || order?.id;
         let paymentId = payment?.id;
         const notes = payment?.notes || order?.notes || {};
-        let sessionId = notes.sessionId;
+        let sessionId = notes.sessionId || notes.session_id;
 
         // If order.paid event came without payment entity, fetch order payments from Razorpay
         if (orderId && !paymentId) {
@@ -1111,7 +1123,7 @@ export class CheckoutApiController {
           }
         }
 
-        // If sessionId was not in notes, locate session from database by razorpayOrderId
+        // If sessionId was not in notes, locate session from database by razorpayOrderId or receipt
         if (!sessionId && orderId) {
           const matchingSession = await prisma.checkoutSession.findFirst({
             where: {
@@ -1124,16 +1136,37 @@ export class CheckoutApiController {
           });
           if (matchingSession) {
             sessionId = matchingSession.id;
+          } else {
+            const receipt = order?.receipt;
+            if (receipt && receipt.startsWith('cs_')) {
+              const rawHex = receipt.replace('cs_', '');
+              const receiptSession = await prisma.checkoutSession.findFirst({
+                where: {
+                  OR: [
+                    { id: rawHex },
+                    { id: { startsWith: rawHex.slice(0, 8) } },
+                  ],
+                },
+              });
+              if (receiptSession) {
+                sessionId = receiptSession.id;
+              }
+            }
           }
         }
 
         if (sessionId && paymentId) {
+          console.log(`[CheckoutWebhook] Capturing session ${sessionId} for payment ${paymentId}`);
           await CheckoutService.verifyDirectPayment({
             sessionId,
             orderId: orderId || `ord_${Date.now()}`,
             paymentId,
             signature: 'auto_polled_capture',
-          }).catch((e: any) => console.log('[CheckoutWebhook] Processed session:', e.message));
+          }).catch((e: any) => console.log('[CheckoutWebhook] verifyDirectPayment warning:', e.message));
+
+          // Run full reconciliation to guarantee link views, purchases count, and wallet credits are persisted
+          await CheckoutService.reconcileSession(sessionId)
+            .catch((e: any) => console.log('[CheckoutWebhook] reconcileSession warning:', e.message));
         }
 
         // Also handle wallet topups if routed to this webhook
@@ -1149,9 +1182,29 @@ export class CheckoutApiController {
             true
           ).catch((e: any) => console.log('[CheckoutWebhook] Processed wallet topup:', e.message));
         }
+      } else if (event === 'payment.failed') {
+        const payment = req.body.payload?.payment?.entity;
+        const notes = payment?.notes || {};
+        const sessionId = notes.sessionId || notes.session_id;
+        if (sessionId) {
+          console.log(`[CheckoutWebhook] Payment failed for session ${sessionId}:`, payment?.error_description);
+          const current = await prisma.checkoutSession.findUnique({ where: { id: sessionId } });
+          if (current && current.status === 'PENDING') {
+            await prisma.checkoutSession.update({
+              where: { id: sessionId },
+              data: {
+                metadata: {
+                  ...((current.metadata as any) || {}),
+                  lastPaymentError: payment?.error_description || payment?.error_reason || 'Payment failed',
+                  failedAt: new Date().toISOString(),
+                },
+              },
+            }).catch(() => {});
+          }
+        }
       }
 
-      return res.json({ status: 'ok' });
+      return res.json({ status: 'ok', event, success: true });
     } catch (err: any) {
       console.error('[CheckoutApiController:handleWebhook] Error:', err);
       return res.status(500).json({ error: err.message });
@@ -1165,6 +1218,14 @@ export class CheckoutApiController {
   static async checkSessionStatus(req: Request, res: Response) {
     try {
       const id = String(req.params.id);
+
+      // Actively reconcile from Razorpay / Stripe gateway if session is not already CAPTURED
+      try {
+        await CheckoutService.reconcileSession(id);
+      } catch (recErr: any) {
+        // Non-blocking log: session might not yet have a payment attempt
+      }
+
       const session = await CheckoutService.getSession(id);
       const isPaid = session.status === 'CAPTURED';
       return res.json({
@@ -1172,6 +1233,7 @@ export class CheckoutApiController {
         status: session.status,
         isPaid,
         transactionId: (session.metadata as any)?.paymentId || (session.metadata as any)?.transactionId,
+        fulfillment: (session.metadata as any)?.fulfillment,
         returnUrl: session.returnUrl,
       });
     } catch (err: any) {

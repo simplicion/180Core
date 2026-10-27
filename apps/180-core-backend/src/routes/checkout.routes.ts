@@ -19,6 +19,9 @@ router.post('/sessions/:id/direct-verify', CheckoutApiController.verifyDirectPay
 router.post('/sessions/:id/direct-pay', optionalAuth, CheckoutApiController.executeDirectPayment);
 router.post('/sessions/:id/direct-execute', optionalAuth, CheckoutApiController.executeDirectPayment);
 router.post('/webhook', CheckoutApiController.handleWebhook);
+router.post('/webhook/razorpay', CheckoutApiController.handleWebhook);
+router.post('/razorpay-webhook', CheckoutApiController.handleWebhook);
+router.post('/razorpay', CheckoutApiController.handleWebhook);
 router.post('/sessions/:id/apply-coupon', CheckoutApiController.applyCoupon);
 router.post('/sessions/:id/remove-coupon', CheckoutApiController.removeCoupon);
 router.post('/sessions/:id/track-event', CheckoutApiController.trackEvent);

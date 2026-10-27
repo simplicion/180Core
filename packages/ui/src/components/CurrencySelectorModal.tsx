@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Search, X, Globe, Check } from 'lucide-react';
 import { locationService, CountryItem } from '../lib/location-service';
 import { currencyService } from '../lib/currency-service';
@@ -11,6 +12,9 @@ export interface CurrencySelectorModalProps {
   activeCurrency: string;
   activeCountryCode?: string;
   onSelect: (currencyCode: string, countryCode: string) => void;
+  title?: string;
+  subtitle?: string;
+  zIndex?: string;
 }
 
 const POPULAR_REGIONS = [
@@ -31,8 +35,22 @@ export function CurrencySelectorModal({
   activeCurrency,
   activeCountryCode,
   onSelect,
+  title = 'Select Display Currency & Country',
+  subtitle = 'Choose any regional currency. All metrics and figures will convert automatically.',
+  zIndex = 'z-[100002]',
 }: CurrencySelectorModalProps) {
+  const [mounted, setMounted] = useState(false);
   const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSearch('');
+    }
+  }, [isOpen]);
 
   const allCountries = useMemo(() => locationService.getAllCountries(), []);
 
@@ -51,8 +69,8 @@ export function CurrencySelectorModal({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
+  const modalNode = (
+    <div className={`fixed inset-0 ${zIndex} flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200`}>
       <div className="relative w-full max-w-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-zinc-100 dark:border-white/10">
@@ -62,10 +80,10 @@ export function CurrencySelectorModal({
             </div>
             <div>
               <h3 className="text-sm font-bold text-zinc-950 dark:text-white">
-                Select Display Currency &amp; Country
+                {title}
               </h3>
               <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                Choose any regional currency. All metrics and figures will convert automatically.
+                {subtitle}
               </p>
             </div>
           </div>
@@ -198,4 +216,10 @@ export function CurrencySelectorModal({
       </div>
     </div>
   );
+
+  if (mounted && typeof document !== 'undefined') {
+    return createPortal(modalNode, document.body);
+  }
+
+  return modalNode;
 }

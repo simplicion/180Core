@@ -15,8 +15,9 @@ import {
   CheckCircle2,
   Eye,
   TrendingUp,
+  ChevronDown,
 } from 'lucide-react';
-import { PlatformDrawer, Button } from '@workspace/ui';
+import { PlatformDrawer, Button, CurrencySelectorModal, currencyService } from '@workspace/ui';
 import { toast } from 'react-hot-toast';
 import { getApiBase, getPublicBase, getAuthToken } from '@/lib/api-config';
 import { MultiPricingConfig } from './MultiPricingDrawer';
@@ -69,6 +70,12 @@ export function PaymentLinkDrawer({
   const [amountType, setAmountType] = useState<'FIXED' | 'CUSTOM'>('FIXED');
   const [amount, setAmount] = useState('500');
   const [currency, setCurrency] = useState('INR');
+  const [isCurrencyModalOpen, setIsCurrencyModalOpen] = useState(false);
+
+  const currMeta = React.useMemo(() => {
+    return currencyService.getCurrencyMeta(currency || 'INR');
+  }, [currency]);
+
   const [customSlug, setCustomSlug] = useState('');
   const [maxPurchases, setMaxPurchases] = useState('');
   const [fulfillmentMessage, setFulfillmentMessage] = useState('');
@@ -392,7 +399,7 @@ export function PaymentLinkDrawer({
                   Total Collected
                 </span>
                 <span className="font-extrabold text-emerald-600 dark:text-emerald-400 font-mono text-sm">
-                  {currentLink.currency === 'INR' ? '₹' : '$'}
+                  {currencyService.getCurrencyMeta(currentLink.currency || 'INR').symbol}
                   {Number(currentLink.totalCollected !== undefined ? currentLink.totalCollected : (currentLink.metadata?.totalCollected ?? (currentLink.purchasesCount * currentLink.amount))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
@@ -470,7 +477,7 @@ export function PaymentLinkDrawer({
                   <span className="text-xs font-bold text-zinc-900 dark:text-white">Fixed Price</span>
                 </div>
                 <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug">
-                  Customer pays a pre-defined fixed amount (e.g. ₹500, $20).
+                  Customer pays a pre-defined fixed amount (e.g. {currMeta.symbol}{amount || '500'}).
                 </p>
               </button>
 
@@ -499,17 +506,22 @@ export function PaymentLinkDrawer({
             {amountType === 'FIXED' ? (
               <div>
                 <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">
-                  Fixed Amount
+                  Fixed Amount ({currMeta.symbol})
                 </label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  step="any"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-sm font-mono font-bold text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold font-mono text-xs text-zinc-400 dark:text-zinc-500 select-none">
+                    {currMeta.symbol}
+                  </span>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    step="any"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-sm font-mono font-bold text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
               </div>
             ) : (
               <div>
@@ -524,19 +536,33 @@ export function PaymentLinkDrawer({
             )}
 
             <div>
-              <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">
-                Currency
+              <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5 flex items-center justify-between">
+                <span>Currency</span>
+                <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">
+                  Global Currencies
+                </span>
               </label>
-              <select
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-sm text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              <button
+                type="button"
+                onClick={() => setIsCurrencyModalOpen(true)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800/80 text-sm text-zinc-950 dark:text-white flex items-center justify-between transition-all cursor-pointer shadow-2xs group focus:outline-none focus:ring-2 focus:ring-indigo-500 active:scale-[0.99]"
+                title="Change Currency"
               >
-                <option value="INR">INR (₹)</option>
-                <option value="USD">USD ($)</option>
-                <option value="EUR">EUR (€)</option>
-                <option value="GBP">GBP (£)</option>
-              </select>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="text-xl leading-none shrink-0 select-none">{currMeta.flag}</span>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-bold font-mono text-xs sm:text-sm text-zinc-900 dark:text-white">
+                      {currency}
+                    </span>
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
+                      ({currMeta.symbol} • {currMeta.name})
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0 text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-200 ml-1">
+                  <ChevronDown className="w-4 h-4 transition-transform group-hover:translate-y-0.5" />
+                </div>
+              </button>
             </div>
           </div>
 
@@ -651,7 +677,7 @@ export function PaymentLinkDrawer({
               </h3>
               <p className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">
                 {amountType === 'FIXED'
-                  ? `${currency === 'INR' ? '₹' : currency} ${parseFloat(amount).toFixed(2)}`
+                  ? `${currMeta.symbol} ${parseFloat(amount || '0').toFixed(2)} (${currency})`
                   : 'Customer Chooses Amount'}
               </p>
               <p className="text-[11px] text-zinc-400 font-mono truncate max-w-xs mx-auto">
@@ -670,6 +696,19 @@ export function PaymentLinkDrawer({
           </div>
         </div>
       )}
+
+      {/* Global Regional Currency Selector Modal */}
+      <CurrencySelectorModal
+        isOpen={isCurrencyModalOpen}
+        onClose={() => setIsCurrencyModalOpen(false)}
+        activeCurrency={currency}
+        title="Select Payment Link Currency"
+        subtitle="Choose the currency your customers will be charged in for this payment link."
+        onSelect={(selectedCurrency) => {
+          setCurrency(selectedCurrency.toUpperCase());
+          setIsCurrencyModalOpen(false);
+        }}
+      />
     </PlatformDrawer>
   );
 }

@@ -868,6 +868,7 @@ export function CheckoutClient({
     setCompleted(true);
     setPaying(false);
     setTopupLoading(false);
+    setVerifyingPayment(false);
 
     if (details.fulfillment || session?.metadata?.fulfillment) {
       setSession((prev: any) => ({
@@ -975,92 +976,82 @@ export function CheckoutClient({
     savedVerifyPayloadRef.current = credentials;
     setVerifyingPayment(true);
     setVerificationFailedState(false);
-    setVerificationProgress(30);
+    setVerificationProgress(45);
     setVerificationStatusText('Verifying payment...');
-    setVerificationSubtext('Securely confirming transaction with your bank & 180 Core...');
+    setVerificationSubtext('Bank authorization in progress • Do not close, wait for a moment');
 
     const maxAttempts = 6;
     let attempt = 0;
     let completedSuccessfully = false;
 
-    // Advance visual progress smoothly
+    // Advance visual progress smoothly & quickly
     const progressTimer = setInterval(() => {
       setVerificationProgress((prev) => {
-        if (prev >= 90) return prev;
-        return prev + 12;
+        if (prev >= 92) return prev;
+        return prev + 15;
       });
-    }, 600);
+    }, 280);
 
     try {
       while (attempt < maxAttempts && !completedSuccessfully) {
         attempt++;
         setVerificationAttempt(attempt);
 
-        if (attempt === 2) {
+        if (attempt >= 2) {
           setVerificationStatusText('Verifying payment...');
-          setVerificationSubtext('Connecting to 180 Sovereign Authorization Network...');
-        } else if (attempt >= 3) {
-          setVerificationStatusText('Verifying payment...');
-          setVerificationSubtext(`Network is slower than usual — confirming with banking network (Attempt ${attempt}/${maxAttempts})...`);
+          setVerificationSubtext('Bank authorization in progress • Do not close, wait for a moment');
         }
 
-        // Try direct backend endpoint first, with fallback to local same-origin proxy
-        const targetUrls = [
-          getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/direct-verify`),
-          `/api/v1/checkout/sessions/${sessionId}/direct-verify`,
-        ];
+        // Direct backend verify
+        const targetUrl = getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/direct-verify`);
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-        for (const targetUrl of targetUrls) {
-          if (completedSuccessfully) break;
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 9000);
+          const verifyRes = await fetch(targetUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(credentials),
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
 
-            const verifyRes = await fetch(targetUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(credentials),
-              signal: controller.signal,
-            });
-            clearTimeout(timeoutId);
+          if (verifyRes.ok) {
+            const verifyData = await verifyRes.json();
+            if (verifyData && verifyData.success) {
+              clearInterval(progressTimer);
+              setVerificationProgress(100);
+              setVerificationStatusText('Payment Authorized!');
+              setVerificationSubtext('Bank authorization confirmed.');
+              completedSuccessfully = true;
 
-            if (verifyRes.ok) {
-              const verifyData = await verifyRes.json();
-              if (verifyData && verifyData.success) {
-                clearInterval(progressTimer);
-                setVerificationProgress(100);
-                setVerificationStatusText('Payment Authorized!');
-                setVerificationSubtext('Your transaction has been securely captured.');
-                completedSuccessfully = true;
-
-                setTimeout(() => {
-                  setVerifyingPayment(false);
-                  setTopupLoading(false);
-                  handlePaymentCompletion({
-                    transactionId: credentials.paymentId,
-                    creditedUserBalance: verifyData.creditedUserBalance,
-                    fulfillment: verifyData.fulfillment || verifyData.session?.metadata?.fulfillment,
-                    customReturnUrl: verifyData.returnUrl,
-                  });
-                }, 750);
-                return;
-              }
+              setTimeout(() => {
+                setVerifyingPayment(false);
+                setTopupLoading(false);
+                handlePaymentCompletion({
+                  transactionId: credentials.paymentId,
+                  creditedUserBalance: verifyData.creditedUserBalance,
+                  fulfillment: verifyData.fulfillment || verifyData.session?.metadata?.fulfillment,
+                  customReturnUrl: verifyData.returnUrl,
+                });
+              }, 250);
+              return;
             }
-          } catch (fetchErr: any) {
-            console.warn(`[180 Pay] Verify attempt ${attempt} on ${targetUrl} transient error:`, fetchErr?.message || fetchErr);
           }
+        } catch (fetchErr: any) {
+          console.warn(`[180 Pay] Verify attempt ${attempt} transient error:`, fetchErr?.message || fetchErr);
         }
 
-        // Cross-check session status in case webhook already confirmed capture
+        // Parallel check: Gateway live reconciliation
         try {
           const statusRes = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/status`));
           if (statusRes.ok) {
             const statusData = await statusRes.json();
-            if (statusData && (statusData.status === 'CAPTURED' || statusData.status === 'COMPLETED')) {
+            if (statusData && (statusData.status === 'CAPTURED' || statusData.status === 'COMPLETED' || statusData.isPaid)) {
               clearInterval(progressTimer);
               setVerificationProgress(100);
               setVerificationStatusText('Payment Authorized!');
-              setVerificationSubtext('Transaction verified and confirmed.');
+              setVerificationSubtext('Bank authorization confirmed.');
               completedSuccessfully = true;
 
               setTimeout(() => {
@@ -1070,14 +1061,14 @@ export function CheckoutClient({
                   transactionId: statusData.transactionId || credentials.paymentId,
                   fulfillment: statusData.fulfillment,
                 });
-              }, 750);
+              }, 250);
               return;
             }
           }
         } catch (_) {}
 
         if (attempt < maxAttempts) {
-          await new Promise((r) => setTimeout(r, Math.min(3000, 1000 + attempt * 500)));
+          await new Promise((r) => setTimeout(r, 800));
         }
       }
     } finally {
@@ -1087,8 +1078,8 @@ export function CheckoutClient({
     if (!completedSuccessfully) {
       setVerificationProgress(95);
       setVerificationFailedState(true);
-      setVerificationStatusText('Confirming Payment Status');
-      setVerificationSubtext('Your bank has processed your payment. Reconnecting to 180 Core network to finalize your receipt.');
+      setVerificationStatusText('Verifying payment...');
+      setVerificationSubtext('Bank authorization in progress • Do not close, wait for a moment');
     }
   }, [sessionId, handlePaymentCompletion]);
 
@@ -2774,78 +2765,35 @@ export function CheckoutClient({
         )}
       </div>
 
-      {/* Payment Options: Wallet (Only if Authenticated) OR Direct Checkout Badges */}
-      {!isTopUpSession && (
-        isAuthenticatedWithWallet ? (
-          <div className="rounded-2xl p-4 border border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900/60 shadow-2xs space-y-2.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-600 dark:text-zinc-300 flex items-center gap-1.5 font-medium">
-                <Wallet className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                180 Wallet Balance:
-              </span>
-              <span className="font-bold text-slate-900 dark:text-zinc-100">
-                {currencyService.format(userBalance, activeCurrency)}
-              </span>
-            </div>
-
-            {hasEnoughBalance ? (
-              <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-zinc-800 text-slate-600 dark:text-zinc-400">
-                <span>Balance after payment:</span>
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                  {currencyService.format(userBalance - activeFinalAmount, activeCurrency)}
-                </span>
-              </div>
-            ) : (
-              <div className="text-[11px] text-slate-600 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-800/50 p-2.5 rounded-xl border border-slate-200/70 dark:border-zinc-700/60 flex items-center justify-between">
-                <span>{isIndia ? 'Pay remaining with UPI / Cards:' : 'Pay remaining with Card:'}</span>
-                <span className="font-bold text-slate-900 dark:text-zinc-200">
-                  {currencyService.format(Math.max(0, activeFinalAmount - userBalance), activeCurrency)}
-                </span>
-              </div>
-            )}
+      {/* Payment Options: Wallet (Only if Authenticated) */}
+      {!isTopUpSession && isAuthenticatedWithWallet && (
+        <div className="rounded-2xl p-4 border border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900/60 shadow-2xs space-y-2.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-600 dark:text-zinc-300 flex items-center gap-1.5 font-medium">
+              <Wallet className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+              180 Wallet Balance:
+            </span>
+            <span className="font-bold text-slate-900 dark:text-zinc-100">
+              {currencyService.format(userBalance, activeCurrency)}
+            </span>
           </div>
-        ) : (
-          <div className="rounded-2xl p-3.5 border border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-900/60 shadow-2xs space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-700 dark:text-zinc-300 font-semibold flex items-center gap-1.5">
-                <CreditCard className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                Accepted Payment Methods
-              </span>
-              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Instant Checkout
-              </span>
-            </div>
 
-            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-              {isIndia ? (
-                <>
-                  <span className="px-2 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-md text-[10.5px] font-medium border border-slate-200/50 dark:border-zinc-700/50">
-                    UPI (GPay / PhonePe / Paytm / QR)
-                  </span>
-                  <span className="px-2 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-md text-[10.5px] font-medium border border-slate-200/50 dark:border-zinc-700/50">
-                    Credit & Debit Cards (RuPay / Visa / Mastercard)
-                  </span>
-                  <span className="px-2 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-md text-[10.5px] font-medium border border-slate-200/50 dark:border-zinc-700/50">
-                    Netbanking (All Indian Banks)
-                  </span>
-                  <span className="px-2 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-md text-[10.5px] font-medium border border-slate-200/50 dark:border-zinc-700/50">
-                    Wallets & EMI
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span className="px-2 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-md text-[10.5px] font-medium border border-slate-200/50 dark:border-zinc-700/50">
-                    Credit & Debit Cards (Visa / Mastercard / 3D Secure)
-                  </span>
-                  <span className="px-2 py-1 bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 rounded-md text-[10.5px] font-medium border border-slate-200/50 dark:border-zinc-700/50">
-                    International Online Cards
-                  </span>
-                </>
-              )}
+          {hasEnoughBalance ? (
+            <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-zinc-800 text-slate-600 dark:text-zinc-400">
+              <span>Balance after payment:</span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                {currencyService.format(userBalance - activeFinalAmount, activeCurrency)}
+              </span>
             </div>
-          </div>
-        )
+          ) : (
+            <div className="text-[11px] text-slate-600 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-800/50 p-2.5 rounded-xl border border-slate-200/70 dark:border-zinc-700/60 flex items-center justify-between">
+              <span>{isIndia ? 'Pay remaining with UPI / Cards:' : 'Pay remaining with Card:'}</span>
+              <span className="font-bold text-slate-900 dark:text-zinc-200">
+                {currencyService.format(Math.max(0, activeFinalAmount - userBalance), activeCurrency)}
+              </span>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Actions */}
@@ -2948,39 +2896,39 @@ export function CheckoutClient({
         <div
           role="status"
           aria-live="polite"
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-2xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300 select-none overflow-hidden"
+          className="fixed inset-0 z-50 bg-white/95 backdrop-blur-2xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-200 select-none overflow-hidden"
         >
-          {/* Ethereal Glow Mirror Backdrop */}
-          <div className="absolute w-80 h-80 rounded-full bg-blue-500/15 blur-3xl -z-10 animate-pulse pointer-events-none" />
+          {/* Subtle Accent Glow Backdrop */}
+          <div className="absolute w-80 h-80 rounded-full bg-blue-500/10 blur-3xl -z-10 animate-pulse pointer-events-none" />
 
-          {/* Glowing 180 Core Icon */}
+          {/* 180 Core Icon in Soft Card */}
           <div className="relative mb-6">
-            <div className="w-20 h-20 rounded-3xl bg-white/5 border border-white/10 shadow-2xl flex items-center justify-center p-3.5 backdrop-blur-md relative z-10">
+            <div className="w-16 h-16 rounded-2xl bg-slate-50 border border-slate-200/80 shadow-md flex items-center justify-center p-3 relative z-10">
               <OneEightyCoreLogo
                 variant="icon"
-                theme="dark"
-                height={48}
-                width={48}
+                theme="auto"
+                height={38}
+                width={38}
                 className="animate-pulse"
               />
             </div>
-            <div className="absolute inset-0 rounded-3xl bg-blue-500/25 blur-xl animate-ping opacity-30" />
+            <div className="absolute inset-0 rounded-2xl bg-blue-500/20 blur-lg animate-ping opacity-25" />
           </div>
 
           {/* Heading */}
-          <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight mb-2">
+          <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mb-2">
             {verificationStatusText}
           </h3>
 
           {/* Subtitle */}
-          <p className="text-xs sm:text-sm text-zinc-300 max-w-sm mx-auto leading-relaxed mb-6">
+          <p className="text-xs sm:text-sm text-slate-600 max-w-sm mx-auto leading-relaxed mb-6 font-medium">
             {verificationSubtext}
           </p>
 
           {/* Animated Progress Bar */}
-          <div className="w-64 max-w-full h-1.5 bg-white/10 rounded-full overflow-hidden relative shadow-inner mb-4">
+          <div className="w-64 max-w-full h-1.5 bg-slate-100 border border-slate-200/70 rounded-full overflow-hidden relative shadow-inner mb-4">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-400 transition-all duration-500 ease-out shadow-[0_0_14px_rgba(59,130,246,0.7)]"
+              className="h-full rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 transition-all duration-300 ease-out shadow-[0_0_10px_rgba(37,99,235,0.4)]"
               style={{ width: `${verificationProgress}%` }}
             />
           </div>
@@ -2988,9 +2936,9 @@ export function CheckoutClient({
           {/* Live Action Badges or Reassurance Retry */}
           {verificationFailedState ? (
             <div className="space-y-3 mt-2 animate-in zoom-in-95">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-medium">
-                <AlertCircle className="w-3.5 h-3.5" />
-                <span>Slow connection • Your money is safe</span>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                <span>Bank authorization in progress • Do not close, wait for a moment</span>
               </div>
               <div>
                 <Button
@@ -3001,7 +2949,7 @@ export function CheckoutClient({
                       checkSessionStatus(false);
                     }
                   }}
-                  className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/30 transition-all cursor-pointer"
+                  className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer"
                 >
                   <RefreshCw className="w-3.5 h-3.5 mr-2" />
                   Check Payment Status
@@ -3009,9 +2957,9 @@ export function CheckoutClient({
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-[11px] text-zinc-400 mt-2 font-medium">
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              <span>Bank Authorization in Progress • Do Not Close</span>
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200/80 text-[11px] text-emerald-700 font-semibold shadow-2xs mt-1">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+              <span>Bank authorization in progress • Do not close, wait for a moment</span>
             </div>
           )}
         </div>

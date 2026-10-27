@@ -276,23 +276,7 @@
       var actionGroup = document.createElement('div');
       actionGroup.style.cssText = 'display: flex; align-items: center; gap: 6px;';
 
-      // Expand / Full-screen toggle button on mobile
-      var expandBtn = null;
-      if (isMobile) {
-        expandBtn = document.createElement('button');
-        expandBtn.type = 'button';
-        expandBtn.setAttribute('aria-label', 'Toggle Full Screen');
-        expandBtn.setAttribute('title', 'Expand full screen');
-        expandBtn.style.cssText = 'width: 28px; height: 28px; border-radius: 50%; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); color: #a1a1aa; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; outline: none; margin-right: 2px;';
-        expandBtn.innerHTML = '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>';
-        expandBtn.onclick = function (e) {
-          e.stopPropagation();
-          setFullScreen(!isFullScreen);
-        };
-        actionGroup.appendChild(expandBtn);
-      }
-
-      // Close button
+      // Single clean close button
       var closeBtn = document.createElement('button');
       closeBtn.type = 'button';
       closeBtn.setAttribute('aria-label', 'Close');
@@ -713,7 +697,13 @@
       options = options || {};
       var env = resolveEnvironmentMode(options.environment);
       var payServer = options.payServerUrl || (env === 'production' ? 'https://profile.180core.cloud' : DEFAULT_PAY_SERVER);
-      var sessionId = options.sessionId || 'cs_' + generateRandomString(24);
+      var isSandboxOpt = Boolean(
+        (options.description && options.description.toLowerCase().indexOf('sandbox') !== -1) ||
+        (options.description && options.description.toLowerCase().indexOf('demo') !== -1) ||
+        (options.title && options.title.toLowerCase().indexOf('sandbox') !== -1) ||
+        env !== 'production'
+      );
+      var sessionId = options.sessionId || (isSandboxOpt ? 'sess_sandbox_' + generateRandomString(16) : 'cs_' + generateRandomString(24));
 
       var returnUrl = options.returnUrl || options.return_url;
       var cancelUrl = options.cancelUrl || options.cancel_url;

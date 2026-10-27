@@ -31,7 +31,7 @@ export function CheckoutUxDrawer({ isOpen, onClose }: CheckoutUxDrawerProps) {
         appId: project?.id,
         title: `${project?.name || 'Developer Project'} Checkout`,
         description: 'Sandbox verification session (Adaptive Sheet)',
-        environment: 'sandbox',
+        environment: 'development',
         onSuccess: (res: any) =>
           toast.success(
             `Payment test passed! TxID: ${res?.transactionId || res?.sessionId || 'SUCCESS'}`
