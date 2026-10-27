@@ -8,7 +8,7 @@ import { PaymentLinksTab } from '@/components/apps/pay/PaymentLinksTab';
 import { useProject } from '@/context/ProjectContext';
 
 export default function PayLinksPage() {
-  const { projectId } = useProject();
+  const { project, projectId } = useProject();
 
   return (
     <AppShellLayout
@@ -19,7 +19,7 @@ export default function PayLinksPage() {
       badgeColor="purple"
     >
       <div className="p-6">
-        <PaymentLinksTab appId={projectId} />
+        <PaymentLinksTab appId={project?.id || projectId} />
       </div>
     </AppShellLayout>
   );

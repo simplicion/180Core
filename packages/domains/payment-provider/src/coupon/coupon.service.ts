@@ -1,6 +1,6 @@
 'use strict';
 
-import { developersPrisma as prisma } from '@workspace/db-180core';
+import { developersPrisma as prisma, resolveOAuthApp, resolveAppId } from '@workspace/db-180core';
 import { GeoPricingService } from '../geo/geo-pricing.service';
 
 export interface CouponValidationInput {
@@ -444,15 +444,7 @@ export class CouponService {
     }
 
     try {
-      const app = await (prisma as any).oAuthApp.findFirst({
-        where: {
-          OR: [
-            { id: appId },
-            { clientId: appId },
-          ],
-        },
-      });
-
+      const app = await resolveOAuthApp(appId);
       if (app) {
         candidateSet.add(app.id);
         candidateSet.add(app.clientId);
@@ -488,14 +480,7 @@ export class CouponService {
 
         if (paymentLink && paymentLink.appId) {
           candidateSet.add(paymentLink.appId);
-          const linkedApp = await (prisma as any).oAuthApp.findFirst({
-            where: {
-              OR: [
-                { id: paymentLink.appId },
-                { clientId: paymentLink.appId },
-              ],
-            },
-          });
+          const linkedApp = await resolveOAuthApp(paymentLink.appId);
           if (linkedApp) {
             candidateSet.add(linkedApp.id);
             candidateSet.add(linkedApp.clientId);
@@ -508,16 +493,14 @@ export class CouponService {
   }
 
   public static async resolveAppId(appId: string): Promise<string> {
-    const oauthApp = await (prisma as any).oAuthApp.findFirst({
-      where: {
-        OR: [
-          { id: appId },
-          { clientId: appId },
-        ],
-      },
-      select: { id: true },
-    });
-    return oauthApp ? oauthApp.id : appId;
+    if (!appId) {
+      throw new Error('Application ID or slug is required');
+    }
+    const oauthApp = await resolveOAuthApp(appId);
+    if (!oauthApp) {
+      throw new Error(`Application "${appId}" not found. Please verify the application ID, Client ID, or app name.`);
+    }
+    return oauthApp.id;
   }
 
   /**

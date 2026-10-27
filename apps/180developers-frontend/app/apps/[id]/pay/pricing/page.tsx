@@ -8,7 +8,7 @@ import { PricingTablesTab } from '@/components/apps/pay/PricingTablesTab';
 import { useProject } from '@/context/ProjectContext';
 
 export default function PayPricingPage() {
-  const { projectId } = useProject();
+  const { project, projectId } = useProject();
 
   return (
     <AppShellLayout
@@ -19,7 +19,7 @@ export default function PayPricingPage() {
       badgeColor="purple"
       fullWidth
     >
-      <PricingTablesTab appId={projectId} />
+      <PricingTablesTab appId={project?.id || projectId} />
     </AppShellLayout>
   );
 }

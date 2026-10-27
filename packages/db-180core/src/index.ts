@@ -55,25 +55,78 @@ if (process.env.NODE_ENV !== 'production') {
 export default corePrisma;
 
 /**
- * Universal Two-Credential Model Helper:
- * Resolves an OAuthApp record by either its public clientId or internal UUID id.
+ * Generates a clean URL/identifier slug from any arbitrary string.
  */
-export async function resolveOAuthApp(identifier: string) {
-  if (!identifier) return null;
-  return (corePrisma as any).oAuthApp.findFirst({
-    where: {
-      OR: [
-        { clientId: identifier },
-        { id: identifier },
-      ],
-    },
-  });
+export function slugify(text: string): string {
+  return String(text || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 /**
- * Resolves the internal database primary key UUID from either a clientId or UUID.
+ * Universal Two-Credential Model Helper:
+ * Resolves an OAuthApp record by public clientId, internal UUID id, case-insensitive name, or slug.
+ */
+export async function resolveOAuthApp(identifier: string) {
+  if (!identifier) return null;
+  const trimmed = String(identifier).trim();
+  if (!trimmed) return null;
+
+  // 1. Direct match by id, clientId, or exact name (case-insensitive)
+  const direct = await (corePrisma as any).oAuthApp.findFirst({
+    where: {
+      OR: [
+        { id: trimmed },
+        { clientId: trimmed },
+        { name: { equals: trimmed, mode: 'insensitive' } },
+      ],
+    },
+  });
+  if (direct) return direct;
+
+  // 2. Slug match against app name (e.g. "bookselling" -> "Bookselling")
+  const targetSlug = slugify(trimmed);
+  if (targetSlug) {
+    const allApps = await (corePrisma as any).oAuthApp.findMany();
+    const slugMatch = allApps.find((a: any) => {
+      const aSlug = slugify(a.name);
+      return aSlug === targetSlug || aSlug.replace(/-/g, '') === targetSlug.replace(/-/g, '');
+    });
+    if (slugMatch) return slugMatch;
+  }
+
+  // 3. Fallback: Check if identifier matches a PaymentLink slug or ID
+  try {
+    const link = await (corePrisma as any).paymentLink.findFirst({
+      where: {
+        OR: [{ id: trimmed }, { slug: trimmed }],
+      },
+      select: { appId: true },
+    });
+    if (link && link.appId) {
+      return (corePrisma as any).oAuthApp.findFirst({
+        where: {
+          OR: [
+            { id: link.appId },
+            { clientId: link.appId },
+            { name: { equals: link.appId, mode: 'insensitive' } },
+          ],
+        },
+      });
+    }
+  } catch (_) {}
+
+  return null;
+}
+
+/**
+ * Resolves the internal database primary key UUID from either a clientId, UUID, app name, or slug.
  */
 export async function resolveAppId(identifier: string): Promise<string> {
   const app = await resolveOAuthApp(identifier);
   return app ? app.id : identifier;
 }
+

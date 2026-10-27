@@ -1,7 +1,7 @@
 'use strict';
 
 import { Request, Response } from 'express';
-import { developersPrisma as prisma } from '@workspace/db-180core';
+import { developersPrisma as prisma, resolveOAuthApp } from '@workspace/db-180core';
 import { COUNTRY_DIRECTORY } from '@workspace/payment-provider';
 
 function applyMultiPricingToPlanCards(planCards: any[], visitorCountry?: string) {
@@ -98,29 +98,18 @@ export class PricingTableApiController {
     try {
       const appId = String(req.params.appId);
 
-      // Verify app exists
-      const app = await prisma.oAuthApp.findFirst({
-        where: {
-          OR: [{ id: appId }, { clientId: appId }],
-        },
-        select: {
-          id: true,
-          name: true,
-          logoUrl: true,
-          clientId: true,
-          description: true,
-          allowedOrigins: true,
-          redirectUris: true,
-        },
-      });
+      // Verify app exists (supports UUID, Client ID, name, or slug)
+      const app = await resolveOAuthApp(appId);
 
       if (!app) {
         return res.status(404).json({ success: false, error: 'Application not found' });
       }
 
+      const candidateAppIds = [app.id, app.clientId].filter(Boolean);
+
       // Query active subscription plans registered for this app
       const dbPlans = await (prisma as any).subscriptionPlan.findMany({
-        where: { appId: app.id, isActive: true },
+        where: { appId: { in: candidateAppIds }, isActive: true },
         orderBy: { amount: 'asc' },
       });
 
@@ -137,8 +126,8 @@ export class PricingTableApiController {
       }));
 
       // Check for custom config
-      const existingConfig = await (prisma as any).pricingTableConfig.findUnique({
-        where: { appId: app.id },
+      const existingConfig = await (prisma as any).pricingTableConfig.findFirst({
+        where: { appId: { in: candidateAppIds } },
       });
 
       const visitorCountry = String(
@@ -245,11 +234,7 @@ export class PricingTableApiController {
         syncToSubscriptionPlans = true,
       } = req.body;
 
-      const app = await prisma.oAuthApp.findFirst({
-        where: {
-          OR: [{ id: appId }, { clientId: appId }],
-        },
-      });
+      const app = await resolveOAuthApp(appId);
 
       if (!app) {
         return res.status(404).json({ success: false, error: 'Application not found' });
@@ -367,18 +352,16 @@ export class PricingTableApiController {
   static async listAppSubscriptionPlans(req: Request, res: Response) {
     try {
       const appId = String(req.params.appId);
-      const app = await prisma.oAuthApp.findFirst({
-        where: {
-          OR: [{ id: appId }, { clientId: appId }],
-        },
-      });
+      const app = await resolveOAuthApp(appId);
 
       if (!app) {
         return res.status(404).json({ success: false, error: 'Application not found' });
       }
 
+      const candidateAppIds = [app.id, app.clientId].filter(Boolean);
+
       const plans = await (prisma as any).subscriptionPlan.findMany({
-        where: { appId: app.id, isActive: true },
+        where: { appId: { in: candidateAppIds }, isActive: true },
         orderBy: { amount: 'asc' },
       });
 
@@ -402,19 +385,7 @@ export class PricingTableApiController {
       const appId = String(req.params.appId);
       const origin = req.headers.origin || '';
 
-      const app = await prisma.oAuthApp.findFirst({
-        where: {
-          OR: [{ id: appId }, { clientId: appId }],
-        },
-        select: {
-          id: true,
-          name: true,
-          logoUrl: true,
-          clientId: true,
-          description: true,
-          allowedOrigins: true,
-        },
-      });
+      const app = await resolveOAuthApp(appId);
 
       if (!app) {
         return res.status(404).json({ success: false, error: 'Application not found' });
@@ -443,12 +414,14 @@ export class PricingTableApiController {
       res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-client-id, Authorization');
 
-      const config = await (prisma as any).pricingTableConfig.findUnique({
-        where: { appId: app.id },
+      const candidateAppIds = [app.id, app.clientId].filter(Boolean);
+
+      const config = await (prisma as any).pricingTableConfig.findFirst({
+        where: { appId: { in: candidateAppIds } },
       });
 
       const dbPlans = await (prisma as any).subscriptionPlan.findMany({
-        where: { appId: app.id, isActive: true },
+        where: { appId: { in: candidateAppIds }, isActive: true },
         orderBy: { amount: 'asc' },
       });
 

@@ -8,7 +8,7 @@ import { CouponsTab } from '@/components/apps/pay/CouponsTab';
 import { useProject } from '@/context/ProjectContext';
 
 export default function PayCouponsPage() {
-  const { projectId } = useProject();
+  const { project, projectId } = useProject();
 
   return (
     <AppShellLayout
@@ -19,7 +19,7 @@ export default function PayCouponsPage() {
       badgeColor="emerald"
     >
       <div className="p-6">
-        <CouponsTab appId={projectId} />
+        <CouponsTab appId={project?.id || projectId} />
       </div>
     </AppShellLayout>
   );
