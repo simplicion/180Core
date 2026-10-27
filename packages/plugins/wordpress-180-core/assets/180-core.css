@@ -1,0 +1,110 @@
+/**
+ * 180 Core Frontend Styles
+ */
+
+.one-eighty-login-container {
+    margin: 20px 0;
+    width: 100%;
+}
+
+.one-eighty-divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    margin: 16px 0;
+}
+
+.one-eighty-divider::before,
+.one-eighty-divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid #e4e4e7;
+}
+
+.one-eighty-divider span {
+    padding: 0 12px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #71717a;
+    text-transform: uppercase;
+}
+
+.one-eighty-sso-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    padding: 12px 18px;
+    background: #09090b;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none !important;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    box-sizing: border-box;
+}
+
+.one-eighty-sso-button:hover {
+    background: #18181b;
+    color: #ffffff !important;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+}
+
+.one-eighty-btn-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    color: #6366f1;
+}
+
+.one-eighty-btn-icon svg {
+    width: 18px;
+    height: 18px;
+}
+
+.one-eighty-btn-badge {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: rgba(99, 102, 241, 0.2);
+    color: #818cf8;
+    padding: 3px 8px;
+    border-radius: 9999px;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.one-eighty-checkout-login-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    background: #f4f4f5;
+    border-left: 4px solid #6366f1;
+    padding: 12px 16px;
+    margin-bottom: 24px;
+    border-radius: 8px;
+}
+
+.one-eighty-btn-sm {
+    background: #09090b !important;
+    color: #ffffff !important;
+    border-radius: 8px !important;
+    font-size: 12px !important;
+    padding: 6px 14px !important;
+    font-weight: 600 !important;
+}
+
+.one-eighty-btn-sm:hover {
+    background: #27272a !important;
+}
