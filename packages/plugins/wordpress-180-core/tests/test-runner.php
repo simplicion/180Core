@@ -623,11 +623,23 @@ try {
 assert_test($state_tamper_rejected, 'Security: Forged/tampered OAuth state rejected with cryptographic error');
 
 // ----------------------------------------------------
-// TEST 5: WooCommerce Gateway Registration
+// TEST 5: 180 Pay Gateway & Standalone Shortcode Registration
 // ----------------------------------------------------
 require_once dirname(__DIR__) . '/includes/class-180-pay-gateway.php';
 $pay_module = OneEighty_Pay_Gateway_Module::get_instance();
 assert_test($pay_module !== null, 'OneEighty_Pay_Gateway_Module loaded');
+
+// Test standalone [180_pay] shortcode (Bookings, Consultations, Tickets, Donations)
+assert_test(isset($GLOBALS['_wp_shortcodes']['180_pay']), '[180_pay] standalone shortcode registered for non-WooCommerce sites');
+$booking_button_html = call_user_func($GLOBALS['_wp_shortcodes']['180_pay'], array(
+    'amount'   => '750',
+    'currency' => 'INR',
+    'title'    => 'Consultation Booking',
+    'text'     => 'Book Appointment for ₹750'
+));
+assert_test(strpos($booking_button_html, 'data-180-amount="750"') !== false, '[180_pay] sets correct whole currency amount attribute (750)');
+assert_test(strpos($booking_button_html, 'data-180-title="Consultation Booking"') !== false, '[180_pay] sets booking title');
+assert_test(strpos($booking_button_html, 'Book Appointment for ₹750') !== false, '[180_pay] renders custom booking button label');
 
 // Trigger WooCommerce gateway registration filter
 $gateways = apply_filters('woocommerce_payment_gateways', array());

@@ -24,11 +24,104 @@ class OneEighty_Pay_Gateway_Module {
 
         // Initialize gateway class when plugins loaded
         add_action('plugins_loaded', 'one_eighty_init_wc_gateway_class');
+
+        // Universal [180_pay] Shortcode for Bookings, Tickets, Services, and Donations
+        add_shortcode('180_pay', array($this, 'shortcode_pay_button'));
+
+        // Standalone Webhook Listener (/?180_webhook=pay)
+        add_action('init', array($this, 'handle_standalone_webhook'));
     }
 
     public function register_gateway($gateways) {
         $gateways[] = 'WC_Gateway_180_Pay';
         return $gateways;
+    }
+
+    public function shortcode_pay_button($atts) {
+        $atts = shortcode_atts(array(
+            'amount'      => '0',
+            'currency'    => 'INR',
+            'title'       => __('180 Pay Payment', '180-core'),
+            'order_id'    => '',
+            'text'        => '',
+            'redirect'    => '',
+            'class'       => '',
+        ), $atts, '180_pay');
+
+        $amount = floatval($atts['amount']);
+        $currency = strtoupper($atts['currency']);
+        $title = sanitize_text_field($atts['title']);
+        $order_id = !empty($atts['order_id']) ? sanitize_text_field($atts['order_id']) : ('book_' . substr(md5(uniqid(rand(), true)), 0, 8));
+        $redirect = !empty($atts['redirect']) ? esc_url_raw($atts['redirect']) : '';
+
+        $currency_symbol = $currency === 'INR' ? '₹' : ($currency === 'USD' ? '$' : ($currency === 'EUR' ? '€' : $currency));
+        $button_text = !empty($atts['text']) ? esc_html($atts['text']) : sprintf(__('Pay %s%s with 180 Pay', '180-core'), $currency_symbol, $amount);
+
+        ob_start();
+        ?>
+        <div class="one-eighty-pay-shortcode-container <?php echo esc_attr($atts['class']); ?>">
+            <button type="button" 
+                    class="one-eighty-sso-button one-eighty-pay-custom-btn" 
+                    data-180-pay-trigger="true"
+                    data-180-amount="<?php echo esc_attr($amount); ?>"
+                    data-180-currency="<?php echo esc_attr($currency); ?>"
+                    data-180-title="<?php echo esc_attr($title); ?>"
+                    data-180-order-id="<?php echo esc_attr($order_id); ?>"
+                    data-180-return-url="<?php echo esc_url($redirect); ?>">
+                <span class="one-eighty-btn-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="5" width="20" height="14" rx="2"/>
+                        <line x1="2" y1="10" x2="22" y2="10"/>
+                    </svg>
+                </span>
+                <span class="one-eighty-btn-text"><?php echo $button_text; ?></span>
+                <span class="one-eighty-btn-badge"><?php _e('Instant UPI / Cards', '180-core'); ?></span>
+            </button>
+        </div>
+        <?php
+        return ob_get_clean();
+    }
+
+    public function handle_standalone_webhook() {
+        if (!isset($_GET['180_webhook']) || $_GET['180_webhook'] !== 'pay') {
+            return;
+        }
+
+        $raw_body = file_get_contents('php://input');
+        if (empty($raw_body)) {
+            status_header(400);
+            echo 'Missing body';
+            if (!defined('ONE_EIGHTY_TEST_MODE')) { exit; }
+            return;
+        }
+
+        // Verify cryptographic signature
+        $client_secret = get_option('180_core_client_secret');
+        $sig = !empty($_SERVER['HTTP_X_180_SIGNATURE']) ? sanitize_text_field($_SERVER['HTTP_X_180_SIGNATURE']) : '';
+        if (empty($client_secret) || empty($sig)) {
+            status_header(401);
+            echo 'Unauthorized';
+            if (!defined('ONE_EIGHTY_TEST_MODE')) { exit; }
+            return;
+        }
+
+        $expected = hash_hmac('sha256', $raw_body, $client_secret);
+        if (!hash_equals($expected, $sig)) {
+            status_header(401);
+            echo 'Invalid signature';
+            if (!defined('ONE_EIGHTY_TEST_MODE')) { exit; }
+            return;
+        }
+
+        $data = json_decode($raw_body, true);
+        $event = isset($data['event']) ? $data['event'] : '';
+        $payload = isset($data['data']) ? $data['data'] : $data;
+
+        // Trigger WordPress developer action hooks for bookings and custom plugins
+        do_action('180_pay_payment_completed', $payload, $event);
+        status_header(200);
+        echo '180 Pay generic webhook processed';
+        if (!defined('ONE_EIGHTY_TEST_MODE')) { exit; }
     }
 }
 

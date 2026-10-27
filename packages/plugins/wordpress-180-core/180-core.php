@@ -356,12 +356,16 @@ class OneEighty_Core_Plugin {
             </p>
 
             <?php if (!$wc_active): ?>
-                <div class="notice notice-warning inline">
-                    <p><strong><?php _e('Notice:', '180-core'); ?></strong> <?php _e('WooCommerce is not installed or active. 180 Pay requires WooCommerce to process cart checkouts.', '180-core'); ?></p>
+                <div class="notice notice-info inline" style="border-left-color: #6366f1; padding: 12px 16px;">
+                    <p style="margin: 0 0 6px 0;"><strong><?php _e('Standalone Payments Active (No WooCommerce Required):', '180-core'); ?></strong></p>
+                    <p style="margin: 0; color: #4b5563; line-height: 1.5;">
+                        <?php _e('You can accept payments for <strong>bookings, seat reservations, consulting fees, event tickets, or donations</strong> anywhere on your WordPress site using the universal <code>[180_pay]</code> shortcode!', '180-core'); ?><br />
+                        <?php _e('Example:', '180-core'); ?> <code>[180_pay amount="499" currency="INR" title="Book Consultation" redirect="/booking-confirmed"]</code>
+                    </p>
                 </div>
             <?php else: ?>
                 <div class="notice notice-success inline">
-                    <p><strong><?php _e('WooCommerce Detected:', '180-core'); ?></strong> <?php _e('You can manage gateway toggles here or directly under WooCommerce → Settings → Payments → 180 Pay.', '180-core'); ?></p>
+                    <p><strong><?php _e('WooCommerce Detected:', '180-core'); ?></strong> <?php _e('180 Pay is active as a WooCommerce checkout gateway and also available via standalone <code>[180_pay]</code> buttons for bookings and services.', '180-core'); ?></p>
                 </div>
             <?php endif; ?>
 
