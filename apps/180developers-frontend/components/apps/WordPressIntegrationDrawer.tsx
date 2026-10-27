@@ -4,22 +4,13 @@ import React, { useState } from 'react';
 import {
   X,
   Download,
-  Copy,
-  Check,
   ExternalLink,
   ShieldCheck,
   CreditCard,
-  Key,
-  Globe,
   CheckCircle2,
-  HelpCircle,
   Sparkles,
-  ArrowRight,
-  Eye,
-  EyeOff,
 } from 'lucide-react';
 import { Button } from '@workspace/ui';
-import { toast } from 'react-hot-toast';
 import { DeveloperAppDetail } from './types';
 
 interface WordPressIntegrationDrawerProps {
@@ -35,20 +26,10 @@ export function WordPressIntegrationDrawer({
   onClose,
   onOpenSettings,
 }: WordPressIntegrationDrawerProps) {
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [showSecret, setShowSecret] = useState(false);
   const [activeStep, setActiveStep] = useState(1);
 
   if (!isOpen) return null;
 
-  const handleCopy = (text: string, key: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKey(key);
-    toast.success(`${label} copied to clipboard`);
-    setTimeout(() => setCopiedKey(null), 2000);
-  };
-
-  const clientSecret = app.clientSecret || (app as any).apiSecret || '••••••••••••••••';
   const downloadUrl = '/downloads/180-core.zip';
 
   return (
@@ -121,83 +102,6 @@ export function WordPressIntegrationDrawer({
             </div>
           </div>
 
-          {/* Credentials Card */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 flex items-center gap-2">
-              <Key className="w-3.5 h-3.5" />
-              <span>Project Credentials (Paste in WordPress)</span>
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {/* Client ID */}
-              <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 space-y-1.5">
-                <span className="text-[11px] font-semibold text-zinc-500">Client ID</span>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-mono text-zinc-900 dark:text-zinc-200 truncate select-all">
-                    {app.clientId}
-                  </span>
-                  <button
-                    onClick={() => handleCopy(app.clientId, 'client_id', 'Client ID')}
-                    className="p-1.5 rounded-lg hover:bg-zinc-200 dark:hover:bg-white/10 text-zinc-500 transition-colors"
-                    title="Copy Client ID"
-                  >
-                    {copiedKey === 'client_id' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Client Secret */}
-              <div className="p-3.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-zinc-500">Client Secret</span>
-                  <button
-                    onClick={() => setShowSecret(!showSecret)}
-                    className="text-[10px] text-zinc-400 hover:text-zinc-200 flex items-center gap-1"
-                  >
-                    {showSecret ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                    <span>{showSecret ? 'Hide' : 'Reveal'}</span>
-                  </button>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-mono text-zinc-900 dark:text-zinc-200 truncate select-all">
-                    {showSecret ? clientSecret : '••••••••••••••••••••••••'}
-                  </span>
-                  <button
-                    onClick={() => handleCopy(clientSecret, 'client_secret', 'Client Secret')}
-                    className="p-1.5 rounded-lg hover:bg-zinc-200 dark:hover:bg-white/10 text-zinc-500 transition-colors"
-                    title="Copy Client Secret"
-                  >
-                    {copiedKey === 'client_secret' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Important Required URLs */}
-            <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 text-xs space-y-2">
-              <span className="font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-                <Globe className="w-3.5 h-3.5" />
-                <span>Required App URL Configurations</span>
-              </span>
-              <p className="text-zinc-600 dark:text-zinc-300">
-                In your WordPress Admin under <span className="font-semibold">180 Core → Credentials & API</span>, note your store URL and add it to this project's settings:
-              </p>
-              <div className="space-y-1.5 pt-1">
-                <div className="flex items-center justify-between gap-2 p-2 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10">
-                  <span className="font-mono text-[11px] text-zinc-700 dark:text-zinc-300">
-                    https://YOUR-STORE-DOMAIN.com/?180core_auth=callback
-                  </span>
-                  <button
-                    onClick={() => handleCopy('https://YOUR-STORE-DOMAIN.com/?180core_auth=callback', 'redirect_uri', 'Redirect URI template')}
-                    className="p-1 hover:text-white"
-                  >
-                    {copiedKey === 'redirect_uri' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* Step-by-Step Setup Wizard */}
           <div className="space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
@@ -252,9 +156,8 @@ export function WordPressIntegrationDrawer({
                   </h4>
                   <ol className="list-decimal list-inside space-y-1.5 pl-1">
                     <li>In your WordPress left sidebar, click on <span className="font-semibold">180 Core</span>.</li>
-                    <li>Under the <span className="font-semibold">Credentials & API</span> tab, paste your <span className="font-semibold">Client ID</span> and <span className="font-semibold">Client Secret</span>.</li>
+                    <li>Under the <span className="font-semibold">Credentials & API</span> tab, paste your <span className="font-semibold">Client ID</span> and <span className="font-semibold">Client Secret</span> (copied from this project's overview).</li>
                     <li>Click <span className="font-semibold">Save Credentials</span>.</li>
-                    <li>Copy your store's callback URL shown on that page and add it to this project's <span className="font-semibold">Redirect URIs</span>.</li>
                   </ol>
                 </div>
               )}

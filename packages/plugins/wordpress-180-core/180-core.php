@@ -263,11 +263,14 @@ class OneEighty_Core_Plugin {
                 </table>
 
                 <div class="one-eighty-notice-box">
-                    <h3>⚠️ <?php _e('Important: Configure Redirect URI in 180 Console', '180-core'); ?></h3>
-                    <p><?php _e('Copy this URL and add it to <strong>"Redirect URIs"</strong> in your 180 Developer Console app settings:', '180-core'); ?></p>
-                    <div class="copy-field">
-                        <code><?php echo esc_html($callback_url); ?></code>
-                    </div>
+                    <h3>✅ <?php _e('Universal Bottom-Sheet (Zero-Config)', '180-core'); ?></h3>
+                    <p><?php _e('180 Identity and 180 Pay run in-context via the sovereign bottom-sheet and automatically authenticate your store without manual redirect URI configuration.', '180-core'); ?></p>
+                    <details style="margin-top: 8px;">
+                        <summary style="cursor: pointer; color: #6366f1; font-weight: 600; font-size: 12px;"><?php _e('View OAuth Callback URL (Optional / Legacy Full-Page Redirect)', '180-core'); ?></summary>
+                        <div class="copy-field" style="margin-top: 6px;">
+                            <code><?php echo esc_html($callback_url); ?></code>
+                        </div>
+                    </details>
 
                     <h3 style="margin-top: 16px;">🔔 <?php _e('Webhook Listener URL (WooCommerce 180 Pay)', '180-core'); ?></h3>
                     <p><?php _e('Copy this URL and add it to <strong>"Webhook URL"</strong> in your 180 Developer Console app settings:', '180-core'); ?></p>

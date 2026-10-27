@@ -144,7 +144,39 @@ export class OAuthController {
             // Redirect URI validation (RFC 9700 Open Redirector Defense)
             if (redirect_uri && app.redirectUris && app.redirectUris.length > 0) {
                 const isFirstParty = isFirstPartyApp(app.clientId) || isFirstPartyApp(client_id);
-                const isMatch = isFirstParty || app.redirectUris.some((uri: string) => {
+
+                // Auto-authorize 180 Core WordPress & plugin in-context callbacks when origin matches application
+                let isWordpressAutoMatch = false;
+                if (String(redirect_uri).includes('180core_auth=callback')) {
+                    try {
+                        const targetOrigin = new URL(String(redirect_uri)).origin.toLowerCase();
+                        const isLoopback = targetOrigin.includes('localhost') || targetOrigin.includes('127.0.0.1');
+                        if (isLoopback) {
+                            isWordpressAutoMatch = true;
+                        } else if (app.website) {
+                            const webOrigin = new URL(app.website.startsWith('http') ? app.website : `https://${app.website}`).origin.toLowerCase();
+                            if (webOrigin === targetOrigin) isWordpressAutoMatch = true;
+                        }
+                        if (!isWordpressAutoMatch && app.allowedOrigins && app.allowedOrigins.length > 0) {
+                            isWordpressAutoMatch = app.allowedOrigins.some((orig: string) => {
+                                if (orig === '*') return true;
+                                try {
+                                    return new URL(orig.startsWith('http') ? orig : `https://${orig}`).origin.toLowerCase() === targetOrigin;
+                                } catch (_) { return false; }
+                            });
+                        }
+                        if (!isWordpressAutoMatch && app.redirectUris && app.redirectUris.length > 0) {
+                            isWordpressAutoMatch = app.redirectUris.some((uri: string) => {
+                                if (uri === '*') return true;
+                                try {
+                                    return new URL(uri).origin.toLowerCase() === targetOrigin;
+                                } catch (_) { return false; }
+                            });
+                        }
+                    } catch (_) {}
+                }
+
+                const isMatch = isFirstParty || isWordpressAutoMatch || app.redirectUris.some((uri: string) => {
                     const cleanRegistered = uri.trim();
                     const cleanTarget = String(redirect_uri).trim();
                     if (cleanRegistered === '*') return true;
