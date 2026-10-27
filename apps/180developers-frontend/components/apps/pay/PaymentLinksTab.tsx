@@ -16,6 +16,8 @@ import {
   Sparkles,
   Globe,
   QrCode,
+  CheckCircle2,
+  Eye,
 } from 'lucide-react';
 import { Button } from '@workspace/ui';
 import { toast } from 'react-hot-toast';
@@ -236,6 +238,11 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
           {filteredLinks.map((link) => {
             const isSoldOut = link.maxPurchases && link.purchasesCount >= link.maxPurchases;
 
+            const totalCollected = Number(link.totalCollected !== undefined ? link.totalCollected : (link.metadata?.totalCollected ?? (link.purchasesCount * link.amount)));
+            const viewsCount = Number(link.viewsCount !== undefined ? link.viewsCount : (link.metadata?.viewsCount ?? 0));
+            const qualifiedViewsCount = Number(link.qualifiedViewsCount !== undefined ? link.qualifiedViewsCount : (link.metadata?.qualifiedViewsCount ?? 0));
+            const currencySymbol = link.currency === 'INR' ? '₹' : (link.currency === 'USD' ? '$' : (link.currency === 'EUR' ? '€' : link.currency));
+
             return (
               <div
                 key={link.id}
@@ -273,6 +280,41 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
                   <p className="text-xs text-zinc-600 dark:text-zinc-300 line-clamp-2">{link.description}</p>
                 )}
 
+                {/* Link Telemetry: Payments Collected & 3s+ Qualified Views */}
+                <div className="grid grid-cols-3 gap-2 p-3 rounded-xl bg-zinc-50/80 dark:bg-zinc-900/60 border border-zinc-200/70 dark:border-white/5 text-xs">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+                      Collected
+                    </span>
+                    <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 font-mono mt-0.5">
+                      {currencySymbol}{totalCollected.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col border-l border-zinc-200/60 dark:border-white/5 pl-2.5">
+                    <span className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+                      Sales
+                    </span>
+                    <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 font-mono mt-0.5">
+                      {link.purchasesCount} <span className="text-[10px] font-normal text-zinc-400">/ {link.maxPurchases ? link.maxPurchases : '∞'}</span>
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col border-l border-zinc-200/60 dark:border-white/5 pl-2.5">
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+                        Views
+                      </span>
+                      <span className="text-[9px] font-bold text-indigo-500 bg-indigo-500/10 px-1 py-0.2 rounded" title="Visitors who stayed 3 seconds or longer">
+                        3s+
+                      </span>
+                    </div>
+                    <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 font-mono mt-0.5" title={`${viewsCount} total visits (${qualifiedViewsCount} stayed >= 3s)`}>
+                      {qualifiedViewsCount} <span className="text-[10px] font-normal text-zinc-400">/ {viewsCount}</span>
+                    </span>
+                  </div>
+                </div>
+
                 {link.metadata?.multiPricing?.enabled && (
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-500/20 text-[11px] text-indigo-700 dark:text-indigo-300 font-medium">
                     <Globe className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
@@ -291,9 +333,9 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
 
                 <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-white/5 text-xs">
                   <div className="flex items-center gap-2">
-                    <span className="text-zinc-500">Sales:</span>
-                    <span className="font-semibold text-zinc-950 dark:text-white">
-                      {link.purchasesCount} / {link.maxPurchases ? link.maxPurchases : '∞'}
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg">
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      <span>{link.purchasesCount} Accepted</span>
                     </span>
                     {isSoldOut && (
                       <span className="px-2 py-0.5 rounded-full bg-red-500/10 text-red-500 text-[10px] font-bold">

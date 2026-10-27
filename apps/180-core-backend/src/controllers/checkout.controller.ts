@@ -4,6 +4,64 @@ import { Request, Response } from 'express';
 import { CheckoutService, CouponService, GeoPricingService, WebhookDispatcherService, IdentityWalletService } from '@workspace/payment-provider';
 import { developersPrisma as prisma } from '@workspace/db-180core';
 
+/**
+ * Authorizes first-party 180 Core platform origins and hosted payment links.
+ * Platform origins (localhost:3009/3008/3000, *.180.app, *.180core.cloud, etc.)
+ * are internal platform surfaces and are ALWAYS whitelisted across all merchant applications.
+ */
+export function isAuthorizedPlatformOrigin(
+  cleanOrigin: string,
+  appName?: string,
+  sessionMetadata?: any
+): boolean {
+  if (!cleanOrigin) return true;
+
+  // 1. First-party hosted payment link checkouts are always authorized
+  if (
+    sessionMetadata?.paymentLinkId ||
+    sessionMetadata?.paymentLinkSlug ||
+    sessionMetadata?.isPaymentLink ||
+    sessionMetadata?.source === 'PAYMENT_LINK'
+  ) {
+    return true;
+  }
+
+  // 2. Platform master application
+  if (appName === '180 Core') return true;
+
+  // 3. Local development origins for 180 Core ecosystem (Profile, Devs, Landing, API)
+  if (
+    cleanOrigin.startsWith('http://localhost:') ||
+    cleanOrigin.startsWith('https://localhost:') ||
+    cleanOrigin.startsWith('http://127.0.0.1:') ||
+    cleanOrigin.startsWith('https://127.0.0.1:')
+  ) {
+    return true;
+  }
+
+  // 4. Configured platform origins in environment
+  const envOrigins = (process.env.CORE_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((o) => o.trim().toLowerCase().replace(/\/$/, ''))
+    .filter(Boolean);
+  if (envOrigins.includes(cleanOrigin)) return true;
+
+  // 5. Official production & staging ecosystem domains
+  const platformSuffixes = [
+    '180core.cloud',
+    '180.app',
+    '180profile.com',
+    '180pay.com',
+    '180developers.com',
+    '.vercel.app',
+  ];
+  if (platformSuffixes.some((s) => cleanOrigin.endsWith(s) || cleanOrigin.includes(`.${s}`))) {
+    return true;
+  }
+
+  return false;
+}
+
 export class CheckoutApiController {
   /**
    * POST /api/v1/checkout/sessions
@@ -202,7 +260,7 @@ export class CheckoutApiController {
             return false;
           }
         }));
-        const isPlatform = app.name === '180 Core' || cleanOrigin.endsWith('180core.cloud');
+        const isPlatform = isAuthorizedPlatformOrigin(cleanOrigin, app.name, metadata);
 
         if (!isOriginAllowed && !isPlatform) {
           return res.status(403).json({
@@ -482,7 +540,7 @@ export class CheckoutApiController {
             }
           }));
 
-          const isPlatform = app.name === '180 Core' || cleanOrigin.endsWith('180core.cloud');
+          const isPlatform = isAuthorizedPlatformOrigin(cleanOrigin, app.name, (session as any)?.metadata);
           if (!isAllowed && !isPlatform) {
             return res.status(403).json({
               success: false,

@@ -13,6 +13,8 @@ import {
   DollarSign,
   Package,
   CheckCircle2,
+  Eye,
+  TrendingUp,
 } from 'lucide-react';
 import { PlatformDrawer, Button } from '@workspace/ui';
 import { toast } from 'react-hot-toast';
@@ -35,6 +37,9 @@ export interface PaymentLinkItem {
   fulfillmentFileUrl?: string;
   metadata?: Record<string, any>;
   createdAt: string;
+  totalCollected?: number;
+  viewsCount?: number;
+  qualifiedViewsCount?: number;
 }
 
 export interface PaymentLinkDrawerProps {
@@ -380,6 +385,42 @@ export function PaymentLinkDrawer({
       {/* TAB 1: LINK CONFIGURATION */}
       {activeTab === 'LINK' && (
         <form onSubmit={handleSubmit} className="space-y-5">
+          {currentLink && (
+            <div className="grid grid-cols-3 gap-2 p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/80 dark:border-white/10 text-xs shadow-xs">
+              <div>
+                <span className="block text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+                  Total Collected
+                </span>
+                <span className="font-extrabold text-emerald-600 dark:text-emerald-400 font-mono text-sm">
+                  {currentLink.currency === 'INR' ? '₹' : '$'}
+                  {Number(currentLink.totalCollected !== undefined ? currentLink.totalCollected : (currentLink.metadata?.totalCollected ?? (currentLink.purchasesCount * currentLink.amount))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="border-l border-zinc-200 dark:border-white/10 pl-3">
+                <span className="block text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+                  Payments
+                </span>
+                <span className="font-bold text-zinc-900 dark:text-zinc-100 font-mono text-sm">
+                  {currentLink.purchasesCount} <span className="text-[11px] font-normal text-zinc-400">/ {currentLink.maxPurchases || '∞'}</span>
+                </span>
+              </div>
+              <div className="border-l border-zinc-200 dark:border-white/10 pl-3">
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
+                    Views
+                  </span>
+                  <span className="text-[9px] font-medium text-indigo-500 bg-indigo-500/10 px-1 rounded" title="Visitor stayed 3 seconds or longer">
+                    3s+
+                  </span>
+                </div>
+                <span className="font-bold text-indigo-600 dark:text-indigo-400 font-mono text-sm" title="Qualified views where user stayed >= 3s">
+                  {currentLink.qualifiedViewsCount ?? currentLink.metadata?.qualifiedViewsCount ?? 0}
+                  <span className="text-[11px] font-normal text-zinc-400"> / {currentLink.viewsCount ?? currentLink.metadata?.viewsCount ?? 0}</span>
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Item Title */}
           <div>
             <label className="block text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5">

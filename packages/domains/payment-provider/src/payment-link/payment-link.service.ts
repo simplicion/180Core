@@ -311,7 +311,7 @@ export class PaymentLinkService {
   /**
    * 3. Completes payment on a link, atomically increments counter, and reveals fulfillment assets.
    */
-  static async completeLinkPurchase(linkId: string, sessionId: string): Promise<FulfillmentResult> {
+  static async completeLinkPurchase(linkId: string, sessionId: string, paidAmount?: number): Promise<FulfillmentResult> {
     const result = await prisma.$transaction(async (tx: any) => {
       // Atomic increment with conditional capacity check
       const affectedRows = await tx.$executeRaw`
@@ -338,7 +338,24 @@ export class PaymentLinkService {
           fulfillmentMessage: true,
           fulfillmentFileUrl: true,
           redirectUrl: true,
+          metadata: true,
         },
+      });
+
+      // Update totalCollected and successful payments in metadata
+      const currentMeta = (link?.metadata as any) || {};
+      const amountToAdd = Number(paidAmount) || Number(link?.amount) || 0;
+      const updatedTotalCollected = (Number(currentMeta.totalCollected) || 0) + amountToAdd;
+      const updatedMeta = {
+        ...currentMeta,
+        totalCollected: updatedTotalCollected,
+        lastPurchasedAt: new Date().toISOString(),
+        lastSessionId: sessionId,
+      };
+
+      await tx.paymentLink.update({
+        where: { id: linkId },
+        data: { metadata: updatedMeta },
       });
 
       return {
@@ -440,7 +457,7 @@ export class PaymentLinkService {
   }
 
   /**
-   * 6. Developer Management: List Payment Links
+   * 6. Developer Management: List Payment Links with rich metrics
    */
   static async listPaymentLinks(appId: string, options?: { page?: number; limit?: number }) {
     const targetAppId = await resolveAppId(appId);
@@ -464,8 +481,21 @@ export class PaymentLinkService {
       }),
     ]);
 
+    const enrichedLinks = links.map((link: any) => {
+      const meta = (link.metadata as any) || {};
+      const totalCollected = Number(meta.totalCollected) || (Number(link.purchasesCount || 0) * Number(link.amount || 0));
+      const viewsCount = Number(meta.viewsCount) || 0;
+      const qualifiedViewsCount = Number(meta.qualifiedViewsCount) || 0;
+      return {
+        ...link,
+        totalCollected,
+        viewsCount,
+        qualifiedViewsCount,
+      };
+    });
+
     return {
-      links,
+      links: enrichedLinks,
       total,
       page,
       limit,
@@ -474,7 +504,7 @@ export class PaymentLinkService {
   }
 
   /**
-   * 7. Developer Management: Fetch single link by ID
+   * 7. Developer Management: Fetch single link by ID with metrics
    */
   static async getPaymentLinkById(appId: string, linkId: string) {
     const targetAppId = await resolveAppId(appId);
@@ -489,7 +519,69 @@ export class PaymentLinkService {
       throw new Error('Payment link not found');
     }
 
-    return link;
+    const meta = (link.metadata as any) || {};
+    const totalCollected = Number(meta.totalCollected) || (Number(link.purchasesCount || 0) * Number(link.amount || 0));
+    const viewsCount = Number(meta.viewsCount) || 0;
+    const qualifiedViewsCount = Number(meta.qualifiedViewsCount) || 0;
+
+    return {
+      ...link,
+      totalCollected,
+      viewsCount,
+      qualifiedViewsCount,
+    };
+  }
+
+  /**
+   * 8. Records telemetry: page views and 3-second qualified engagements for a payment link.
+   */
+  static async recordLinkView(slug: string, isQualified: boolean = false) {
+    const cleanSlug = (slug || '').trim().toLowerCase();
+    if (!cleanSlug || cleanSlug === 'preview-link' || cleanSlug === 'default') return null;
+
+    try {
+      const link = await (prisma as any).paymentLink.findUnique({
+        where: { slug: cleanSlug },
+        select: { id: true, metadata: true },
+      });
+      if (!link) return null;
+
+      const meta = (link.metadata as any) || {};
+      const currentViews = Number(meta.viewsCount) || 0;
+      const currentQualified = Number(meta.qualifiedViewsCount) || 0;
+
+      let newViews = currentViews;
+      let newQualified = currentQualified;
+
+      if (isQualified) {
+        newQualified = currentQualified + 1;
+        if (newViews < newQualified) {
+          newViews = newQualified;
+        }
+      } else {
+        newViews = currentViews + 1;
+      }
+
+      const updatedMeta = {
+        ...meta,
+        viewsCount: newViews,
+        qualifiedViewsCount: newQualified,
+        lastViewedAt: new Date().toISOString(),
+      };
+
+      await (prisma as any).paymentLink.update({
+        where: { id: link.id },
+        data: { metadata: updatedMeta },
+      });
+
+      return {
+        viewsCount: newViews,
+        qualifiedViewsCount: newQualified,
+      };
+    } catch (err: any) {
+      console.warn('[PaymentLinkService:recordLinkView] Error tracking view:', err?.message);
+      return null;
+    }
   }
 
   /**

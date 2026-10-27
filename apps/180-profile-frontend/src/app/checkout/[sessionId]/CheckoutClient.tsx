@@ -977,16 +977,20 @@ export function CheckoutClient({
           sessionInfo = sessionData.data || sessionData.session;
           setDomainError(null);
         } else if (sessionData && (sessionData.error === 'forbidden_origin' || sessionData.details?.type === 'ORIGIN_NOT_ALLOWED' || sessionData.details?.type === 'REDIRECT_URI_MISMATCH')) {
-          caughtDomainError = {
-            type: sessionData.details?.type || 'ORIGIN_NOT_ALLOWED',
-            origin: sessionData.details?.origin || (typeof window !== 'undefined' ? window.location.origin : ''),
-            appName: sessionData.details?.appName || 'Merchant Application',
-            clientId: sessionData.details?.clientId,
-            allowedOrigins: sessionData.details?.allowedOrigins || [],
-            registeredUris: sessionData.details?.registeredUris || [],
-            message: sessionData.message || sessionData.error,
-          };
-          setDomainError(caughtDomainError);
+          const currentOrigin = typeof window !== 'undefined' ? window.location.origin.toLowerCase() : '';
+          const isPlatformHost = currentOrigin.includes('localhost:') || currentOrigin.includes('127.0.0.1:') || currentOrigin.includes('180.app') || currentOrigin.includes('180profile.com') || currentOrigin.includes('180core.cloud');
+          if (!isPlatformHost) {
+            caughtDomainError = {
+              type: sessionData.details?.type || 'ORIGIN_NOT_ALLOWED',
+              origin: sessionData.details?.origin || currentOrigin,
+              appName: sessionData.details?.appName || 'Merchant Application',
+              clientId: sessionData.details?.clientId,
+              allowedOrigins: sessionData.details?.allowedOrigins || [],
+              registeredUris: sessionData.details?.registeredUris || [],
+              message: sessionData.message || sessionData.error,
+            };
+            setDomainError(caughtDomainError);
+          }
         }
       } catch (_) {}
 
@@ -2759,7 +2763,7 @@ export function CheckoutClient({
             <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] text-slate-500 dark:text-zinc-400 pt-1">
               <span className="flex items-center gap-1 font-medium">
                 <ShieldCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                256-bit Encrypted
+                End-to-End Encrypted
               </span>
               <span>•</span>
               <span className="flex items-center gap-1 font-medium">

@@ -27,6 +27,22 @@ export class PaymentLinkApiController {
   }
 
   /**
+   * POST /api/v1/payment-links/public/:slug/view
+   * Public telemetry endpoint: Records total views and 3-second qualified engagements.
+   */
+  static async recordLinkView(req: Request, res: Response) {
+    try {
+      const slug = String(req.params.slug);
+      const isQualified = Boolean(req.body.qualified || req.body.isQualified);
+      const data = await PaymentLinkService.recordLinkView(slug, isQualified);
+      return res.status(200).json({ success: true, data });
+    } catch (err: any) {
+      console.warn('[PaymentLinkApiController:recordLinkView] Error:', err);
+      return res.status(200).json({ success: false, error: err.message });
+    }
+  }
+
+  /**
    * GET /api/v1/payment-links/apps/:appId
    * Developer endpoint: List all payment links for an app.
    */

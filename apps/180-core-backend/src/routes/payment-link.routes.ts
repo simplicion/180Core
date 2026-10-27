@@ -9,6 +9,9 @@ const router = express.Router();
 // Public checkout resolution & fulfillment
 router.get('/public/:slug', PaymentLinkApiController.getPublicPaymentLink);
 router.get('/slug/:slug', PaymentLinkApiController.getPublicPaymentLink);
+router.post('/public/:slug/view', PaymentLinkApiController.recordLinkView);
+router.post('/slug/:slug/view', PaymentLinkApiController.recordLinkView);
+router.post('/:slug/view', PaymentLinkApiController.recordLinkView);
 router.get('/:id/fulfillment', PaymentLinkApiController.getFulfillment);
 router.post('/:id/complete', PaymentLinkApiController.completePaymentLink);
 
