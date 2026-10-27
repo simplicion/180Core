@@ -45,6 +45,17 @@ import { OneEightyCoreLogo } from '@/components/OneEightyCoreLogo';
 import ThemeToggle from '@/components/ThemeToggle';
 import { purgeAuthSession, getStoredAuthToken } from '@/lib/auth';
 import { getAppSlug } from '@/lib/slug';
+import dynamic from 'next/dynamic';
+
+const ApiPlaygroundTab = dynamic(() => import('@/components/dashboard/ApiPlaygroundTab'), {
+  loading: () => <AdaptiveSkeleton screen="developer-dashboard" />,
+  ssr: false,
+});
+
+const WebhookSimulatorTab = dynamic(() => import('@/components/dashboard/WebhookSimulatorTab'), {
+  loading: () => <AdaptiveSkeleton screen="developer-dashboard" />,
+  ssr: false,
+});
 
 export interface DeveloperBillingStatus {
   totalProjects: number;
@@ -126,7 +137,6 @@ function DeveloperDashboardContent() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'confidential' | 'public'>('all');
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
 
   const CORE_CLIENT_ID =
@@ -295,7 +305,7 @@ function DeveloperDashboardContent() {
     return process.env.NEXT_PUBLIC_CORE_BACKEND_URL || 'https://api.180core.cloud';
   };
 
-  const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 5000): Promise<Response | null> => {
+  const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 15000): Promise<Response | null> => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -342,40 +352,71 @@ function DeveloperDashboardContent() {
       } catch (_) {}
     }
 
+    // Fast-path optimistic auth: Decode JWT or load cached user immediately to render in 0ms
+    let optimisticUser: any = null;
+    try {
+      const cachedUserStr = localStorage.getItem('user');
+      if (cachedUserStr) {
+        optimisticUser = JSON.parse(cachedUserStr);
+      } else {
+        const parts = token.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(atob(parts[1]));
+          optimisticUser = {
+            id: payload.sub || payload.id,
+            name: payload.name || payload.email || 'Developer',
+            email: payload.email,
+            username: payload.username,
+          };
+        }
+      }
+    } catch (_) {}
+
+    if (optimisticUser) {
+      setUserProfile(optimisticUser);
+      setIsAuthenticated(true);
+    }
+
     try {
       const apiBase = getApiBase();
 
-      // Step 1: Verify token via userinfo
-      const uRes = await fetchWithTimeout(`${apiBase}/api/oauth/userinfo`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      // Parallelize userinfo, apps, and billing status requests to eliminate sequential waterfall
+      const [uRes, appsRes, billingRes] = await Promise.all([
+        fetchWithTimeout(`${apiBase}/api/oauth/userinfo`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }, 15000),
+        fetchWithTimeout(`${apiBase}/api/v1/identity/developer/apps`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }, 15000),
+        fetchWithTimeout(`${apiBase}/api/v1/identity/developer/billing/status`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }, 15000),
+      ]);
 
-      let user: any = null;
-
+      // Check User Authentication Result
       if (uRes && uRes.ok) {
-        user = await uRes.json();
+        const verifiedUser = await uRes.json();
+        setUserProfile(verifiedUser);
+        setIsAuthenticated(true);
+        localStorage.setItem('user', JSON.stringify(verifiedUser));
       } else if (uRes && uRes.status === 401) {
-        localStorage.removeItem('platform_auth_token');
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('token');
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('user');
-        document.cookie = 'platform_auth_token=; path=/; max-age=0;';
+        purgeAuthSession();
         setIsAuthenticated(false);
         setUserProfile(null);
         setApps([]);
         setLoading(false);
         return;
-      }
-
-      // Step 2: Fallback to /me
-      if (!user) {
+      } else if (!optimisticUser) {
+        // Fallback to /me if userinfo didn't respond and we had no optimistic user
         const meRes = await fetchWithTimeout(`${apiBase}/api/v1/auth/me`, {
           headers: { Authorization: `Bearer ${token}` },
-        });
+        }, 10000);
         if (meRes && meRes.ok) {
           const meData = await meRes.json();
-          user = meData.user || meData;
+          const meUser = meData.user || meData;
+          setUserProfile(meUser);
+          setIsAuthenticated(true);
+          localStorage.setItem('user', JSON.stringify(meUser));
         } else if (meRes && meRes.status === 401) {
           purgeAuthSession();
           setIsAuthenticated(false);
@@ -386,48 +427,7 @@ function DeveloperDashboardContent() {
         }
       }
 
-      // Step 3: Fallback to decode JWT client-side or check cached user
-      if (!user) {
-        try {
-          const parts = token.split('.');
-          if (parts.length === 3) {
-            const payload = JSON.parse(atob(parts[1]));
-            user = {
-              id: payload.sub || payload.id,
-              name: payload.name || payload.email || 'Developer',
-              email: payload.email,
-              username: payload.username,
-            };
-          } else {
-            const cachedUserStr = localStorage.getItem('user');
-            if (cachedUserStr) {
-              user = JSON.parse(cachedUserStr);
-            }
-          }
-        } catch (_) {}
-      }
-
-      if (user) {
-        setUserProfile(user);
-        setIsAuthenticated(true);
-        localStorage.setItem('user', JSON.stringify(user));
-      } else {
-        setIsAuthenticated(false);
-        setLoading(false);
-        return;
-      }
-
-      // Step 4: Fetch Apps & Developer Billing Status in Parallel
-      let parsedApps: DeveloperApp[] = [];
-      const [appsRes, billingRes] = await Promise.all([
-        fetchWithTimeout(`${apiBase}/api/v1/identity/developer/apps`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetchWithTimeout(`${apiBase}/api/v1/identity/developer/billing/status`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      ]);
-
+      // Handle Billing Status Result
       if (billingRes && billingRes.ok) {
         try {
           const bData = await billingRes.json();
@@ -437,6 +437,8 @@ function DeveloperDashboardContent() {
         } catch (_) {}
       }
 
+      // Handle Apps Result
+      let parsedApps: DeveloperApp[] = [];
       if (appsRes && appsRes.ok) {
         const data = await appsRes.json();
         parsedApps = (data.apps || data || []).map((app: any) => ({
@@ -451,9 +453,10 @@ function DeveloperDashboardContent() {
           },
         }));
       } else {
+        // Fallback apps endpoint if primary endpoint failed or timed out
         const altAppsRes = await fetchWithTimeout(`${apiBase}/api/oauth/developer/apps`, {
           headers: { Authorization: `Bearer ${token}` },
-        });
+        }, 10000);
         if (altAppsRes && altAppsRes.ok) {
           const altData = await altAppsRes.json();
           parsedApps = (altData.apps || altData || []).map((app: any) => ({
@@ -911,15 +914,9 @@ function DeveloperDashboardContent() {
       const matchesSearch =
         app.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         app.clientId.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesType =
-        filterType === 'all'
-          ? true
-          : filterType === 'public'
-          ? app.clientType === 'public'
-          : app.clientType !== 'public';
-      return matchesSearch && matchesType;
+      return matchesSearch;
     });
-  }, [apps, searchQuery, filterType]);
+  }, [apps, searchQuery]);
 
   // Tab Title Map
   const tabTitles: Record<string, string> = {
@@ -1094,41 +1091,7 @@ function DeveloperDashboardContent() {
                   />
                 </div>
 
-                <div className="flex items-center gap-1.5 p-1 bg-white dark:bg-[#101012] border border-zinc-200/80 dark:border-white/10 rounded-2xl">
-                  <button
-                    type="button"
-                    onClick={() => setFilterType('all')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer min-h-[36px] ${
-                      filterType === 'all'
-                        ? 'bg-blue-600 text-white'
-                        : 'text-zinc-500 hover:text-zinc-950 dark:hover:text-white'
-                    }`}
-                  >
-                    All
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterType('confidential')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer min-h-[36px] ${
-                      filterType === 'confidential'
-                        ? 'bg-blue-600 text-white'
-                        : 'text-zinc-500 hover:text-zinc-950 dark:hover:text-white'
-                    }`}
-                  >
-                    Confidential
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterType('public')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer min-h-[36px] ${
-                      filterType === 'public'
-                        ? 'bg-blue-600 text-white'
-                        : 'text-zinc-500 hover:text-zinc-950 dark:hover:text-white'
-                    }`}
-                  >
-                    Public (PKCE)
-                  </button>
-                </div>
+
 
                 {/* + New Project Action Button */}
                 <Button
@@ -1293,253 +1256,42 @@ function DeveloperDashboardContent() {
 
 
           {/* ─────────────────────────────────────────────────────────────────────────
-              TAB 5: API PLAYGROUND & SANDBOX
+              TAB 5: API PLAYGROUND & SANDBOX (Code-Split / Lazy Loaded)
               ───────────────────────────────────────────────────────────────────────── */}
           {activeTab === 'playground' && (
-            <div className="space-y-6 animate-in fade-in duration-200">
-              <div className="space-y-1">
-                <h2 className="text-2xl font-bold tracking-tight text-zinc-950 dark:text-white flex items-center gap-2">
-                  <Code2 className="w-6 h-6 text-amber-500" />
-                  <span>Interactive API Playground</span>
-                </h2>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  Live in-browser sandbox to test token validation, userinfo introspection, and RFC 7636 PKCE challenges.
-                </p>
-              </div>
-
-              {/* Playground Controls */}
-              <div className="rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#101012] p-6 space-y-5">
-                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-200/60 dark:border-white/5 pb-4">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setPlaygroundSubTab('userinfo')}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-                        playgroundSubTab === 'userinfo'
-                          ? 'bg-blue-600 text-white'
-                          : 'text-zinc-500 hover:text-zinc-950 dark:hover:text-white'
-                      }`}
-                    >
-                      /api/oauth/userinfo
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPlaygroundSubTab('pkce')}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-                        playgroundSubTab === 'pkce'
-                          ? 'bg-blue-600 text-white'
-                          : 'text-zinc-500 hover:text-zinc-950 dark:hover:text-white'
-                      }`}
-                    >
-                      PKCE Generator
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPlaygroundSubTab('token')}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
-                        playgroundSubTab === 'token'
-                          ? 'bg-blue-600 text-white'
-                          : 'text-zinc-500 hover:text-zinc-950 dark:hover:text-white'
-                      }`}
-                    >
-                      JWT Inspector
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-zinc-500">Target App:</span>
-                    <select
-                      value={playgroundSelectedAppId}
-                      onChange={(e) => setPlaygroundSelectedAppId(e.target.value)}
-                      className="px-3 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs text-zinc-900 dark:text-white font-medium"
-                    >
-                      {apps.map((app) => (
-                        <option key={app.id} value={app.id}>
-                          {app.name} ({app.clientId.slice(0, 16)}...)
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {playgroundSubTab === 'userinfo' && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-zinc-500">
-                        Sends a Bearer token authorization request to retrieve authentic RS256 verified user claims.
-                      </p>
-                      <Button
-                        onClick={handleRunPlaygroundTest}
-                        disabled={playgroundLoading}
-                        size="sm"
-                        className="rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs"
-                      >
-                        {playgroundLoading ? (
-                          <LogoLoader className="w-4 h-4 animate-spin text-white" />
-                        ) : (
-                          <Send className="w-3.5 h-3.5 mr-1.5" />
-                        )}
-                        <span>Execute Request</span>
-                      </Button>
-                    </div>
-
-                    {playgroundOutput && (
-                      <pre className="p-4 rounded-2xl bg-zinc-950 text-emerald-400 font-mono text-xs border border-white/5 overflow-x-auto select-all">
-                        {JSON.stringify(playgroundOutput, null, 2)}
-                      </pre>
-                    )}
-                  </div>
-                )}
-
-                {playgroundSubTab === 'pkce' && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-zinc-500">
-                        Generate cryptographic <code className="font-mono text-blue-500">code_verifier</code> and{' '}
-                        <code className="font-mono text-blue-500">code_challenge</code> for public clients (Flutter, React Native, SPAs).
-                      </p>
-                      <Button
-                        onClick={handleGeneratePkce}
-                        size="sm"
-                        className="rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-                        <span>Generate Keypair</span>
-                      </Button>
-                    </div>
-
-                    {pkceVerifier && (
-                      <div className="space-y-2 font-mono text-xs">
-                        <div className="p-3 rounded-xl bg-zinc-950 text-zinc-200 border border-white/5">
-                          <span className="text-[10px] text-zinc-500 block font-sans">code_verifier (Private)</span>
-                          <span className="text-emerald-400 select-all">{pkceVerifier}</span>
-                        </div>
-                        <div className="p-3 rounded-xl bg-zinc-950 text-zinc-200 border border-white/5">
-                          <span className="text-[10px] text-zinc-500 block font-sans">code_challenge (SHA256 URL-Safe)</span>
-                          <span className="text-blue-400 select-all">{pkceChallenge}</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {playgroundSubTab === 'token' && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-zinc-500">
-                        Inspect active token bundle structure and expiration lifecycle.
-                      </p>
-                      <Button
-                        onClick={handleRunPlaygroundTest}
-                        size="sm"
-                        className="rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs"
-                      >
-                        <span>Decode Active Token</span>
-                      </Button>
-                    </div>
-
-                    {playgroundOutput && (
-                      <pre className="p-4 rounded-2xl bg-zinc-950 text-purple-400 font-mono text-xs border border-white/5 overflow-x-auto select-all">
-                        {JSON.stringify(playgroundOutput, null, 2)}
-                      </pre>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
+            <ApiPlaygroundTab
+              apps={apps}
+              playgroundSelectedAppId={playgroundSelectedAppId}
+              setPlaygroundSelectedAppId={setPlaygroundSelectedAppId}
+              playgroundSubTab={playgroundSubTab}
+              setPlaygroundSubTab={setPlaygroundSubTab}
+              playgroundLoading={playgroundLoading}
+              playgroundOutput={playgroundOutput}
+              handleRunPlaygroundTest={handleRunPlaygroundTest}
+              handleGeneratePkce={handleGeneratePkce}
+              pkceVerifier={pkceVerifier}
+              pkceChallenge={pkceChallenge}
+            />
           )}
 
           {/* ─────────────────────────────────────────────────────────────────────────
-              TAB 6: WEBHOOK SIMULATOR
+              TAB 6: WEBHOOK SIMULATOR (Code-Split / Lazy Loaded)
               ───────────────────────────────────────────────────────────────────────── */}
           {activeTab === 'webhooks' && (
-            <div className="space-y-6 animate-in fade-in duration-200">
-              <div className="space-y-1">
-                <h2 className="text-2xl font-bold tracking-tight text-zinc-950 dark:text-white flex items-center gap-2">
-                  <Webhook className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-                  <span>Webhook Dispatch Simulator</span>
-                </h2>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  Simulate live events and test HMAC-SHA256 signature verification directly against your backend receiver.
-                </p>
-              </div>
-
-              <div className="rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#101012] p-6 space-y-5">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Target Application</label>
-                    <select
-                      value={simWebhookAppId}
-                      onChange={(e) => {
-                        setSimWebhookAppId(e.target.value);
-                        const a = apps.find((app) => app.id === e.target.value);
-                        if (a?.webhookUrl) setSimWebhookUrl(a.webhookUrl);
-                      }}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs text-zinc-900 dark:text-white font-medium"
-                    >
-                      {apps.map((app) => (
-                        <option key={app.id} value={app.id}>
-                          {app.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Event Type</label>
-                    <select
-                      value={simEventType}
-                      onChange={(e: any) => setSimEventType(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs text-zinc-900 dark:text-white font-medium"
-                    >
-                      <option value="payment.captured">payment.captured (180 Pay)</option>
-                      <option value="payment.failed">payment.failed (180 Pay)</option>
-                      <option value="identity.user_authorized">identity.user_authorized (180 Identity)</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Webhook Receiver URL</label>
-                  <input
-                    type="url"
-                    value={simWebhookUrl}
-                    onChange={(e) => setSimWebhookUrl(e.target.value)}
-                    placeholder="https://api.yourdomain.com/webhooks/180"
-                    className="w-full px-4 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs font-mono text-zinc-900 dark:text-white focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-
-                <Button
-                  onClick={handleSimulateWebhook}
-                  disabled={simIsSending}
-                  className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md shadow-purple-500/20 flex items-center justify-center gap-2"
-                >
-                  {simIsSending ? <LogoLoader className="w-4 h-4 animate-spin text-white" /> : <Send className="w-4 h-4" />}
-                  <span>Dispatch Simulated Webhook</span>
-                </Button>
-
-                {simResult && (
-                  <div className="p-4 rounded-2xl bg-zinc-950 border border-purple-500/30 space-y-3 font-mono text-xs">
-                    <div className="flex items-center justify-between text-purple-400 font-bold font-sans">
-                      <span className="flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Dispatch Result ({simResult.statusCode} OK)
-                      </span>
-                      <span className="text-[11px] text-zinc-400">Latency: {simResult.latencyMs}ms</span>
-                    </div>
-
-                    <div className="space-y-1 text-zinc-400 text-[11px]">
-                      <div>Header: <span className="text-zinc-200 select-all">{simResult.signatureHeader}</span></div>
-                    </div>
-
-                    <pre className="p-3 bg-black/70 rounded-xl text-zinc-300 overflow-x-auto border border-white/5 select-all">
-                      {simResult.responseBody}
-                    </pre>
-                  </div>
-                )}
-              </div>
-            </div>
+            <WebhookSimulatorTab
+              apps={apps}
+              simWebhookAppId={simWebhookAppId}
+              setSimWebhookAppId={setSimWebhookAppId}
+              simWebhookUrl={simWebhookUrl}
+              setSimWebhookUrl={setSimWebhookUrl}
+              simEventType={simEventType}
+              setSimEventType={setSimEventType}
+              handleSimulateWebhook={handleSimulateWebhook}
+              simIsSending={simIsSending}
+              simResult={simResult}
+            />
           )}
+
 
         </main>
       </div>
@@ -1585,57 +1337,7 @@ function DeveloperDashboardContent() {
           {/* Project Logo Upload */}
           <AppLogoUploader logoUrl={createLogoUrl} onChange={setCreateLogoUrl} />
 
-          {/* Optional Webhook URL */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-              Payment Webhook URL (Optional)
-            </label>
-            <input
-              type="url"
-              placeholder="https://api.myapp.com/webhooks/180-pay"
-              value={createWebhookUrl}
-              onChange={(e) => setCreateWebhookUrl(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs text-zinc-900 dark:text-white font-mono focus:outline-none focus:border-blue-500 transition-colors"
-            />
-          </div>
 
-          {/* Client Type Selector */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-              Application Type
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setClientType('confidential')}
-                className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer min-h-[44px] ${
-                  clientType === 'confidential'
-                    ? 'bg-blue-50 dark:bg-blue-600/10 border-blue-500 text-blue-900 dark:text-white'
-                    : 'bg-zinc-50 dark:bg-zinc-900/50 border-zinc-200 dark:border-white/10 text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white'
-                }`}
-              >
-                <div className="font-semibold text-xs text-zinc-900 dark:text-white">Confidential Client</div>
-                <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  Web apps with secure backends (Node, Next, Python)
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setClientType('public')}
-                className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer min-h-[44px] ${
-                  clientType === 'public'
-                    ? 'bg-blue-50 dark:bg-blue-600/10 border-blue-500 text-blue-900 dark:text-white'
-                    : 'bg-zinc-50 dark:bg-zinc-900/50 border-zinc-200 dark:border-white/10 text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white'
-                }`}
-              >
-                <div className="font-semibold text-xs text-zinc-900 dark:text-white">Public Client (PKCE)</div>
-                <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                  Mobile (Flutter, iOS, Android) or SPAs
-                </div>
-              </button>
-            </div>
-          </div>
 
           {/* Redirect URIs */}
           <div className="space-y-1.5">

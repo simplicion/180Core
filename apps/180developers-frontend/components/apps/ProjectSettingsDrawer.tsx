@@ -156,12 +156,12 @@ export function ProjectSettingsDrawer({
                   Client Secret
                 </label>
                 <span className="text-[10px] font-mono text-amber-600 dark:text-amber-400 font-medium">
-                  Confidential
+                  Keep Private
                 </span>
               </div>
               <div className="flex items-center gap-2 p-2.5 rounded-xl bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-white/10 font-mono text-xs text-zinc-500 dark:text-zinc-400">
                 <span className="flex-1 truncate">
-                  {app.clientSecretHint ? `••••••••••••${app.clientSecretHint}` : 'Public PKCE Client'}
+                  {app.clientSecretHint ? `••••••••••••${app.clientSecretHint}` : '••••••••••••••••'}
                 </span>
                 {app.clientSecretHint && onRotateSecretClick && (
                   <button
