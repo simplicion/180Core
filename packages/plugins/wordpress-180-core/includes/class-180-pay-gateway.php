@@ -23,21 +23,26 @@ class OneEighty_Pay_Gateway_Module {
         add_filter('woocommerce_payment_gateways', array($this, 'register_gateway'));
 
         // Initialize gateway class when plugins loaded
-        add_action('plugins_loaded', array($this, 'init_gateway_class'));
+        add_action('plugins_loaded', 'one_eighty_init_wc_gateway_class');
     }
 
     public function register_gateway($gateways) {
         $gateways[] = 'WC_Gateway_180_Pay';
         return $gateways;
     }
+}
 
-    public function init_gateway_class() {
-        if (!class_exists('WC_Payment_Gateway')) {
-            return;
-        }
+function one_eighty_init_wc_gateway_class() {
+    if (!class_exists('WC_Payment_Gateway')) {
+        return;
+    }
 
-        class WC_Gateway_180_Pay extends WC_Payment_Gateway {
-            public function __construct() {
+    if (class_exists('WC_Gateway_180_Pay')) {
+        return;
+    }
+
+    class WC_Gateway_180_Pay extends WC_Payment_Gateway {
+        public function __construct() {
                 $this->id                 = '180pay';
                 $this->icon               = ONE_EIGHTY_CORE_PLUGIN_URL . 'assets/180-pay-badge.svg';
                 $this->has_fields         = false;
@@ -175,8 +180,10 @@ class OneEighty_Pay_Gateway_Module {
                 $order->add_order_note(sprintf(__('180 Pay checkout session initiated: %s', '180-core'), $session_id));
                 $order->save();
 
-                // Empty cart
-                WC()->cart->empty_cart();
+                // Empty cart safely if available
+                if (function_exists('WC') && WC()->cart) {
+                    WC()->cart->empty_cart();
+                }
 
                 return array(
                     'result'   => 'success',
@@ -189,23 +196,33 @@ class OneEighty_Pay_Gateway_Module {
                 if (empty($raw_body)) {
                     status_header(400);
                     echo 'Missing body';
-                    exit;
+                    if (!defined('ONE_EIGHTY_TEST_MODE')) {
+                        exit;
+                    }
+                    return;
                 }
 
                 $data = json_decode($raw_body, true);
                 if (!$data) {
                     status_header(400);
                     echo 'Invalid JSON';
-                    exit;
+                    if (!defined('ONE_EIGHTY_TEST_MODE')) {
+                        exit;
+                    }
+                    return;
                 }
 
                 $event = isset($data['event']) ? $data['event'] : '';
                 $payload = isset($data['data']) ? $data['data'] : $data;
 
-                // Extract Order ID from metadata
+                // Extract Order ID from metadata or root payload
                 $order_id = null;
                 if (!empty($payload['metadata']['order_id'])) {
                     $order_id = intval($payload['metadata']['order_id']);
+                } elseif (!empty($payload['orderId'])) {
+                    $order_id = intval($payload['orderId']);
+                } elseif (!empty($payload['order_id'])) {
+                    $order_id = intval($payload['order_id']);
                 }
 
                 if (!$order_id && !empty($payload['sessionId'])) {
@@ -223,14 +240,20 @@ class OneEighty_Pay_Gateway_Module {
                 if (!$order_id) {
                     status_header(200);
                     echo 'No matching order found';
-                    exit;
+                    if (!defined('ONE_EIGHTY_TEST_MODE')) {
+                        exit;
+                    }
+                    return;
                 }
 
                 $order = wc_get_order($order_id);
                 if (!$order) {
                     status_header(200);
                     echo 'Order not found';
-                    exit;
+                    if (!defined('ONE_EIGHTY_TEST_MODE')) {
+                        exit;
+                    }
+                    return;
                 }
 
                 if ($event === 'payment.succeeded' || (isset($payload['status']) && $payload['status'] === 'COMPLETED')) {
@@ -249,7 +272,10 @@ class OneEighty_Pay_Gateway_Module {
 
                 status_header(200);
                 echo 'Webhook processed';
-                exit;
+                if (!defined('ONE_EIGHTY_TEST_MODE')) {
+                    exit;
+                }
+                return;
             }
 
             public function process_refund($order_id, $amount = null, $reason = '') {
@@ -264,4 +290,4 @@ class OneEighty_Pay_Gateway_Module {
             }
         }
     }
-}
+

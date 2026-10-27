@@ -175,7 +175,9 @@ class OneEighty_Identity_Module {
 
         // Redirect
         wp_safe_redirect($redirect_to);
-        exit;
+        if (!defined('ONE_EIGHTY_TEST_MODE')) {
+            exit;
+        }
     }
 
     private function exchange_code_for_user($code) {

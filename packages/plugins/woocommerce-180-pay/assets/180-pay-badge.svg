@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="32" viewBox="0 0 120 32" fill="none">
+  <rect width="120" height="32" rx="6" fill="#09090B"/>
+  <rect x="0.5" y="0.5" width="119" height="31" rx="5.5" stroke="#27272A"/>
+  <g transform="translate(10, 7)">
+    <path d="M9 1L1 5L9 9L17 5L9 1Z" stroke="#818CF8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M1 13L9 17L17 13" stroke="#818CF8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M1 9L9 13L17 9" stroke="#818CF8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="36" y="20" fill="#FFFFFF" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="12" font-weight="700" letter-spacing="0.5">180 PAY</text>
+</svg>
