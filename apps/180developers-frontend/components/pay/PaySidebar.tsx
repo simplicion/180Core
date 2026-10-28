@@ -73,7 +73,7 @@ export function PaySidebar({
       label: 'Payouts & Balance',
       href: `/apps/${projectId}/pay/payouts`,
       icon: CreditCard,
-      badge: payoutBalance > 0 ? `₹${payoutBalance.toLocaleString()}` : undefined,
+      badge: payoutBalance > 0 ? `₹${payoutBalance.toLocaleString(undefined, { minimumFractionDigits: payoutBalance % 1 === 0 ? 0 : 2, maximumFractionDigits: 2 })}` : undefined,
     },
     {
       label: 'Webhooks & Dispatcher',

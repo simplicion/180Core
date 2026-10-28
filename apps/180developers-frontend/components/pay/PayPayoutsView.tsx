@@ -50,9 +50,9 @@ export function PayPayoutsView() {
   const [simulatorAmount, setSimulatorAmount] = useState('1000');
 
   useEffect(() => {
-    fetchPayoutHistory();
+    fetchPayoutHistory(true);
     if (fetchPaymentAnalytics) {
-      fetchPaymentAnalytics();
+      fetchPaymentAnalytics(true);
     }
   }, [fetchPayoutHistory, fetchPaymentAnalytics]);
 

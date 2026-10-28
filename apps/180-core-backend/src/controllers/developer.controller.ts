@@ -711,10 +711,43 @@ export class DeveloperApiController {
       };
 
       const unifiedSessions: any[] = [];
-      const clientSessionIndex = new Map<string, any>();
+      const clientSessionIndex = new Map<string, any[]>();
       const userIndex = new Map<string, any[]>();
       const contactIndex = new Map<string, any[]>();
       const ipIndex = new Map<string, any[]>();
+
+      // Safe merge comparator: guarantees distinct captured payments are NEVER collapsed
+      const canMergeSessions = (existing: any, incoming: any) => {
+        const existingIsCaptured = existing.status === 'CAPTURED' || existing.status === 'SUCCESS';
+        const incomingIsCaptured = incoming.status === 'CAPTURED' || incoming.status === 'SUCCESS';
+
+        // Two distinct captured payments must NEVER be merged unless identical gateway payment/transaction ID
+        if (existingIsCaptured && incomingIsCaptured) {
+          const existingPayId = (existing.metadata as any)?.paymentId || (existing.metadata as any)?.gatewayPaymentId;
+          const incomingPayId = (incoming.metadata as any)?.paymentId || (incoming.metadata as any)?.gatewayPaymentId;
+          if (existingPayId && incomingPayId && existingPayId === incomingPayId) {
+            return true; // Exact same payment idempotency retry
+          }
+          return false; // Distinct captured transactions!
+        }
+
+        // Check session time window
+        const incomingTime = new Date(incoming.createdAt).getTime();
+        const existingTime = new Date(existing.createdAt).getTime();
+        if (Math.abs(incomingTime - existingTime) > SESSION_WINDOW_MS) {
+          return false;
+        }
+
+        // If existing is already captured, an attempt created AFTER existing was completed/created is a new intent
+        if (existingIsCaptured) {
+          const completedTime = new Date(existing.completedAt || existing.createdAt).getTime();
+          if (incomingTime > completedTime) {
+            return false;
+          }
+        }
+
+        return true;
+      };
 
       for (const session of allSessions) {
         const meta = (session.metadata as any) || {};
@@ -729,19 +762,23 @@ export class DeveloperApiController {
 
         let matchedGroup: any = null;
 
-        // Fast Path 1: Exact client session ID (O(1) lookup)
+        // Fast Path 1: Exact client session ID (small bucket scan with time-window & capture guards)
         if (clientSessionId && clientSessionIndex.has(clientSessionId)) {
-          matchedGroup = clientSessionIndex.get(clientSessionId);
+          const candidates = clientSessionIndex.get(clientSessionId)!;
+          for (let i = candidates.length - 1; i >= 0; i--) {
+            if (canMergeSessions(candidates[i], session)) {
+              matchedGroup = candidates[i];
+              break;
+            }
+          }
         }
 
         // Fast Path 2: Authenticated user ID in time window (small bucket scan)
         if (!matchedGroup && userId && userIndex.has(userId)) {
           const userBucket = userIndex.get(userId)!;
           for (let i = userBucket.length - 1; i >= 0; i--) {
-            const group = userBucket[i];
-            const groupTime = new Date(group.createdAt).getTime();
-            if (Math.abs(sessionTime - groupTime) <= SESSION_WINDOW_MS) {
-              matchedGroup = group;
+            if (canMergeSessions(userBucket[i], session)) {
+              matchedGroup = userBucket[i];
               break;
             }
           }
@@ -751,10 +788,8 @@ export class DeveloperApiController {
         if (!matchedGroup && phone && contactIndex.has(phone)) {
           const contactBucket = contactIndex.get(phone)!;
           for (let i = contactBucket.length - 1; i >= 0; i--) {
-            const group = contactBucket[i];
-            const groupTime = new Date(group.createdAt).getTime();
-            if (Math.abs(sessionTime - groupTime) <= SESSION_WINDOW_MS) {
-              matchedGroup = group;
+            if (canMergeSessions(contactBucket[i], session)) {
+              matchedGroup = contactBucket[i];
               break;
             }
           }
@@ -762,10 +797,8 @@ export class DeveloperApiController {
         if (!matchedGroup && email && contactIndex.has(email)) {
           const contactBucket = contactIndex.get(email)!;
           for (let i = contactBucket.length - 1; i >= 0; i--) {
-            const group = contactBucket[i];
-            const groupTime = new Date(group.createdAt).getTime();
-            if (Math.abs(sessionTime - groupTime) <= SESSION_WINDOW_MS) {
-              matchedGroup = group;
+            if (canMergeSessions(contactBucket[i], session)) {
+              matchedGroup = contactBucket[i];
               break;
             }
           }
@@ -775,12 +808,10 @@ export class DeveloperApiController {
         if (!matchedGroup && ip && ipIndex.has(ip)) {
           const ipBucket = ipIndex.get(ip)!;
           for (let i = ipBucket.length - 1; i >= 0; i--) {
-            const group = ipBucket[i];
-            const groupMeta = (group.metadata as any) || {};
+            const groupMeta = (ipBucket[i].metadata as any) || {};
             if (!userAgent || !groupMeta.userAgent || userAgent === groupMeta.userAgent) {
-              const groupTime = new Date(group.createdAt).getTime();
-              if (Math.abs(sessionTime - groupTime) <= SESSION_WINDOW_MS) {
-                matchedGroup = group;
+              if (canMergeSessions(ipBucket[i], session)) {
+                matchedGroup = ipBucket[i];
                 break;
               }
             }
@@ -805,7 +836,7 @@ export class DeveloperApiController {
             screen: (matchedGroup.metadata as any)?.screen || meta.screen,
           };
 
-          // Elevate status if current session has higher priority
+          // Elevate status if incoming session has higher priority (e.g. upgraded intent to capture)
           const currentPriority = getStatusPriority(matchedGroup);
           const newPriority = getStatusPriority(session);
           if (newPriority > currentPriority) {
@@ -814,8 +845,6 @@ export class DeveloperApiController {
             matchedGroup.amount = session.amount;
             matchedGroup.currency = session.currency;
             matchedGroup.completedAt = session.completedAt || matchedGroup.completedAt;
-          } else if (newPriority === currentPriority && (session.status === 'CAPTURED' || session.status === 'SUCCESS')) {
-            matchedGroup.amount = session.amount;
           }
 
           // Ensure timestamps reflect latest active moment
@@ -835,8 +864,12 @@ export class DeveloperApiController {
           };
           unifiedSessions.push(newGroup);
 
-          // Index for fast O(1) lookups on subsequent sessions
-          if (clientSessionId) clientSessionIndex.set(clientSessionId, newGroup);
+          // Index for fast bucket lookups on subsequent sessions
+          if (clientSessionId) {
+            const arr = clientSessionIndex.get(clientSessionId) || [];
+            arr.push(newGroup);
+            clientSessionIndex.set(clientSessionId, arr);
+          }
           if (userId) {
             const arr = userIndex.get(userId) || [];
             arr.push(newGroup);
@@ -906,10 +939,7 @@ export class DeveloperApiController {
       const appWallet = await prisma.wallet.findFirst({
         where: { developerAppId: { in: appIds } },
       });
-      const withdrawableBalance = appWallet ? appWallet.balance : 0;
-
-      // Realistic Pending Settlements: Captured volume awaiting T+1 clearing cycle
-      const pendingSettlements = Math.max(0, Math.round((grossVolume - withdrawableBalance) * 100) / 100);
+      const rawWalletBalance = appWallet ? appWallet.balance : 0;
 
       // Conversion funnel & Intent metrics: Accurately counted per customer session
       const totalIntentsVolume = unifiedSessions.reduce((sum, s) => sum + s.amount, 0);
@@ -1036,6 +1066,10 @@ export class DeveloperApiController {
       const totalPlatformFee = Math.round(grossVolume * 0.015 * 100) / 100;
       const netMerchantVolume = Math.round((grossVolume - totalPlatformFee) * 100) / 100;
 
+      // Net available balance ready for instant payout (settled wallet funds, capped to net merchant earnings)
+      const withdrawableBalance = grossVolume > 0 ? Math.min(rawWalletBalance, netMerchantVolume) : rawWalletBalance;
+      const pendingSettlements = Math.max(0, Math.round((grossVolume - rawWalletBalance) * 100) / 100);
+
       const analyticsData = {
         grossVolume: Math.round(grossVolume * 100) / 100,
         platformFeePercent,
@@ -1045,6 +1079,7 @@ export class DeveloperApiController {
         lastMonthVolume: Math.round(lastMonthVolume * 100) / 100,
         pendingSettlements,
         withdrawableBalance: Math.round(withdrawableBalance * 100) / 100,
+        rawWalletBalance: Math.round(rawWalletBalance * 100) / 100,
         currency: appWallet?.currency || 'INR',
         totalTransactionsCount: capturedSessions.length,
         // Conversion funnel metrics: Canonical deduplicated customer sessions
