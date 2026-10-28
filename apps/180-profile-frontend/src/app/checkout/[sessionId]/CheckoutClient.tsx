@@ -1070,16 +1070,33 @@ export function CheckoutClient({
         `/api/oauth/checkout/sessions/${sessionId}${clientSessionId ? `?clientSessionId=${encodeURIComponent(clientSessionId)}` : ''}`
       );
 
-      const [sessionRes, walletRes] = await Promise.all([
-        fetch(sessionUrl, {
-          headers: {
-            ...authHeaders,
-            ...(clientSessionId ? { 'x-client-session-id': clientSessionId } : {}),
-          },
-          credentials: 'include',
-        }),
-        fetch(getCoreApiUrl('/api/oauth/wallet'), { headers: authHeaders, credentials: 'include' }),
-      ]);
+      // 1. Fetch Session with resilient auto-retry (recovers from mobile webview cold-connect lag)
+      let sessionRes: Response | null = null;
+      let lastNetworkErr: any = null;
+
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          sessionRes = await fetch(sessionUrl, {
+            headers: {
+              Accept: 'application/json',
+              ...authHeaders,
+            },
+            credentials: 'include',
+          });
+          if (sessionRes) {
+            break;
+          }
+        } catch (fErr: any) {
+          lastNetworkErr = fErr;
+          if (attempt < 2) {
+            await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+          }
+        }
+      }
+
+      if (!sessionRes) {
+        throw lastNetworkErr || new Error('Network connection issue');
+      }
 
       let sessionInfo: any = null;
       let caughtDomainError: any = null;
@@ -1142,14 +1159,23 @@ export function CheckoutClient({
         throw new Error(sessionErrorMessage || 'Failed to load checkout details');
       }
 
-      try {
-        const walletData = await walletRes.json();
-        if (walletData && walletData.success) {
-          setWallet(walletData.data);
-        }
-      } catch (_) {}
+      // 2. Fetch Wallet asynchronously (Never block or fail checkout session if wallet fails)
+      if (token) {
+        fetch(getCoreApiUrl('/api/oauth/wallet'), { headers: authHeaders, credentials: 'include' })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((walletData) => {
+            if (walletData && walletData.success && walletData.data) {
+              setWallet(walletData.data);
+            }
+          })
+          .catch(() => {});
+      }
     } catch (err: any) {
-      toast.error(err.message || 'Error loading payment session');
+      console.warn('[180 Pay] Session fetch error:', err);
+      const msg = err.message || '';
+      if (msg && msg !== 'Failed to fetch' && !msg.includes('Network connection issue')) {
+        toast.error(msg);
+      }
     } finally {
       setLoading(false);
     }

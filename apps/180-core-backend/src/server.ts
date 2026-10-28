@@ -56,23 +56,26 @@ const allowedOrigins = [
 
 const corsMiddleware = cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps, curl, server-to-server) or matching allowed
-    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('180core.cloud')) {
-      callback(null, true);
-    } else {
-      callback(null, true); // Allow all for 3rd-party checkout and OAuth integrations
-    }
+    // Allow all origins (standard for public OAuth, checkout embed, payment link, mobile SDK)
+    callback(null, true);
   },
   credentials: true,
   optionsSuccessStatus: 204,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
   allowedHeaders: [
+    '*',
     'Content-Type',
     'Authorization',
     'X-Requested-With',
     'X-180-Signature',
     'X-180-Timestamp',
     'X-180-Event',
+    'x-client-session-id',
+    'X-Client-Session-Id',
+    'x-180-client-session-id',
+    'X-180-Client-Session-Id',
+    'x-razorpay-signature',
+    'X-Razorpay-Signature',
     'x-device-token',
     'x-desktop-device-token',
     'x-company-id',
@@ -81,11 +84,36 @@ const corsMiddleware = cors({
     'Idempotency-Key',
     'x-client-platform',
     'x-app-version',
+    'x-api-key',
+    'X-Api-Key',
+    'Accept',
+    'Origin',
+    'Cache-Control',
+    'Pragma',
   ],
 });
 
 // Mount CORS before any body parsers or rate-limiters so OPTIONS preflights never fail
 app.disable('x-powered-by');
+
+// Universal preflight & CORS header injector
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+  const requestHeaders = req.headers['access-control-request-headers'];
+  if (requestHeaders) {
+    res.setHeader('Access-Control-Allow-Headers', requestHeaders);
+  }
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH,HEAD');
+    return res.sendStatus(204);
+  }
+  next();
+});
+
 app.use(corsMiddleware);
 app.options('*', corsMiddleware as any);
 
@@ -95,6 +123,7 @@ app.use(
     contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false,
     crossOriginOpenerPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
     hidePoweredBy: true,
     hsts: {
       maxAge: 31536000,
@@ -102,7 +131,7 @@ app.use(
       preload: true,
     },
     noSniff: true,
-    frameguard: { action: 'deny' },
+    frameguard: false,
     xssFilter: true,
   })
 );

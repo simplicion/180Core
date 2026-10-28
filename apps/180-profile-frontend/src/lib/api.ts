@@ -3,21 +3,31 @@
  * Directs all API and OAuth calls to the universal core backend (api.180core.cloud)
  */
 
+export function isLocalOrIpHost(host: string): boolean {
+  if (!host) return false;
+  return (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host === '10.0.2.2' ||
+    /^192\.168\.\d+\.\d+$/.test(host) ||
+    /^10\.\d+\.\d+\.\d+$/.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$/.test(host)
+  );
+}
+
 const envCoreUrl = process.env.NEXT_PUBLIC_CORE_BACKEND_URL || process.env.NEXT_PUBLIC_CORE_API_URL || process.env.NEXT_PUBLIC_API_URL;
 export const CORE_BACKEND_URL =
   (envCoreUrl && !envCoreUrl.includes(':4004'))
     ? envCoreUrl
-    : (typeof window !== 'undefined' &&
-      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-        ? 'http://localhost:4003'
+    : (typeof window !== 'undefined' && isLocalOrIpHost(window.location.hostname)
+        ? `http://${window.location.hostname}:4003`
         : 'https://api.180core.cloud');
 
 export function isCustomDomainHost(): boolean {
   if (typeof window === 'undefined') return false;
   const host = window.location.hostname;
   return (
-    host !== 'localhost' &&
-    host !== '127.0.0.1' &&
+    !isLocalOrIpHost(host) &&
     !host.endsWith('180core.cloud') &&
     !host.endsWith('.pages.dev')
   );
