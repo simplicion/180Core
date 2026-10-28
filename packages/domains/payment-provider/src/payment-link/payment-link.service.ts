@@ -369,6 +369,9 @@ export class PaymentLinkService {
         fulfillmentFileUrl: link?.fulfillmentFileUrl || undefined,
         redirectUrl: link?.redirectUrl || undefined,
       };
+    }, {
+      maxWait: 15000,
+      timeout: 30000,
     });
 
     // Asynchronously dispatch webhook event

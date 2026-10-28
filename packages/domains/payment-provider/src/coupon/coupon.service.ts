@@ -430,6 +430,9 @@ export class CouponService {
       });
 
       return redemption;
+    }, {
+      maxWait: 15000,
+      timeout: 30000,
     });
   }
 

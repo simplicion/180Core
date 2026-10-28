@@ -272,7 +272,7 @@ export class CheckoutService {
    * client-side sandbox sessions, and auto-renews active checkouts.
    */
   static async getSession(sessionId: string, fallbackData?: any) {
-    let session = await prisma.checkoutSession.findUnique({
+    let session: any = await prisma.checkoutSession.findUnique({
       where: { id: sessionId },
       include: {
         app: {
@@ -283,6 +283,10 @@ export class CheckoutService {
             description: true,
             logoUrl: true,
             isVerified: true,
+            customGatewayType: true,
+            customGatewayKeyId: true,
+            customGatewaySecret: true,
+            customGatewayWebhookSecret: true,
           },
         },
       },
@@ -1630,10 +1634,32 @@ export class CheckoutService {
     };
   }
 
+  private static inFlightVerifications = new Map<string, Promise<any>>();
+
   /**
-   * Cryptographically verifies payment (Razorpay HMAC or Stripe PaymentIntent) and captures session
+   * Cryptographically verifies payment (Razorpay HMAC or Stripe PaymentIntent) and captures session.
+   * Employs atomic in-flight promise deduplication to prevent concurrent transaction deadlocks.
    */
   static async verifyDirectPayment(input: {
+    sessionId: string;
+    orderId: string;
+    paymentId: string;
+    signature: string;
+  }): Promise<any> {
+    const { sessionId } = input;
+    if (this.inFlightVerifications.has(sessionId)) {
+      return await this.inFlightVerifications.get(sessionId)!;
+    }
+
+    const verificationPromise = this._doVerifyDirectPayment(input).finally(() => {
+      this.inFlightVerifications.delete(sessionId);
+    });
+
+    this.inFlightVerifications.set(sessionId, verificationPromise);
+    return await verificationPromise;
+  }
+
+  private static async _doVerifyDirectPayment(input: {
     sessionId: string;
     orderId: string;
     paymentId: string;
@@ -1856,6 +1882,9 @@ export class CheckoutService {
       });
 
       return { session: updatedSession, transactionId: paymentId, alreadyCaptured: false, creditedUserBalance };
+    }, {
+      maxWait: 15000,
+      timeout: 30000,
     });
 
     // Dispatch webhook to merchant

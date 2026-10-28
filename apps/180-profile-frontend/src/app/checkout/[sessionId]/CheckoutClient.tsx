@@ -948,10 +948,15 @@ export function CheckoutClient({
     if (!sessionId || sessionId === 'default' || completed || checkStatusRef.current) return false;
     checkStatusRef.current = true;
     try {
-      const res = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/status`));
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const res = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/status`), {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
       if (!res.ok) return false;
       const data = await res.json();
-      if (data && (data.status === 'CAPTURED' || data.status === 'COMPLETED')) {
+      if (data && (data.status === 'CAPTURED' || data.status === 'COMPLETED' || data.isPaid)) {
         if (!isSilent) toast.success('Payment verified & captured!');
         handlePaymentCompletion({
           transactionId: data.transactionId,
@@ -999,14 +1004,16 @@ export function CheckoutClient({
 
         if (attempt >= 2) {
           setVerificationStatusText('Verifying payment...');
-          setVerificationSubtext('Bank authorization in progress • Do not close, wait for a moment');
+          setVerificationSubtext('Finalizing bank authorization with gateway...');
         }
 
-        // Direct backend verify
+        let needsStatusFallback = false;
+
+        // 1. Primary Direct Backend Verify (Give ample time for cross-region DB + gateway authorization)
         const targetUrl = getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/direct-verify`);
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 4000);
+          const timeoutId = setTimeout(() => controller.abort(), 15000);
 
           const verifyRes = await fetch(targetUrl, {
             method: 'POST',
@@ -1036,39 +1043,52 @@ export function CheckoutClient({
                 });
               }, 250);
               return;
+            } else {
+              needsStatusFallback = true;
             }
+          } else {
+            needsStatusFallback = true;
           }
         } catch (fetchErr: any) {
+          needsStatusFallback = true;
           console.warn(`[180 Pay] Verify attempt ${attempt} transient error:`, fetchErr?.message || fetchErr);
         }
 
-        // Parallel check: Gateway live reconciliation
-        try {
-          const statusRes = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/status`));
-          if (statusRes.ok) {
-            const statusData = await statusRes.json();
-            if (statusData && (statusData.status === 'CAPTURED' || statusData.status === 'COMPLETED' || statusData.isPaid)) {
-              clearInterval(progressTimer);
-              setVerificationProgress(100);
-              setVerificationStatusText('Payment Authorized!');
-              setVerificationSubtext('Bank authorization confirmed.');
-              completedSuccessfully = true;
+        // 2. Serial Fallback check ONLY IF direct-verify had a transient issue
+        // (Avoids concurrent lock contention by running sequentially)
+        if (needsStatusFallback && !completedSuccessfully) {
+          try {
+            const statusController = new AbortController();
+            const statusTimeout = setTimeout(() => statusController.abort(), 10000);
+            const statusRes = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/status`), {
+              signal: statusController.signal,
+            });
+            clearTimeout(statusTimeout);
+            if (statusRes.ok) {
+              const statusData = await statusRes.json();
+              if (statusData && (statusData.status === 'CAPTURED' || statusData.status === 'COMPLETED' || statusData.isPaid)) {
+                clearInterval(progressTimer);
+                setVerificationProgress(100);
+                setVerificationStatusText('Payment Authorized!');
+                setVerificationSubtext('Bank authorization confirmed.');
+                completedSuccessfully = true;
 
-              setTimeout(() => {
-                setVerifyingPayment(false);
-                setTopupLoading(false);
-                handlePaymentCompletion({
-                  transactionId: statusData.transactionId || credentials.paymentId,
-                  fulfillment: statusData.fulfillment,
-                });
-              }, 250);
-              return;
+                setTimeout(() => {
+                  setVerifyingPayment(false);
+                  setTopupLoading(false);
+                  handlePaymentCompletion({
+                    transactionId: statusData.transactionId || credentials.paymentId,
+                    fulfillment: statusData.fulfillment,
+                  });
+                }, 250);
+                return;
+              }
             }
-          }
-        } catch (_) {}
+          } catch (_) {}
+        }
 
         if (attempt < maxAttempts) {
-          await new Promise((r) => setTimeout(r, 800));
+          await new Promise((r) => setTimeout(r, 1000));
         }
       }
     } finally {
@@ -1078,10 +1098,15 @@ export function CheckoutClient({
     if (!completedSuccessfully) {
       setVerificationProgress(95);
       setVerificationFailedState(true);
-      setVerificationStatusText('Verifying payment...');
-      setVerificationSubtext('Bank authorization in progress • Do not close, wait for a moment');
+      setVerificationStatusText('Confirming Payment Status...');
+      setVerificationSubtext('Bank authorization in progress • Click below to re-check status');
+
+      // Auto-retry checking status in the background after 3 seconds
+      setTimeout(() => {
+        checkSessionStatus(true);
+      }, 3000);
     }
-  }, [sessionId, handlePaymentCompletion]);
+  }, [sessionId, handlePaymentCompletion, checkSessionStatus]);
 
   const fetchSessionAndWallet = async () => {
     try {
