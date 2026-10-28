@@ -1,6 +1,10 @@
 // 180 Core Dedicated Server (Identity & Pay Engine) - Ready
 'use strict';
 
+import dns from 'dns';
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch (_) {}
 import path from 'path';
 import dotenv from 'dotenv';
 // Reloaded: Sovereign token issuance (decoupled companyId) & R2 Media Pipeline

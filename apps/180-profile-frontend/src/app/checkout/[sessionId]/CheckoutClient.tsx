@@ -237,17 +237,6 @@ export function CheckoutClient({
   const [paying, setPaying] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [topupLoading, setTopupLoading] = useState(false);
-  const [verifyingPayment, setVerifyingPayment] = useState<boolean>(false);
-  const [verificationStatusText, setVerificationStatusText] = useState<string>('Verifying payment...');
-  const [verificationSubtext, setVerificationSubtext] = useState<string>('Confirming secure transaction with your bank & 180 Core...');
-  const [verificationAttempt, setVerificationAttempt] = useState<number>(1);
-  const [verificationFailedState, setVerificationFailedState] = useState<boolean>(false);
-  const [verificationProgress, setVerificationProgress] = useState<number>(30);
-  const savedVerifyPayloadRef = React.useRef<{
-    orderId: string;
-    paymentId: string;
-    signature: string;
-  } | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedDetails, setCopiedDetails] = useState(false);
   const [showDevInspector, setShowDevInspector] = useState(false);
@@ -868,7 +857,6 @@ export function CheckoutClient({
     setCompleted(true);
     setPaying(false);
     setTopupLoading(false);
-    setVerifyingPayment(false);
 
     if (details.fulfillment || session?.metadata?.fulfillment) {
       setSession((prev: any) => ({
@@ -971,142 +959,6 @@ export function CheckoutClient({
     }
     return false;
   }, [sessionId, completed, handlePaymentCompletion]);
-
-  // ─── Resilient Multi-Attempt Payment Verification Engine ─────────────────────
-  const verifyPaymentWithResilience = useCallback(async (credentials: {
-    orderId: string;
-    paymentId: string;
-    signature: string;
-  }) => {
-    savedVerifyPayloadRef.current = credentials;
-    setVerifyingPayment(true);
-    setVerificationFailedState(false);
-    setVerificationProgress(45);
-    setVerificationStatusText('Verifying payment...');
-    setVerificationSubtext('Bank authorization in progress • Do not close, wait for a moment');
-
-    const maxAttempts = 6;
-    let attempt = 0;
-    let completedSuccessfully = false;
-
-    // Advance visual progress smoothly & quickly
-    const progressTimer = setInterval(() => {
-      setVerificationProgress((prev) => {
-        if (prev >= 92) return prev;
-        return prev + 15;
-      });
-    }, 280);
-
-    try {
-      while (attempt < maxAttempts && !completedSuccessfully) {
-        attempt++;
-        setVerificationAttempt(attempt);
-
-        if (attempt >= 2) {
-          setVerificationStatusText('Verifying payment...');
-          setVerificationSubtext('Finalizing bank authorization with gateway...');
-        }
-
-        let needsStatusFallback = false;
-
-        // 1. Primary Direct Backend Verify (Give ample time for cross-region DB + gateway authorization)
-        const targetUrl = getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/direct-verify`);
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-          const verifyRes = await fetch(targetUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(credentials),
-            signal: controller.signal,
-          });
-          clearTimeout(timeoutId);
-
-          if (verifyRes.ok) {
-            const verifyData = await verifyRes.json();
-            if (verifyData && verifyData.success) {
-              clearInterval(progressTimer);
-              setVerificationProgress(100);
-              setVerificationStatusText('Payment Authorized!');
-              setVerificationSubtext('Bank authorization confirmed.');
-              completedSuccessfully = true;
-
-              setTimeout(() => {
-                setVerifyingPayment(false);
-                setTopupLoading(false);
-                handlePaymentCompletion({
-                  transactionId: credentials.paymentId,
-                  creditedUserBalance: verifyData.creditedUserBalance,
-                  fulfillment: verifyData.fulfillment || verifyData.session?.metadata?.fulfillment,
-                  customReturnUrl: verifyData.returnUrl,
-                });
-              }, 250);
-              return;
-            } else {
-              needsStatusFallback = true;
-            }
-          } else {
-            needsStatusFallback = true;
-          }
-        } catch (fetchErr: any) {
-          needsStatusFallback = true;
-          console.warn(`[180 Pay] Verify attempt ${attempt} transient error:`, fetchErr?.message || fetchErr);
-        }
-
-        // 2. Serial Fallback check ONLY IF direct-verify had a transient issue
-        // (Avoids concurrent lock contention by running sequentially)
-        if (needsStatusFallback && !completedSuccessfully) {
-          try {
-            const statusController = new AbortController();
-            const statusTimeout = setTimeout(() => statusController.abort(), 10000);
-            const statusRes = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/status`), {
-              signal: statusController.signal,
-            });
-            clearTimeout(statusTimeout);
-            if (statusRes.ok) {
-              const statusData = await statusRes.json();
-              if (statusData && (statusData.status === 'CAPTURED' || statusData.status === 'COMPLETED' || statusData.isPaid)) {
-                clearInterval(progressTimer);
-                setVerificationProgress(100);
-                setVerificationStatusText('Payment Authorized!');
-                setVerificationSubtext('Bank authorization confirmed.');
-                completedSuccessfully = true;
-
-                setTimeout(() => {
-                  setVerifyingPayment(false);
-                  setTopupLoading(false);
-                  handlePaymentCompletion({
-                    transactionId: statusData.transactionId || credentials.paymentId,
-                    fulfillment: statusData.fulfillment,
-                  });
-                }, 250);
-                return;
-              }
-            }
-          } catch (_) {}
-        }
-
-        if (attempt < maxAttempts) {
-          await new Promise((r) => setTimeout(r, 1000));
-        }
-      }
-    } finally {
-      clearInterval(progressTimer);
-    }
-
-    if (!completedSuccessfully) {
-      setVerificationProgress(95);
-      setVerificationFailedState(true);
-      setVerificationStatusText('Confirming Payment Status...');
-      setVerificationSubtext('Bank authorization in progress • Click below to re-check status');
-
-      // Auto-retry checking status in the background after 3 seconds
-      setTimeout(() => {
-        checkSessionStatus(true);
-      }, 3000);
-    }
-  }, [sessionId, handlePaymentCompletion, checkSessionStatus]);
 
   const fetchSessionAndWallet = async () => {
     try {
@@ -1765,19 +1617,39 @@ export function CheckoutClient({
         handler: async function (response: any) {
           stopPolling();
           toast.dismiss(directToastId);
-          verifyPaymentWithResilience({
-            orderId: response.razorpay_order_id,
-            paymentId: response.razorpay_payment_id,
-            signature: response.razorpay_signature,
-          });
+          const verifyToastId = toast.loading('Verifying payment signature...');
+          try {
+            const verifyRes = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/direct-verify`), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                orderId: response.razorpay_order_id,
+                paymentId: response.razorpay_payment_id,
+                signature: response.razorpay_signature,
+              }),
+            });
+
+            const verifyData = await verifyRes.json();
+            if (!verifyData.success) {
+              throw new Error(verifyData.error || 'Payment signature verification failed');
+            }
+
+            toast.success('Payment authorized & completed!', { id: verifyToastId });
+            handlePaymentCompletion({
+              transactionId: response.razorpay_payment_id,
+              creditedUserBalance: verifyData.creditedUserBalance,
+              fulfillment: verifyData.fulfillment || verifyData.session?.metadata?.fulfillment,
+              customReturnUrl: verifyData.returnUrl,
+            });
+          } catch (e: any) {
+            toast.error(e.message || 'Payment verification failed', { id: verifyToastId });
+          } finally {
+            setTopupLoading(false);
+          }
         },
         modal: {
           ondismiss: async () => {
             toast.dismiss(directToastId);
-            if (verifyingPayment || savedVerifyPayloadRef.current) {
-              // Payment was captured at gateway and verification is active; do not cancel or show dismissed!
-              return;
-            }
             setTopupLoading(false);
             // Polling check: did the user complete payment in UPI app before returning and dismissing?
             const isDone = await checkSessionStatus(false);
@@ -2915,80 +2787,6 @@ export function CheckoutClient({
         )}
 
       </div>
-
-      {/* ─── FULL-SCREEN MIRROR / GLASS BLUR PAYMENT VERIFICATION OVERLAY ─── */}
-      {verifyingPayment && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed inset-0 z-50 bg-white/95 backdrop-blur-2xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-200 select-none overflow-hidden"
-        >
-          {/* Subtle Accent Glow Backdrop */}
-          <div className="absolute w-80 h-80 rounded-full bg-blue-500/10 blur-3xl -z-10 animate-pulse pointer-events-none" />
-
-          {/* 180 Core Icon in Soft Card */}
-          <div className="relative mb-6">
-            <div className="w-16 h-16 rounded-2xl bg-slate-50 border border-slate-200/80 shadow-md flex items-center justify-center p-3 relative z-10">
-              <OneEightyCoreLogo
-                variant="icon"
-                theme="auto"
-                height={38}
-                width={38}
-                className="animate-pulse"
-              />
-            </div>
-            <div className="absolute inset-0 rounded-2xl bg-blue-500/20 blur-lg animate-ping opacity-25" />
-          </div>
-
-          {/* Heading */}
-          <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mb-2">
-            {verificationStatusText}
-          </h3>
-
-          {/* Subtitle */}
-          <p className="text-xs sm:text-sm text-slate-600 max-w-sm mx-auto leading-relaxed mb-6 font-medium">
-            {verificationSubtext}
-          </p>
-
-          {/* Animated Progress Bar */}
-          <div className="w-64 max-w-full h-1.5 bg-slate-100 border border-slate-200/70 rounded-full overflow-hidden relative shadow-inner mb-4">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 transition-all duration-300 ease-out shadow-[0_0_10px_rgba(37,99,235,0.4)]"
-              style={{ width: `${verificationProgress}%` }}
-            />
-          </div>
-
-          {/* Live Action Badges or Reassurance Retry */}
-          {verificationFailedState ? (
-            <div className="space-y-3 mt-2 animate-in zoom-in-95">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium">
-                <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
-                <span>Bank authorization in progress • Do not close, wait for a moment</span>
-              </div>
-              <div>
-                <Button
-                  onClick={() => {
-                    if (savedVerifyPayloadRef.current) {
-                      verifyPaymentWithResilience(savedVerifyPayloadRef.current);
-                    } else {
-                      checkSessionStatus(false);
-                    }
-                  }}
-                  className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition-all cursor-pointer"
-                >
-                  <RefreshCw className="w-3.5 h-3.5 mr-2" />
-                  Check Payment Status
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200/80 text-[11px] text-emerald-700 font-semibold shadow-2xs mt-1">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-              <span>Bank authorization in progress • Do not close, wait for a moment</span>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
