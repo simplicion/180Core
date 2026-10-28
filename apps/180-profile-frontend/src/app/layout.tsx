@@ -45,9 +45,6 @@ export default function RootLayout({
         <link
           href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
           rel="stylesheet"
-          media="print"
-          // @ts-ignore
-          onLoad="this.media='all'"
         />
         <script
           dangerouslySetInnerHTML={{
