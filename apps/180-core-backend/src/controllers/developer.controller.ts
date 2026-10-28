@@ -811,7 +811,11 @@ export class DeveloperApiController {
           if (newPriority > currentPriority) {
             matchedGroup.id = session.id;
             matchedGroup.status = session.status;
+            matchedGroup.amount = session.amount;
+            matchedGroup.currency = session.currency;
             matchedGroup.completedAt = session.completedAt || matchedGroup.completedAt;
+          } else if (newPriority === currentPriority && (session.status === 'CAPTURED' || session.status === 'SUCCESS')) {
+            matchedGroup.amount = session.amount;
           }
 
           // Ensure timestamps reflect latest active moment

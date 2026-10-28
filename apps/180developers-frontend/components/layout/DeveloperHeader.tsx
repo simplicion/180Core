@@ -98,7 +98,7 @@ export function DeveloperHeader({
           <span className="hidden sm:inline text-zinc-300 dark:text-zinc-700">/</span>
           {breadcrumbs && breadcrumbs.length > 0 ? (
             breadcrumbs.map((crumb, idx) => (
-              <React.Fragment key={crumb.label}>
+              <React.Fragment key={`${crumb.label}-${idx}`}>
                 {crumb.href ? (
                   <Link
                     href={crumb.href}

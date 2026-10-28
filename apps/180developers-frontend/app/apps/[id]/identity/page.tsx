@@ -1,17 +1,20 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, usePathname } from 'next/navigation';
+import { extractAppIdFromPath } from '@/context/ProjectContext';
 
 export default function IdentityIndexRedirectPage() {
+  const pathname = usePathname();
   const params = useParams();
   const router = useRouter();
 
   useEffect(() => {
-    if (params?.id) {
-      router.replace(`/apps/${params.id}/identity/users`);
+    const id = extractAppIdFromPath(pathname) || (params?.id !== 'default' ? params?.id : '') || (typeof window !== 'undefined' ? extractAppIdFromPath(window.location.pathname) : '');
+    if (id && id !== 'default') {
+      router.replace(`/apps/${id}/identity/users`);
     }
-  }, [params?.id, router]);
+  }, [pathname, params?.id, router]);
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black flex items-center justify-center">

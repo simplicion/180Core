@@ -1,17 +1,19 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, usePathname } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
+import { extractAppIdFromPath } from '@/context/ProjectContext';
 
 export default function PayTransactionsRedirectPage() {
+  const pathname = usePathname();
   const params = useParams();
   const router = useRouter();
 
   useEffect(() => {
-    const id = params?.id || 'default';
+    const id = extractAppIdFromPath(pathname) || (params?.id !== 'default' ? params?.id : '') || (typeof window !== 'undefined' ? extractAppIdFromPath(window.location.pathname) : '') || 'default';
     router.replace(`/apps/${id}/pay#transactions`);
-  }, [params, router]);
+  }, [pathname, params, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-zinc-950">

@@ -169,8 +169,10 @@ export function AppShellLayout({
                 )}
               </div>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                Project: <span className="font-semibold text-zinc-700 dark:text-zinc-300">{project?.name}</span>{' '}
-                <span className="font-mono text-[10px]">({project?.clientId})</span>
+                Project: <span className="font-semibold text-zinc-700 dark:text-zinc-300">{project?.name || projectId || 'Project'}</span>
+                {project?.clientId && (
+                  <> <span className="font-mono text-[10px]">({project.clientId})</span></>
+                )}
               </p>
             </div>
 

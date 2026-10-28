@@ -1,12 +1,21 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { useParams, useRouter, usePathname } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { DeveloperAppDetail, PaymentAnalyticsData, BankDetailsData, PayoutRecord, WebhookTestResult } from '@/components/apps/types';
 import { purgeAuthSession, getStoredAuthToken } from '@/lib/auth';
 import { cachedFetch, invalidateCache } from '@/lib/cache';
 import { getAppSlug } from '@/lib/slug';
+
+export function extractAppIdFromPath(path?: string | null): string {
+  if (!path) return '';
+  const match = path.match(/\/apps\/([^\/\?#]+)/);
+  if (match && match[1] && match[1] !== 'default') {
+    return match[1];
+  }
+  return '';
+}
 
 interface ProjectContextValue {
   project: DeveloperAppDetail | null;
@@ -100,21 +109,24 @@ export function ProjectProvider({
   children: React.ReactNode;
   projectId?: string;
 }) {
+  const pathname = usePathname();
   const params = useParams();
   const router = useRouter();
 
-  const getInitialAppId = () => {
+  const getTargetAppId = useCallback(() => {
     if (propProjectId && propProjectId !== 'default') return propProjectId;
+    const fromPath = extractAppIdFromPath(pathname);
+    if (fromPath) return fromPath;
+    if (typeof window !== 'undefined') {
+      const fromWindow = extractAppIdFromPath(window.location.pathname);
+      if (fromWindow) return fromWindow;
+    }
     const pId = params?.id as string;
     if (pId && pId !== 'default') return pId;
-    if (typeof window !== 'undefined') {
-      const match = window.location.pathname.match(/\/apps\/([^\/\?#]+)/);
-      if (match && match[1] && match[1] !== 'default') return match[1];
-    }
-    return pId || '';
-  };
+    return '';
+  }, [propProjectId, pathname, params?.id]);
 
-  const [projectId, setProjectId] = useState<string>(getInitialAppId);
+  const [projectId, setProjectId] = useState<string>(getTargetAppId);
   const [project, setProject] = useState<DeveloperAppDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -123,13 +135,29 @@ export function ProjectProvider({
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  // Synchronize projectId with window location pathname and params.id on mount and route changes
+  // Synchronize projectId with route pathname, params, or prop changes
   useEffect(() => {
-    const currentId = getInitialAppId();
+    const currentId = getTargetAppId();
     if (currentId && currentId !== 'default' && currentId !== projectId) {
       setProjectId(currentId);
     }
-  }, [params?.id, propProjectId]);
+  }, [getTargetAppId, projectId]);
+
+  // Instant cache binding: When projectId or allProjects updates, bind matching app immediately without network delay
+  useEffect(() => {
+    if (projectId && projectId !== 'default' && allProjects.length > 0) {
+      const normalizedTarget = projectId.toLowerCase();
+      const matched = allProjects.find((a: any) =>
+        (a.id && a.id.toLowerCase() === normalizedTarget) ||
+        (a.clientId && a.clientId.toLowerCase() === normalizedTarget) ||
+        (getAppSlug(a) && getAppSlug(a).toLowerCase() === normalizedTarget) ||
+        (a.name && a.name.toLowerCase() === normalizedTarget)
+      );
+      if (matched && (!project || project.id !== matched.id)) {
+        setProject(matched);
+      }
+    }
+  }, [projectId, allProjects, project]);
 
   // Watchdog timer: ensure loading state never hangs for more than 5 seconds
   useEffect(() => {
@@ -376,8 +404,33 @@ export function ProjectProvider({
         if (payload.user) setUserProfile(payload.user);
         if (payload.apps) {
           setAllProjects(payload.apps);
-          // If current projectId is empty or 'default', automatically bind to the user's active project
-          if ((!projectId || projectId === 'default') && payload.apps.length > 0) {
+
+          // Find current active target from props, pathname, window, or state
+          const currentTarget =
+            propProjectId ||
+            extractAppIdFromPath(pathname) ||
+            (typeof window !== 'undefined' ? extractAppIdFromPath(window.location.pathname) : '') ||
+            projectId;
+
+          let targetApp = null;
+          if (currentTarget && currentTarget !== 'default') {
+            const normalized = currentTarget.toLowerCase();
+            targetApp = payload.apps.find((a: any) =>
+              (a.id && a.id.toLowerCase() === normalized) ||
+              (a.clientId && a.clientId.toLowerCase() === normalized) ||
+              (getAppSlug(a) && getAppSlug(a).toLowerCase() === normalized) ||
+              (a.name && a.name.toLowerCase() === normalized)
+            );
+          }
+
+          if (targetApp) {
+            setProject(targetApp);
+            const slug = getAppSlug(targetApp) || targetApp.id;
+            if (projectId !== slug && projectId !== targetApp.id) {
+              setProjectId(slug);
+            }
+          } else if ((!currentTarget || currentTarget === 'default') && payload.apps.length > 0) {
+            // Only if NO specific project was requested anywhere, fallback to user's first app
             const firstApp = payload.apps[0];
             const firstAppSlug = getAppSlug(firstApp) || firstApp.id;
             setProjectId(firstAppSlug);
@@ -386,7 +439,7 @@ export function ProjectProvider({
         }
       }
     } catch (_) {}
-  }, [router]);
+  }, [router, propProjectId, pathname, projectId]);
 
   // Fetch Auth Logs (Cached & Deduplicated)
   const fetchAuthLogs = useCallback(async (forceBypass?: any) => {
@@ -751,12 +804,23 @@ export function ProjectProvider({
     }
   };
 
+  // Initial load of user profile and projects
   useEffect(() => {
-    refreshProject();
     fetchAllProjectsAndProfile();
-  }, [refreshProject, fetchAllProjectsAndProfile]);
+  }, [fetchAllProjectsAndProfile]);
 
-  const projectSlug = (project ? getAppSlug(project) : '') || (params?.id as string) || projectId;
+  // Refresh active project details on projectId change
+  useEffect(() => {
+    if (projectId && projectId !== 'default') {
+      refreshProject();
+    }
+  }, [projectId, refreshProject]);
+
+  const projectSlug =
+    (project ? getAppSlug(project) : '') ||
+    extractAppIdFromPath(pathname) ||
+    (params?.id !== 'default' ? (params?.id as string) : '') ||
+    projectId;
 
   return (
     <ProjectContext.Provider

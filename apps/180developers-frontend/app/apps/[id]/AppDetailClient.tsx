@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -29,7 +29,7 @@ import {
 import DeveloperSidebar from '@/components/layout/DeveloperSidebar';
 import DeveloperHeader from '@/components/layout/DeveloperHeader';
 import { purgeAuthSession } from '@/lib/auth';
-import { useProject } from '@/context/ProjectContext';
+import { useProject, extractAppIdFromPath } from '@/context/ProjectContext';
 import { invalidateCache } from '@/lib/cache';
 import { getAppSlug } from '@/lib/slug';
 
@@ -38,19 +38,23 @@ interface AppDetailClientProps {
 }
 
 export default function AppDetailClient({ initialView }: AppDetailClientProps) {
+  const pathname = usePathname();
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
+
   // Resilient appId extraction for static SSG exports (Cloudflare Pages rewrites)
-  const getInitialAppId = () => {
+  const getInitialAppId = React.useCallback(() => {
+    const fromPath = extractAppIdFromPath(pathname);
+    if (fromPath) return fromPath;
+    if (typeof window !== 'undefined') {
+      const fromWindow = extractAppIdFromPath(window.location.pathname);
+      if (fromWindow) return fromWindow;
+    }
     const pId = params?.id as string;
     if (pId && pId !== 'default') return pId;
-    if (typeof window !== 'undefined') {
-      const match = window.location.pathname.match(/\/apps\/([^\/\?#]+)/);
-      if (match && match[1] && match[1] !== 'default') return match[1];
-    }
-    return pId || '';
-  };
+    return '';
+  }, [pathname, params?.id]);
 
   const [appId, setAppId] = useState<string>(getInitialAppId);
 
@@ -59,7 +63,7 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
     if (currentId && currentId !== appId) {
       setAppId(currentId);
     }
-  }, [params?.id]);
+  }, [getInitialAppId, appId]);
 
   const {
     project,

@@ -1,18 +1,20 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, usePathname } from 'next/navigation';
+import { extractAppIdFromPath } from '@/context/ProjectContext';
 
 export default function PayGeoPricingPage() {
+  const pathname = usePathname();
   const params = useParams();
   const router = useRouter();
-  const id = params?.id as string;
 
   useEffect(() => {
-    if (id) {
+    const id = extractAppIdFromPath(pathname) || (params?.id !== 'default' ? (params?.id as string) : '') || (typeof window !== 'undefined' ? extractAppIdFromPath(window.location.pathname) : '');
+    if (id && id !== 'default') {
       router.replace(`/apps/${id}/pay/pricing`);
     }
-  }, [id, router]);
+  }, [pathname, params?.id, router]);
 
   return null;
 }
