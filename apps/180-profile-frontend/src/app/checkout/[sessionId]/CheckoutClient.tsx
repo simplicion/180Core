@@ -231,8 +231,42 @@ export function CheckoutClient({
     } catch (_) {}
   }, [sessionId, clientSessionId]);
 
-  const [loading, setLoading] = useState(true);
-  const [session, setSession] = useState<any>(null);
+  const [session, setSession] = useState<any>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const optAmount = parseFloat(sp.get('amount') || '') || initialAmount || null;
+      const optTitle = sp.get('title') || null;
+      if (optAmount || optTitle) {
+        return {
+          id: sessionId || 'pending',
+          amount: optAmount || 0,
+          currency: sp.get('currency') || 'INR',
+          title: optTitle || '180 Checkout',
+          description: sp.get('description') || '',
+          status: 'PENDING',
+          app: {
+            name: sp.get('appName') || '180 Merchant',
+            logoUrl: sp.get('appLogo') || '',
+            isVerified: true,
+          },
+        };
+      }
+    } catch (_) {}
+    return null;
+  });
+
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const optAmount = parseFloat(sp.get('amount') || '') || initialAmount || null;
+      const optTitle = sp.get('title') || null;
+      return !(optAmount || optTitle);
+    } catch (_) {
+      return true;
+    }
+  });
   const [wallet, setWallet] = useState<any>(null);
   const [paying, setPaying] = useState(false);
   const [completed, setCompleted] = useState(false);

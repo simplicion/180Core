@@ -517,7 +517,7 @@ export class CheckoutApiController {
       const cleanOrigin = rawOrigin ? rawOrigin.toLowerCase().replace(/\/$/, '') : '';
 
       if (cleanOrigin && session.appId) {
-        const app = await prisma.oAuthApp.findUnique({
+        const app = (session.app && session.app.allowedOrigins !== undefined) ? session.app : await prisma.oAuthApp.findUnique({
           where: { id: session.appId },
           select: {
             id: true,

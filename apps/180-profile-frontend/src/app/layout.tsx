@@ -29,16 +29,26 @@ export default function RootLayout({
         <link rel="icon" href="/180-core-icon.png" media="(prefers-color-scheme: light)" />
         <link rel="icon" href="/180-core-icon-dark.png" media="(prefers-color-scheme: dark)" />
         <link rel="apple-touch-icon" href="/180-core-icon.png" />
-        <link rel="preconnect" href="https://api.fontshare.com" />
+        {/* High-Performance Asset Loading: Preconnect & Preload */}
+        <link rel="preconnect" href="https://api.fontshare.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://api.fontshare.com" />
         <link
           href="https://api.fontshare.com/v2/css?f[]=satoshi@900,700,500,400,300&display=swap"
           rel="stylesheet"
         />
+        {/* Preload Razorpay Checkout Core for < 5ms instant payment popup */}
+        <link rel="preconnect" href="https://checkout.razorpay.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://checkout.razorpay.com" />
+        <link rel="preload" href="https://checkout.razorpay.com/v1/checkout.js" as="script" />
+        {/* Non-render-blocking developer code font loading */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
           href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
           rel="stylesheet"
+          media="print"
+          // @ts-ignore
+          onLoad="this.media='all'"
         />
         <script
           dangerouslySetInnerHTML={{

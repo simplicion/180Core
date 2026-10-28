@@ -283,6 +283,8 @@ export class CheckoutService {
             description: true,
             logoUrl: true,
             isVerified: true,
+            allowedOrigins: true,
+            redirectUris: true,
             customGatewayType: true,
             customGatewayKeyId: true,
             customGatewaySecret: true,

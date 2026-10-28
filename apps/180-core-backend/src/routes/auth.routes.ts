@@ -19,6 +19,7 @@ router.get('/jwks.json', AuthApiController.getJwks);
 router.get('/certs', AuthApiController.getJwks);
 
 // ─── Authorize & Consent Flow ────────────────────────────────────────────────
+router.get('/bootstrap', optionalAuth, AuthApiController.getBootstrapConfig);
 router.get('/authorize/validate', optionalAuth, AuthApiController.validateAuthorize);
 router.get('/client/:clientId', AuthApiController.getAppPublicConfig);
 router.get('/app-config/:clientId', AuthApiController.getAppPublicConfig);

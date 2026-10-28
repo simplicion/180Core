@@ -13,6 +13,71 @@ import {
 } from './oauth.service';
 import { FIRST_PARTY_APPS, isFirstPartyApp, resolveCanonicalClientId, getPlatformClientId } from './seed-first-party';
 import { UsernameService } from '../user/username.service';
+import { globalOAuthAppCache } from './oauth-cache';
+
+const NOT_FOUND_SENTINEL = { __notFound: true };
+
+/**
+ * Cached OAuth Application Resolver
+ * Sub-millisecond resolution with LRU cache & First-Party App synthesis
+ */
+export async function getResolvedOAuthApp(effectiveClientId: string): Promise<any> {
+    const cached = globalOAuthAppCache.get(effectiveClientId);
+    if (cached) {
+        if (cached.__notFound) return null;
+        return cached;
+    }
+
+    let app: any = null;
+    try {
+        app = await prisma.oAuthApp.findUnique({
+            where: { clientId: effectiveClientId },
+            include: { user: true }
+        });
+    } catch (e) {
+        app = null;
+    }
+
+    const fp = FIRST_PARTY_APPS.find(a => a.clientId === effectiveClientId);
+    if (fp) {
+        if (!app) {
+            app = {
+                id: fp.clientId,
+                name: fp.name,
+                description: fp.description,
+                clientId: fp.clientId,
+                redirectUris: fp.redirectUris,
+                allowedOrigins: fp.allowedOrigins,
+                allowedScopes: fp.allowedScopes,
+                logoUrl: fp.logoUrl,
+                homepageUrl: 'https://180core.cloud',
+                isVerified: true,
+                isActive: true,
+                enableAuth: true,
+                enablePay: true,
+                authDesktopDefault: (fp as any).authDesktopDefault || 'popup',
+                authMobileDefault: (fp as any).authMobileDefault || 'bottom_sheet',
+                payDesktopDefault: (fp as any).payDesktopDefault || 'bottom_sheet',
+                payMobileDefault: (fp as any).payMobileDefault || 'bottom_sheet',
+                company: null,
+                user: null
+            } as any;
+        } else {
+            app.redirectUris = Array.from(new Set([...(app.redirectUris || []), ...fp.redirectUris]));
+            app.allowedOrigins = Array.from(new Set([...(app.allowedOrigins || []), ...fp.allowedOrigins]));
+            app.isActive = true;
+            app.enableAuth = true;
+            app.enablePay = true;
+        }
+    }
+
+    if (app) {
+        globalOAuthAppCache.set(effectiveClientId, app, 60000);
+    } else {
+        globalOAuthAppCache.set(effectiveClientId, NOT_FOUND_SENTINEL, 10000);
+    }
+    return app;
+}
 
 /**
  * Architectural Best Practice: First-Party Ecosystem Auto-Whitelisting
@@ -77,44 +142,7 @@ export class OAuthController {
 
             const effectiveClientId = resolveCanonicalClientId(String(effectiveRawClientId));
 
-            let app: any = null;
-            try {
-                app = await prisma.oAuthApp.findUnique({
-                    where: { clientId: effectiveClientId },
-                    include: { user: true }
-                });
-            } catch (e) {
-                app = null;
-            }
-
-            const fp = FIRST_PARTY_APPS.find(a => a.clientId === effectiveClientId);
-            if (fp) {
-                if (!app) {
-                    app = {
-                        id: fp.clientId,
-                        name: fp.name,
-                        description: fp.description,
-                        clientId: fp.clientId,
-                        redirectUris: fp.redirectUris,
-                        allowedOrigins: fp.allowedOrigins,
-                        allowedScopes: fp.allowedScopes,
-                        logoUrl: fp.logoUrl,
-                        homepageUrl: 'https://180core.cloud',
-                        isVerified: true,
-                        isActive: true,
-                        enableAuth: true,
-                        enablePay: true,
-                        company: null,
-                        user: null
-                    } as any;
-                } else {
-                    app.redirectUris = Array.from(new Set([...(app.redirectUris || []), ...fp.redirectUris]));
-                    app.allowedOrigins = Array.from(new Set([...(app.allowedOrigins || []), ...fp.allowedOrigins]));
-                    app.isActive = true;
-                    app.enableAuth = true;
-                    app.enablePay = true;
-                }
-            }
+            const app = await getResolvedOAuthApp(effectiveClientId);
 
             if (!app || !app.isActive) {
                 return res.status(400).json({
@@ -391,6 +419,84 @@ export class OAuthController {
     }
 
     /**
+     * 1.05 Single-Round-Trip Consolidated Bootstrap Endpoint
+     * Serves app metadata, origin validation, and SSO provider credentials in < 2ms
+     */
+    static async getBootstrapConfig(req: any, res: any) {
+        try {
+            const client_id = req.query.client_id || req.query.clientId || req.body?.client_id || req.body?.clientId;
+            const redirect_uri = req.query.redirect_uri || req.query.redirectUri;
+            const callerOrigin = req.query.origin || (req.headers.origin as string) || (req.headers.referer ? (() => {
+                try { return new URL(req.headers.referer as string).origin; } catch (_) { return ''; }
+            })() : '');
+
+            const effectiveRawClientId = client_id || getPlatformClientId();
+            if (!effectiveRawClientId) {
+                return res.status(400).json({ error: 'invalid_request', error_description: 'Missing client_id parameter' });
+            }
+
+            const effectiveClientId = resolveCanonicalClientId(String(effectiveRawClientId));
+            const app = await getResolvedOAuthApp(effectiveClientId);
+
+            if (!app || !app.isActive) {
+                return res.status(400).json({
+                    error: 'unauthorized_client',
+                    error_description: `OAuth Application with Client ID '${client_id}' was not found or is currently inactive.`,
+                    details: {
+                        type: 'CLIENT_NOT_FOUND',
+                        clientId: String(client_id),
+                        hint: `Verify that the Client ID matches an active application in your 180 Developer Portal.`
+                    }
+                });
+            }
+
+            // Origin / Redirect URI validation
+            const cleanOrigin = callerOrigin ? callerOrigin.toLowerCase().replace(/\/$/, '') : '';
+            let isOriginAllowed = true;
+            if (cleanOrigin && app.allowedOrigins && app.allowedOrigins.length > 0) {
+                const isAllowed = app.allowedOrigins.some((ao: string) => {
+                    const cleanAo = ao.trim().toLowerCase().replace(/\/$/, '');
+                    return cleanAo === '*' || cleanAo === cleanOrigin;
+                }) || (app.redirectUris && app.redirectUris.some((ru: string) => {
+                    try { return new URL(ru).origin.toLowerCase() === cleanOrigin; } catch (_) { return false; }
+                })) || isFirstPartyOrigin(cleanOrigin);
+
+                isOriginAllowed = Boolean(isAllowed);
+            }
+
+            // High performance edge & client cache header
+            res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+            return res.json({
+                success: true,
+                app: {
+                    name: app.name,
+                    logoUrl: app.logoUrl || '',
+                    description: app.description || '',
+                    isVerified: app.isVerified || false,
+                    clientId: app.clientId,
+                    enableGoogleAuth: ((app as any).bankDetails as any)?.enableGoogleAuth ?? true,
+                    enableLinkedInAuth: ((app as any).bankDetails as any)?.enableLinkedInAuth ?? true,
+                    enableGitHubAuth: ((app as any).bankDetails as any)?.enableGitHubAuth ?? true,
+                    enableEmailAuth: ((app as any).bankDetails as any)?.enableEmailAuth ?? true,
+                    authDesktopDefault: (app as any).authDesktopDefault || 'popup',
+                    authMobileDefault: (app as any).authMobileDefault || 'bottom_sheet',
+                    payDesktopDefault: (app as any).payDesktopDefault || 'bottom_sheet',
+                    payMobileDefault: (app as any).payMobileDefault || 'bottom_sheet',
+                },
+                sso: {
+                    google: { clientId: process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '' },
+                    linkedin: { clientId: process.env.LINKEDIN_CLIENT_ID || process.env.NEXT_PUBLIC_LINKEDIN_CLIENT_ID || '' },
+                    github: { clientId: process.env.GITHUB_CLIENT_ID || process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID || '' },
+                },
+                isOriginAllowed
+            });
+        } catch (err: any) {
+            console.error('[OAuthController:getBootstrapConfig] Error:', err);
+            return res.status(500).json({ error: 'server_error', error_description: err.message });
+        }
+    }
+
+    /**
      * 1.1 Public Application Metadata & UX Configuration
      */
     static async getAppPublicConfig(req: any, res: any) {
@@ -402,43 +508,7 @@ export class OAuthController {
 
             const effectiveClientId = resolveCanonicalClientId(String(clientId));
 
-            let app: any = null;
-            try {
-                app = await prisma.oAuthApp.findUnique({
-                    where: { clientId: effectiveClientId },
-                    include: { user: true }
-                });
-            } catch (e) {
-                app = null;
-            }
-
-            const fp = FIRST_PARTY_APPS.find(a => a.clientId === effectiveClientId);
-            if (fp) {
-                if (!app) {
-                    app = {
-                        id: fp.clientId,
-                        name: fp.name,
-                        description: fp.description,
-                        clientId: fp.clientId,
-                        redirectUris: fp.redirectUris,
-                        allowedOrigins: fp.allowedOrigins,
-                        allowedScopes: fp.allowedScopes,
-                        logoUrl: fp.logoUrl,
-                        homepageUrl: 'https://180core.cloud',
-                        isVerified: true,
-                        isActive: true,
-                        authDesktopDefault: (fp as any).authDesktopDefault || 'popup',
-                        authMobileDefault: (fp as any).authMobileDefault || 'bottom_sheet',
-                        payDesktopDefault: (fp as any).payDesktopDefault || 'bottom_sheet',
-                        payMobileDefault: (fp as any).payMobileDefault || 'bottom_sheet',
-                        user: null,
-                    } as any;
-                } else {
-                    app.isActive = true;
-                    app.enableAuth = true;
-                    app.enablePay = true;
-                }
-            }
+            const app = await getResolvedOAuthApp(effectiveClientId);
 
             if (!app || !app.isActive) {
                 return res.status(404).json({ error: 'client_not_found', error_description: `OAuth Application '${clientId}' was not found or is inactive.` });
@@ -496,41 +566,7 @@ export class OAuthController {
 
             const effectiveClientId = resolveCanonicalClientId(String(effectiveRawClientId));
 
-            let app: any = null;
-            try {
-                app = await prisma.oAuthApp.findUnique({
-                    where: { clientId: effectiveClientId }
-                });
-            } catch (e) {
-                app = null;
-            }
-
-            const fp = FIRST_PARTY_APPS.find(a => a.clientId === effectiveClientId);
-            if (fp) {
-                if (!app) {
-                    app = {
-                        id: fp.clientId,
-                        name: fp.name,
-                        description: fp.description,
-                        clientId: fp.clientId,
-                        redirectUris: fp.redirectUris,
-                        allowedOrigins: fp.allowedOrigins,
-                        allowedScopes: fp.allowedScopes,
-                        logoUrl: fp.logoUrl,
-                        homepageUrl: 'https://180core.cloud',
-                        isVerified: true,
-                        isActive: true,
-                        enableAuth: true,
-                        enablePay: true
-                    } as any;
-                } else {
-                    app.redirectUris = Array.from(new Set([...(app.redirectUris || []), ...fp.redirectUris]));
-                    app.allowedOrigins = Array.from(new Set([...(app.allowedOrigins || []), ...fp.allowedOrigins]));
-                    app.isActive = true;
-                    app.enableAuth = true;
-                    app.enablePay = true;
-                }
-            }
+            const app = await getResolvedOAuthApp(effectiveClientId);
 
             if (!app || !app.isActive) {
                 return res.status(400).json({

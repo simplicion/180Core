@@ -60,7 +60,20 @@ function LoginFormContent() {
     enableLinkedInAuth?: boolean;
     enableGitHubAuth?: boolean;
     enableEmailAuth?: boolean;
-  } | null>(null);
+  } | null>(() => {
+    if (!oauthParams.clientId) return null;
+    return {
+      name: searchParams.get('appName') || (oauthParams.clientId.startsWith('180') ? '180 Identity' : oauthParams.clientId),
+      logoUrl: searchParams.get('appLogo') || '',
+      description: searchParams.get('appDescription') || '',
+      isVerified: true,
+      clientId: oauthParams.clientId,
+      enableGoogleAuth: true,
+      enableLinkedInAuth: true,
+      enableGitHubAuth: true,
+      enableEmailAuth: true,
+    };
+  });
 
   // Cached User Session (for 1-click return)
   const [cachedUser, setCachedUser] = useState<any>(null);
@@ -188,7 +201,8 @@ function LoginFormContent() {
 
     try {
       setIsValidatingOAuth(true);
-      const res = await fetch(getCoreApiUrl(`/api/oauth/authorize/validate?${query.toString()}`), {
+      // High-performance single-round-trip consolidated bootstrap endpoint
+      const res = await fetch(getCoreApiUrl(`/api/oauth/bootstrap?${query.toString()}`), {
         credentials: 'include',
       });
       if (!res.ok) {
@@ -214,7 +228,20 @@ function LoginFormContent() {
             enableEmailAuth: appData.enableEmailAuth !== false,
           });
         }
-        setOauthValidationError(null);
+        if (data.isOriginAllowed === false) {
+          setOauthValidationError({
+            error: 'forbidden_origin',
+            errorDescription: `Origin '${callerOrigin}' is not authorized for this application.`,
+            details: {
+              type: 'ORIGIN_NOT_ALLOWED',
+              clientId: oauthParams.clientId,
+              requestedOrigin: callerOrigin,
+              hint: 'Add this origin to Allowed Web Origins in 180 Developer Portal.'
+            }
+          });
+        } else {
+          setOauthValidationError(null);
+        }
       }
     } catch (e: any) {
       console.warn('[180 Identity] OAuth pre-validation note:', e.message);

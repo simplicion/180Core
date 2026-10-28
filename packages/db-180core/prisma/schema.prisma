@@ -124,6 +124,8 @@ model OAuthApp {
 
   @@index([userId])
   @@index([clientId])
+  @@index([customPayDomain, isActive])
+  @@index([clientId, isActive])
 }
 
 model OAuthAuthorizationCode {
@@ -321,6 +323,8 @@ model CheckoutSession {
 
   @@index([appId, status])
   @@index([userId])
+  @@index([appId, status, createdAt])
+  @@index([appId, createdAt])
 }
 
 model PayoutRequest {
@@ -504,6 +508,7 @@ model PaymentLink {
 
   @@index([appId, isActive])
   @@index([slug])
+  @@index([slug, isActive])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

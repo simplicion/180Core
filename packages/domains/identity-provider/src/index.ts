@@ -5,6 +5,7 @@
 export * from './crypto/rsa-keys.service';
 export * from './oauth/oauth.service';
 export * from './oauth/oauth.controller';
+export * from './oauth/oauth-cache';
 export * from './oauth/identity-auth.controller';
 export * from './oauth/seed-first-party';
 export * from './developer/developer.controller';
