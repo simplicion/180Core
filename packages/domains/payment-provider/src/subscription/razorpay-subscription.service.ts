@@ -104,12 +104,15 @@ export class RazorpaySubscriptionService {
     const authHeader = this.getAuthHeader();
 
     if (!authHeader) {
-      const mockId = `sub_sim_${Date.now()}`;
-      return {
-        id: mockId,
-        shortUrl: `https://rzp.io/i/sim_${mockId}`,
-        status: 'created',
-      };
+      if (process.env.NODE_ENV === 'test') {
+        const mockId = `sub_sim_${Date.now()}`;
+        return {
+          id: mockId,
+          shortUrl: `https://rzp.io/i/sim_${mockId}`,
+          status: 'created',
+        };
+      }
+      throw new Error('Razorpay subscription credentials not configured on platform');
     }
 
     try {
@@ -137,15 +140,17 @@ export class RazorpaySubscriptionService {
         status: res.data.status,
       };
     } catch (err: any) {
-      console.warn(
-        `[RazorpaySubscriptionService] Razorpay subscription creation note: ${err.response?.data?.error?.description || err.message}. Falling back to simulation.`
-      );
-      const mockId = `sub_fallback_${Date.now()}`;
-      return {
-        id: mockId,
-        shortUrl: `https://rzp.io/i/fallback_${mockId}`,
-        status: 'created',
-      };
+      const errMsg = err.response?.data?.error?.description || err.message || 'Razorpay subscription creation failed';
+      console.error(`[RazorpaySubscriptionService] Subscription creation failed:`, errMsg);
+      if (process.env.NODE_ENV === 'test') {
+        const mockId = `sub_fallback_${Date.now()}`;
+        return {
+          id: mockId,
+          shortUrl: `https://rzp.io/i/fallback_${mockId}`,
+          status: 'created',
+        };
+      }
+      throw new Error(`Razorpay subscription failed: ${errMsg}`);
     }
   }
 

@@ -32,3 +32,7 @@
 /security                            /security                                  200
 /activity                            /activity                                  200
 /settings                            /settings                                  200
+
+# 180 Pay Receipt Routes
+/thankyou                            /thankyou                                  200
+

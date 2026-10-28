@@ -286,7 +286,11 @@ export class CheckoutService {
    * Features zero-drop resiliency: auto-heals payment links, top-ups, dev sessions,
    * client-side sandbox sessions, and auto-renews active checkouts.
    */
-  static async getSession(sessionId: string, fallbackData?: any, options?: { skipReconcile?: boolean }) {
+  static async getSession(
+    sessionId: string,
+    fallbackData?: any,
+    options?: { skipReconcile?: boolean; clientSessionId?: string }
+  ) {
     let session: any = await prisma.checkoutSession.findUnique({
       where: { id: sessionId },
       include: {
@@ -478,52 +482,54 @@ export class CheckoutService {
             throw new Error('This payment link has expired.');
           }
 
-          const candidateSessions = await prisma.checkoutSession.findMany({
-            where: {
-              appId: paymentLink.appId,
-              createdAt: { gt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-            },
-            include: {
-              app: {
-                select: APP_CHECKOUT_SELECT,
+          // A payment link is a shareable URL that multiple customers can visit.
+          // NEVER return a CAPTURED or COMPLETED session when looking up by payment link slug!
+          const visitorClientId = options?.clientSessionId || (fallbackData as any)?.clientSessionId;
+          let pendingSession = null;
+
+          if (visitorClientId) {
+            const candidateSessions = await prisma.checkoutSession.findMany({
+              where: {
+                appId: paymentLink.appId,
+                status: 'PENDING',
+                expiresAt: { gt: new Date() },
+                createdAt: { gt: new Date(Date.now() - 60 * 60 * 1000) },
               },
-            },
-            orderBy: { createdAt: 'desc' },
-            take: 30,
-          });
+              include: {
+                app: {
+                  select: APP_CHECKOUT_SELECT,
+                },
+              },
+              orderBy: { createdAt: 'desc' },
+              take: 20,
+            });
 
-          const matchingSessions = candidateSessions.filter(
-            (s) => (s.metadata as any)?.paymentLinkId === paymentLink.id || (s.metadata as any)?.paymentLinkSlug === paymentLink.slug
-          );
+            pendingSession = candidateSessions.find((s) => {
+              const meta = (s.metadata as any) || {};
+              const isSameLink = meta.paymentLinkId === paymentLink.id || meta.paymentLinkSlug === paymentLink.slug;
+              const isSameVisitor = meta.clientSessionId === visitorClientId;
+              return isSameLink && isSameVisitor;
+            }) || null;
+          }
 
-          const capturedSession = matchingSessions.find(
-            (s) => s.status === 'CAPTURED' || s.status === 'COMPLETED'
-          );
-
-          const pendingSession = matchingSessions.find(
-            (s) => s.status === 'PENDING' && new Date(s.expiresAt) > new Date()
-          );
-
-          if (capturedSession && (!pendingSession || capturedSession.updatedAt >= pendingSession.updatedAt)) {
-            session = capturedSession;
-          } else if (pendingSession) {
+          if (pendingSession) {
             session = pendingSession;
-          } else if (capturedSession) {
-            session = capturedSession;
           } else {
             const isCustomAmount = Number(paymentLink.amount) === 0 || Boolean((paymentLink as any).allowCustomAmount) || Boolean((paymentLink.metadata as any)?.allowCustomAmount);
             session = await prisma.checkoutSession.create({
               data: {
                 appId: paymentLink.appId,
-                amount: paymentLink.amount,
-                originalAmount: paymentLink.amount,
+                amount: Number(paymentLink.amount),
+                originalAmount: Number(paymentLink.amount),
                 currency: (paymentLink.currency || 'INR').toUpperCase(),
                 status: 'PENDING',
                 title: paymentLink.title,
                 description: paymentLink.description || '',
+                returnUrl: paymentLink.redirectUrl || '',
                 metadata: {
                   paymentLinkId: paymentLink.id,
                   paymentLinkSlug: paymentLink.slug,
+                  clientSessionId: visitorClientId || undefined,
                   source: 'PAYMENT_LINK',
                   allowCoupons: paymentLink.allowCoupons,
                   allowCustomAmount: isCustomAmount,
@@ -545,51 +551,6 @@ export class CheckoutService {
           throw linkHealErr;
         }
         console.warn('[CheckoutService:getSession] Could not auto-resolve payment link session:', linkHealErr);
-      }
-    }
-
-    // Auto-heal or JIT-persist client-side / sandbox / demo / SDK sessions if not yet in DB
-    if (!session && (sessionId.startsWith('sess_') || sessionId.startsWith('cs_') || sessionId === 'default' || fallbackData)) {
-      try {
-        const platformApp = await CheckoutService.resolvePlatformOAuthApp();
-        const targetAppId = fallbackData?.appId || (platformApp ? platformApp.id : null);
-        const targetAmount = typeof fallbackData?.targetAmount === 'number' && fallbackData.targetAmount > 0
-          ? fallbackData.targetAmount
-          : (typeof fallbackData?.amount === 'number' && fallbackData.amount > 0 ? fallbackData.amount : 49.0);
-        const targetCurrency = String(fallbackData?.targetCurrency || fallbackData?.currency || 'USD').toUpperCase();
-        const targetTitle = fallbackData?.title || '180 Pay Checkout';
-        const targetDesc = fallbackData?.description || 'Sandbox verification session';
-
-        if (targetAppId) {
-          session = await prisma.checkoutSession.create({
-            data: {
-              id: sessionId === 'default' ? `sess_${crypto.randomBytes(8).toString('hex')}` : sessionId,
-              appId: targetAppId,
-              amount: targetAmount,
-              originalAmount: targetAmount,
-              currency: targetCurrency,
-              status: 'PENDING',
-              mode: 'payment',
-              title: targetTitle,
-              description: targetDesc,
-              returnUrl: fallbackData?.returnUrl || '',
-              cancelUrl: fallbackData?.cancelUrl || '',
-              metadata: {
-                isSandbox: true,
-                autoCreated: true,
-                ...(fallbackData?.metadata || {}),
-              },
-              expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-            },
-            include: {
-              app: {
-                select: APP_CHECKOUT_SELECT,
-              },
-            },
-          });
-        }
-      } catch (autoCreateErr) {
-        console.warn('[CheckoutService:getSession] Could not auto-create JIT session:', autoCreateErr);
       }
     }
 
@@ -1315,24 +1276,6 @@ export class CheckoutService {
       options?.targetCurrency || sessionMeta.appliedCurrency || session.currency || 'INR'
     ).toUpperCase();
 
-    let targetAmount =
-      typeof options?.targetAmount === 'number' && options.targetAmount > 0
-        ? options.targetAmount
-        : session.amount;
-
-    // Convert targetAmount if targetCurrency differs from session.currency and explicit targetAmount wasn't provided
-    if (
-      options?.targetCurrency &&
-      options.targetCurrency.toUpperCase() !== (session.currency || '').toUpperCase() &&
-      (!options.targetAmount || options.targetAmount === session.amount)
-    ) {
-      targetAmount = GeoPricingService.convertCurrency(
-        session.amount,
-        session.currency || 'USD',
-        targetCurrency
-      );
-    }
-
     // Only allow custom amount mutation if the session explicitly allows custom amounts (e.g. wallet top-ups)
     const isCustomAmountAllowed = Boolean(
       sessionMeta.allowCustomAmount ||
@@ -1340,11 +1283,10 @@ export class CheckoutService {
       sessionId.startsWith('sess_topup_')
     );
 
-    if (
-      isCustomAmountAllowed &&
-      options?.targetAmount &&
-      options.targetAmount > 0
-    ) {
+    let targetAmount = session.amount;
+
+    if (isCustomAmountAllowed && typeof options?.targetAmount === 'number' && options.targetAmount > 0) {
+      targetAmount = options.targetAmount;
       const baseSessionAmount =
         targetCurrency !== (session.currency || 'USD').toUpperCase()
           ? GeoPricingService.convertCurrency(options.targetAmount, targetCurrency, session.currency || 'USD')
@@ -1359,6 +1301,15 @@ export class CheckoutService {
           },
         }).catch(() => {});
         session.amount = baseSessionAmount;
+      }
+    } else {
+      // Fixed session amount: convert to targetCurrency if user requested alternate display currency
+      if (targetCurrency !== (session.currency || 'INR').toUpperCase()) {
+        targetAmount = GeoPricingService.convertCurrency(
+          session.amount,
+          session.currency || 'USD',
+          targetCurrency
+        );
       }
     }
 
@@ -1480,15 +1431,24 @@ export class CheckoutService {
       };
     }
 
-    // If simulated / dummy platform key, generate simulated order without remote network call
-    if (keyId.includes('simulated') || keyId.includes('mock_') || !keySecret || keySecret.includes('simulated')) {
-      return {
-        orderId: `order_sim_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        amountPaise: amountSmallestUnit,
-        currency: targetCurrency,
-        keyId,
-        gatewayType: 'RAZORPAY',
-      };
+    // Simulated order only permitted in automated test environments
+    if (
+      process.env.NODE_ENV === 'test' ||
+      keyId.includes('simulated') ||
+      keyId.includes('mock_') ||
+      !keySecret ||
+      keySecret.includes('simulated')
+    ) {
+      if (process.env.NODE_ENV === 'test') {
+        return {
+          orderId: `order_sim_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          amountPaise: amountSmallestUnit,
+          currency: targetCurrency,
+          keyId,
+          gatewayType: 'RAZORPAY',
+        };
+      }
+      throw new Error('Payment gateway credentials not configured on platform');
     }
 
     const authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
@@ -1666,7 +1626,7 @@ export class CheckoutService {
     } else {
       // Razorpay HMAC-SHA256 signature verification
       const hasLiveKey = Boolean(keySecret && !keySecret.includes('simulated'));
-      const isTestMock = !hasLiveKey && (orderId?.startsWith('order_sim_') || signature === 'mock_sig_sandbox');
+      const isTestMock = process.env.NODE_ENV === 'test' && !hasLiveKey && (orderId?.startsWith('order_sim_') || signature === 'mock_sig_sandbox');
 
       if (!isTestMock && signature !== 'auto_polled_capture') {
         if (!keySecret) {
@@ -1706,6 +1666,10 @@ export class CheckoutService {
               });
               const pData = rzpPayRes.data;
               if (pData && (pData.status === 'captured' || pData.status === 'authorized')) {
+                // Security validation: verify order binding
+                if (pData.order_id && pData.order_id !== orderId) {
+                  throw new Error('Payment was not made for this order');
+                }
                 if (pData.status === 'authorized') {
                   try {
                     const capRes = await axios.post(
@@ -1750,6 +1714,10 @@ export class CheckoutService {
 
       if (session.status === 'CAPTURED') {
         return { session, transactionId: paymentId, alreadyCaptured: true };
+      }
+
+      if (session.status === 'CANCELLED') {
+        throw new Error('This checkout session was cancelled.');
       }
 
       // Fetch or create Developer App Wallet
@@ -1874,7 +1842,8 @@ export class CheckoutService {
           const PaymentLinkService = require('../payment-link/payment-link.service').PaymentLinkService;
           const fulfillment = await PaymentLinkService.completeLinkPurchase(
             (result.session.metadata as any).paymentLinkId,
-            result.session.id
+            result.session.id,
+            result.session.amount
           );
           if (fulfillment) {
             await prisma.checkoutSession.update({

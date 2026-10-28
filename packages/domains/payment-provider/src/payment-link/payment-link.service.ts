@@ -740,29 +740,10 @@ export class PaymentLinkService {
           console.warn('[PaymentLinkService] Razorpay payment link error:', plinkErr?.message);
         }
       }
-
-      // Tier 3: Simulated Razorpay UPI Payload for local / mock mode
-      const simVpa = 'rzp.simulated@hdfcbank';
-      const cleanName = encodeURIComponent(payeeName);
-      const cleanNote = encodeURIComponent(description);
-      const simUpi = `upi://pay?pa=${simVpa}&pn=${cleanName}&am=${amount.toFixed(2)}&cu=${currency}&tn=${cleanNote}`;
-
-      return {
-        qrType: 'RAZORPAY_SIMULATED',
-        qrPayload: simUpi,
-        gateway: 'RAZORPAY',
-        amount,
-        currency,
-        payeeName,
-        linkSlug: link?.slug || null,
-        isDirectUpi: true,
-        simulated: true,
-        mode: 'SIMULATED',
-      };
     }
 
-    // Default / Stripe: Universal Web Checkout URL
-    const publicBase = process.env.PUBLIC_URL || process.env.NEXT_PUBLIC_PUBLIC_BASE || process.env.PROFILE_FRONTEND_URL || process.env.NEXT_PUBLIC_PROFILE_URL || '';
+    // Default: Universal Web Checkout URL
+    const publicBase = (process.env.PUBLIC_URL || process.env.NEXT_PUBLIC_PUBLIC_BASE || process.env.PROFILE_FRONTEND_URL || process.env.NEXT_PUBLIC_PROFILE_URL || 'https://profile.180core.cloud').replace(/\/+$/, '');
     const webUrl = link ? `${publicBase}/link/${link.slug}` : `${publicBase}/pay/${appId}`;
     return {
       qrType: 'UNIVERSAL_WEB_LINK',
@@ -773,7 +754,7 @@ export class PaymentLinkService {
       payeeName,
       linkSlug: link?.slug || null,
       isDirectUpi: false,
-      mode: 'WEB_LINK',
+      mode: 'GATEWAY_LINK',
     };
   }
 }

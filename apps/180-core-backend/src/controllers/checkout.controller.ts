@@ -505,7 +505,8 @@ export class CheckoutApiController {
   static async getCheckoutSession(req: Request, res: Response) {
     try {
       const id = String(req.params.id);
-      const session = await CheckoutService.getSession(id);
+      const clientSessionId = (req.query.clientSessionId as string) || (req.headers['x-client-session-id'] as string) || (req.headers['x-180-client-session-id'] as string);
+      const session = await CheckoutService.getSession(id, undefined, { clientSessionId, skipReconcile: true });
       if (!session) {
         return res.status(404).json({ success: false, error: 'Checkout session not found or expired.' });
       }
@@ -1054,40 +1055,48 @@ export class CheckoutApiController {
     try {
       const crypto = require('crypto');
       const signature = req.headers['x-razorpay-signature'] as string;
+      if (!signature) {
+        console.warn('[CheckoutWebhook] Webhook rejected: missing x-razorpay-signature header');
+        return res.status(401).json({ error: 'Missing x-razorpay-signature header' });
+      }
+
       const candidateSecrets = [
         process.env.RAZORPAY_WEBHOOK_SECRET,
         process.env.CORE_WEBHOOK_SECRET,
         process.env.RAZORPAY_KEY_SECRET,
       ].filter(Boolean) as string[];
 
-      if (signature && candidateSecrets.length > 0) {
-        const rawBody = (req as any).rawBody;
-        let isValid = false;
+      if (candidateSecrets.length === 0) {
+        console.warn('[CheckoutWebhook] Webhook rejected: no webhook secret configured on platform');
+        return res.status(500).json({ error: 'Webhook secret not configured' });
+      }
 
-        for (const secret of candidateSecrets) {
-          if (rawBody && Buffer.isBuffer(rawBody)) {
-            const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
-            const expectedBuf = Buffer.from(expected, 'utf-8');
-            const signatureBuf = Buffer.from(signature, 'utf-8');
-            if (expectedBuf.length === signatureBuf.length && crypto.timingSafeEqual(expectedBuf, signatureBuf)) {
-              isValid = true;
-              break;
-            }
-          }
-          const bodyStr = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
-          const expectedStr = crypto.createHmac('sha256', secret).update(bodyStr).digest('hex');
-          const expectedBuf = Buffer.from(expectedStr, 'utf-8');
+      const rawBody = (req as any).rawBody;
+      let isValid = false;
+
+      for (const secret of candidateSecrets) {
+        if (rawBody && Buffer.isBuffer(rawBody)) {
+          const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+          const expectedBuf = Buffer.from(expected, 'utf-8');
           const signatureBuf = Buffer.from(signature, 'utf-8');
           if (expectedBuf.length === signatureBuf.length && crypto.timingSafeEqual(expectedBuf, signatureBuf)) {
             isValid = true;
             break;
           }
         }
-
-        if (!isValid) {
-          console.warn('[CheckoutWebhook] Invalid signature received from Razorpay. Checked secrets count:', candidateSecrets.length);
-          return res.status(400).json({ error: 'Invalid webhook signature' });
+        const bodyStr = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+        const expectedStr = crypto.createHmac('sha256', secret).update(bodyStr).digest('hex');
+        const expectedBuf = Buffer.from(expectedStr, 'utf-8');
+        const signatureBuf = Buffer.from(signature, 'utf-8');
+        if (expectedBuf.length === signatureBuf.length && crypto.timingSafeEqual(expectedBuf, signatureBuf)) {
+          isValid = true;
+          break;
         }
+      }
+
+      if (!isValid) {
+        console.warn('[CheckoutWebhook] Invalid signature received from Razorpay. Checked secrets count:', candidateSecrets.length);
+        return res.status(400).json({ error: 'Invalid webhook signature' });
       }
 
       const event = req.body.event;

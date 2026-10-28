@@ -276,15 +276,17 @@ export class SubscriptionApiController {
   static async handleRazorpayWebhook(req: Request, res: Response) {
     try {
       const signature = req.headers['x-razorpay-signature'] as string;
+      if (!signature) {
+        return res.status(401).json({ success: false, error: 'Missing x-razorpay-signature header' });
+      }
+
       const rawBody = (req as any).rawBody || JSON.stringify(req.body);
 
       // Verify Razorpay signature
-      if (signature) {
-        const isValid = RazorpaySubscriptionService.verifyWebhookSignature(rawBody, signature);
-        if (!isValid) {
-          console.warn('[SubscriptionApiController:handleRazorpayWebhook] Invalid webhook signature');
-          return res.status(400).json({ success: false, error: 'Invalid webhook signature' });
-        }
+      const isValid = RazorpaySubscriptionService.verifyWebhookSignature(rawBody, signature);
+      if (!isValid) {
+        console.warn('[SubscriptionApiController:handleRazorpayWebhook] Invalid webhook signature');
+        return res.status(400).json({ success: false, error: 'Invalid webhook signature' });
       }
 
       const result = await RazorpaySubscriptionService.handleRazorpaySubscriptionWebhook(req.body);

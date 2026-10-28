@@ -938,7 +938,7 @@ export function CheckoutClient({
       orderId: (session?.metadata as any)?.orderId,
       amount: activeFinalAmount,
       currency: activeCurrency,
-    }) : `/thankyou?session=${encodeURIComponent(targetSessionId)}&payment_id=${encodeURIComponent(txId)}&status=success`;
+    }) : '';
 
     const liveSuccessPayload = {
       type: '180_PAYMENT_SUCCESS',
@@ -948,7 +948,7 @@ export function CheckoutClient({
       currency: activeCurrency,
       creditedUserBalance: details.creditedUserBalance,
       newBalance: details.creditedUserBalance,
-      returnUrl: formattedReturnUrl,
+      returnUrl: formattedReturnUrl || undefined,
       status: 'success',
     };
     const liveSuccessPayloadPay = {
@@ -969,59 +969,51 @@ export function CheckoutClient({
       }
     }
 
-    setTimeout(() => {
-      if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
-        // Send explicit close and success messages to iframe bottom sheet container
-        window.parent.postMessage({
-          type: '180_PAYMENT_SUCCESS',
-          sessionId: targetSessionId,
-          transactionId: txId,
-          returnUrl: formattedReturnUrl,
-          amount: activeFinalAmount,
-          currency: activeCurrency,
-          status: 'success',
-        }, '*');
-        window.parent.postMessage({
-          type: '180_PAYMENT_CLOSE',
-          sessionId: targetSessionId,
-          success: true,
-          returnUrl: formattedReturnUrl,
-          transactionId: txId,
-          status: 'success',
-        }, '*');
-        window.parent.postMessage({
-          type: '180_PAY_CLOSE',
-          sessionId: targetSessionId,
-          success: true,
-          returnUrl: formattedReturnUrl,
-          transactionId: txId,
-          status: 'success',
-        }, '*');
+    // Only auto-redirect if an external return URL was explicitly configured by the merchant/developer
+    if (formattedReturnUrl) {
+      setTimeout(() => {
+        if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+          // Send explicit close and success messages to iframe bottom sheet container
+          window.parent.postMessage({
+            type: '180_PAYMENT_SUCCESS',
+            sessionId: targetSessionId,
+            transactionId: txId,
+            returnUrl: formattedReturnUrl,
+            amount: activeFinalAmount,
+            currency: activeCurrency,
+            status: 'success',
+          }, '*');
+          window.parent.postMessage({
+            type: '180_PAYMENT_CLOSE',
+            sessionId: targetSessionId,
+            success: true,
+            returnUrl: formattedReturnUrl,
+            transactionId: txId,
+            status: 'success',
+          }, '*');
+          window.parent.postMessage({
+            type: '180_PAY_CLOSE',
+            sessionId: targetSessionId,
+            success: true,
+            returnUrl: formattedReturnUrl,
+            transactionId: txId,
+            status: 'success',
+          }, '*');
 
-        // Direct top window redirect if accessible
-        try {
-          if (formattedReturnUrl && window.top && window.top !== window) {
-            window.top.location.href = formattedReturnUrl;
-            return;
+          // Direct top window redirect if accessible
+          try {
+            if (formattedReturnUrl && window.top && window.top !== window) {
+              window.top.location.href = formattedReturnUrl;
+              return;
+            }
+          } catch (_) {
+            // If cross-origin prevents direct top access, parent postMessage listener handles it
           }
-        } catch (_) {
-          // If cross-origin prevents direct top access, parent postMessage listener handles it
         }
-      }
 
-      if (formattedReturnUrl) {
         window.location.href = formattedReturnUrl;
-      } else if (onClose) {
-        onClose();
-      } else if (typeof window !== 'undefined') {
-        if (window.opener) {
-          window.close();
-        } else if (window.parent && window.parent !== window) {
-          window.parent.postMessage({ type: '180_PAYMENT_CLOSE', sessionId: targetSessionId, success: true }, '*');
-          window.parent.postMessage({ type: '180_PAY_CLOSE', sessionId: targetSessionId, success: true }, '*');
-        }
-      }
-    }, 1000);
+      }, 3500);
+    }
   }, [completed, session, sessionId, activeFinalAmount, activeCurrency, onSuccess, onClose]);
 
   const checkStatusRef = React.useRef(false);
@@ -1074,13 +1066,24 @@ export function CheckoutClient({
           : null;
       const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
 
+      const sessionUrl = getCoreApiUrl(
+        `/api/oauth/checkout/sessions/${sessionId}${clientSessionId ? `?clientSessionId=${encodeURIComponent(clientSessionId)}` : ''}`
+      );
+
       const [sessionRes, walletRes] = await Promise.all([
-        fetch(getCoreApiUrl(`/api/oauth/checkout/sessions/${sessionId}`), { headers: authHeaders, credentials: 'include' }),
+        fetch(sessionUrl, {
+          headers: {
+            ...authHeaders,
+            ...(clientSessionId ? { 'x-client-session-id': clientSessionId } : {}),
+          },
+          credentials: 'include',
+        }),
         fetch(getCoreApiUrl('/api/oauth/wallet'), { headers: authHeaders, credentials: 'include' }),
       ]);
 
       let sessionInfo: any = null;
       let caughtDomainError: any = null;
+      let sessionErrorMessage: string = '';
       try {
         const sessionData = await sessionRes.json();
         if (sessionData && sessionData.success) {
@@ -1101,10 +1104,12 @@ export function CheckoutClient({
             };
             setDomainError(caughtDomainError);
           }
+        } else if (sessionData) {
+          sessionErrorMessage = sessionData.message || sessionData.error || '';
         }
       } catch (_) {}
 
-      // If domain whitelist error occurred, DO NOT fallback to mock sandbox parameters
+      // If domain whitelist error occurred, DO NOT fallback to mock parameters
       if (caughtDomainError) {
         if (typeof window !== 'undefined') {
           const lockPayload = {
@@ -1121,75 +1126,6 @@ export function CheckoutClient({
         return;
       }
 
-      const isSandboxSession = Boolean(
-        sessionId && (
-          sessionId.startsWith('sess_') ||
-          sessionId.startsWith('cs_') ||
-          sessionId === 'default'
-        )
-      );
-
-      // Robust fallback for Sandbox / Demo / Standalone sessions
-      if (!sessionInfo && isSandboxSession) {
-        const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-        const rawQueryAmount = urlParams?.get('amount');
-        const parsedQueryAmount = rawQueryAmount !== null && rawQueryAmount !== undefined && !isNaN(parseFloat(rawQueryAmount))
-          ? parseFloat(rawQueryAmount)
-          : null;
-        const queryAmount = parsedQueryAmount !== null
-          ? parsedQueryAmount
-          : (initialAmount !== undefined ? initialAmount : 0);
-        const queryTitle =
-          urlParams?.get('title') ||
-          (sessionId.startsWith('sess_topup_')
-            ? 'Top-Up Prepaid Wallet'
-            : 'Order Checkout');
-        const queryDesc =
-          urlParams?.get('description') ||
-          (sessionId.startsWith('sess_topup_')
-            ? 'Universal 180 Pay Ledger Top-up'
-            : 'Secure Online Checkout');
-        const queryCurrency = (urlParams?.get('currency') || (sessionId.startsWith('sess_topup_') ? 'INR' : 'USD')).toUpperCase();
-        const queryApp =
-          urlParams?.get('appName') ||
-          urlParams?.get('app') ||
-          'Merchant Checkout';
-        const queryReturnUrl =
-          urlParams?.get('returnUrl') ||
-          urlParams?.get('return_url') ||
-          urlParams?.get('redirect_uri') ||
-          '';
-        const queryCancelUrl =
-          urlParams?.get('cancelUrl') ||
-          urlParams?.get('cancel_url') ||
-          '';
-
-        sessionInfo = {
-          id: sessionId,
-          amount: queryAmount,
-          currency: queryCurrency,
-          title: queryTitle,
-          description: queryDesc,
-          status: 'PENDING',
-          returnUrl: queryReturnUrl,
-          cancelUrl: queryCancelUrl,
-          expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
-          metadata: {
-            isTopUp: sessionId.startsWith('sess_topup_'),
-            allowCustomAmount: sessionId.startsWith('sess_topup_'),
-            purpose: sessionId.startsWith('sess_topup_') ? 'wallet_topup' : undefined,
-          },
-          app: {
-            id: 'app_180core',
-            name: queryApp,
-            isVerified: true,
-            logoUrl:
-              urlParams?.get('logoUrl') ||
-              'https://pub-73622b8ffeaa436d83a676e27d5739a6.r2.dev/brands/avatars/792597b3-23d2-43cb-ab5b-e375cb3ed73c/1792050853514-404966-ZeeResizer.png',
-          },
-        };
-      }
-
       if (sessionInfo) {
         setSession(sessionInfo);
         if (sessionInfo.id && sessionInfo.id !== sessionId) {
@@ -1203,7 +1139,7 @@ export function CheckoutClient({
           });
         }
       } else {
-        throw new Error('Failed to load checkout details');
+        throw new Error(sessionErrorMessage || 'Failed to load checkout details');
       }
 
       try {
@@ -1307,21 +1243,6 @@ export function CheckoutClient({
     const toastId = toast.loading('Authorizing payment with 180 Profile...');
 
     try {
-      // Only pure mock/offline demos without a backend complete directly
-      const isPureDemoSession = Boolean(
-        sessionId && (sessionId === 'default' || sessionId.startsWith('sess_demo_') || sessionId.startsWith('sess_sandbox_'))
-      );
-
-      if (isPureDemoSession && !isProduction) {
-        await new Promise((r) => setTimeout(r, 600));
-        const demoTxId = 'tx_180pay_' + Math.random().toString(36).substring(2, 10);
-        toast.success('Payment completed successfully!', { id: toastId });
-        handlePaymentCompletion({
-          transactionId: demoTxId,
-        });
-        return;
-      }
-
       const token =
         typeof window !== 'undefined'
           ? localStorage.getItem('platform_auth_token') ||
@@ -1421,58 +1342,7 @@ export function CheckoutClient({
       }
     }
 
-    const isSandboxEnv = !isProduction || (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('env') === 'sandbox');
-    const isSandboxSession = Boolean(
-      sessionId && (
-        sessionId.startsWith('sess_') ||
-        sessionId.startsWith('cs_') ||
-        sessionId === 'default'
-      )
-    );
-    const isPureDemoSession = Boolean(
-      sessionId && (
-        sessionId === 'default' ||
-        sessionId.startsWith('sess_demo_') ||
-        sessionId.startsWith('sess_sandbox_') ||
-        (isSandboxSession && (
-          session?.description?.toLowerCase().includes('sandbox') ||
-          session?.description?.toLowerCase().includes('demo') ||
-          session?.title?.toLowerCase().includes('sandbox') ||
-          session?.title?.toLowerCase().includes('demo')
-        ))
-      )
-    );
 
-    // In pure sandbox demo without backend, complete directly
-    if (isPureDemoSession && isSandboxEnv) {
-      setTopupLoading(true);
-      const toastId = 'direct-pay-action';
-      toast.loading('Initializing demo payment...', { id: toastId });
-      await new Promise((r) => setTimeout(r, 400));
-      toast.success('Payment completed successfully!', { id: toastId });
-      setCompleted(true);
-      setTopupLoading(false);
-      const demoTxId = 'tx_direct_' + Math.random().toString(36).substring(2, 10);
-      const payload = {
-        type: '180_PAYMENT_SUCCESS',
-        sessionId,
-        transactionId: demoTxId,
-        amount: session?.amount,
-        currency: session?.currency || 'INR',
-      };
-      if (typeof window !== 'undefined') {
-        if (window.opener) window.opener.postMessage(payload, '*');
-        if (window.parent && window.parent !== window) window.parent.postMessage(payload, '*');
-        setTimeout(() => {
-          if (session?.returnUrl) {
-            window.location.href = session.returnUrl;
-          } else if (window.opener) {
-            window.close();
-          }
-        }, 1500);
-      }
-      return;
-    }
 
     let orderInfo = prewarmedOrderRef.current;
     const directToastId = 'direct-pay-action';
@@ -1763,27 +1633,59 @@ export function CheckoutClient({
 
   if (completed) {
     const fulfillment = session?.metadata?.fulfillment;
+    const hasRedirect = Boolean(session?.returnUrl || fulfillment?.redirectUrl);
     return (
       <div 
         role="alert" 
         aria-live="assertive"
-        className="w-full py-12 text-center space-y-5 animate-in zoom-in-95 font-sans"
+        className="w-full py-10 px-4 text-center space-y-5 animate-in zoom-in-95 font-sans"
       >
-        <div className="w-16 h-16 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto animate-bounce shadow-xs">
+        <div className="w-16 h-16 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto shadow-sm">
           <CheckCircle2 className="w-8 h-8" />
         </div>
         <div className="space-y-1">
-          <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">Payment Authorized!</h2>
-          <p className="text-xs text-slate-600">
-            {currencyService.format(activeFinalAmount, activeCurrency)} paid to <strong className="text-slate-900">{session?.app?.name}</strong>.
+          <h2 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">Payment Completed!</h2>
+          <p className="text-xs text-slate-600 dark:text-slate-400">
+            {currencyService.format(activeFinalAmount, activeCurrency)} paid to <strong className="text-slate-900 dark:text-white">{session?.app?.name || 'Merchant'}</strong>.
           </p>
+        </div>
+
+        {/* Receipt Details Card */}
+        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/40 p-4 text-left space-y-2.5 max-w-sm mx-auto text-xs">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-800">
+            <span className="text-slate-500 font-medium">Status</span>
+            <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Verified & Paid
+            </span>
+          </div>
+          <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-800">
+            <span className="text-slate-500 font-medium">Amount</span>
+            <span className="font-bold text-slate-900 dark:text-white">
+              {currencyService.format(activeFinalAmount, activeCurrency)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-slate-500 font-medium">Reference Code</span>
+            <div className="flex items-center gap-1 font-mono text-[11px] text-slate-700 dark:text-slate-300">
+              <span>{payReferenceCode}</span>
+              <button
+                type="button"
+                onClick={handleCopyReferenceCode}
+                className="p-1 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+                title="Copy Reference Code"
+              >
+                <Copy className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Fulfillment Secret Message / License Key */}
         {fulfillment?.fulfillmentMessage && (
-          <div className="rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4 text-left space-y-2 max-w-sm mx-auto">
+          <div className="rounded-2xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/30 p-4 text-left space-y-2 max-w-sm mx-auto">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-indigo-700 uppercase tracking-wider flex items-center gap-1.5">
+              <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5" />
                 Digital Access / License Key
               </span>
@@ -1793,13 +1695,13 @@ export function CheckoutClient({
                   navigator.clipboard.writeText(fulfillment.fulfillmentMessage);
                   toast.success('Copied to clipboard');
                 }}
-                className="text-xs text-slate-500 hover:text-slate-900 flex items-center gap-1 transition-colors cursor-pointer"
+                className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 transition-colors cursor-pointer"
               >
                 <Copy className="w-3.5 h-3.5" />
                 <span>Copy</span>
               </button>
             </div>
-            <div className="p-3 rounded-xl bg-white font-mono text-xs text-slate-800 select-all break-all border border-slate-200">
+            <div className="p-3 rounded-xl bg-white dark:bg-slate-900 font-mono text-xs text-slate-800 dark:text-slate-200 select-all break-all border border-slate-200 dark:border-slate-800">
               {fulfillment.fulfillmentMessage}
             </div>
           </div>
@@ -1820,20 +1722,29 @@ export function CheckoutClient({
           </div>
         )}
 
-        {/* Redirect to store / merchant */}
-        {fulfillment?.redirectUrl ? (
-          <div className="pt-1">
-            <a
-              href={fulfillment.redirectUrl}
-              className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:underline font-semibold"
+        {/* Action Button: Return / Continue / Done */}
+        <div className="pt-2 max-w-sm mx-auto space-y-2">
+          {hasRedirect ? (
+            <>
+              <a
+                href={session?.returnUrl || fulfillment?.redirectUrl}
+                className="w-full inline-flex items-center justify-center gap-1.5 px-5 py-3 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 font-semibold text-xs transition-all shadow-sm"
+              >
+                <span>Continue to {session?.app?.name || 'Merchant'}</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+              <p className="text-[11px] text-slate-500">Redirecting automatically in a few seconds...</p>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={handleReturnToApp}
+              className="w-full inline-flex items-center justify-center gap-1.5 px-5 py-3 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 font-semibold text-xs transition-all shadow-sm cursor-pointer"
             >
-              <span>Continue to {session?.app?.name || 'Merchant'}</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-          </div>
-        ) : (
-          <p className="text-[11px] text-slate-500">Redirecting back to application...</p>
-        )}
+              <span>Done</span>
+            </button>
+          )}
+        </div>
       </div>
     );
   }

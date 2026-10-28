@@ -155,9 +155,8 @@ export class IdentityWalletService {
     const hasLiveKeys = Boolean(keySecret && !keySecret.includes('simulated'));
     const isDirectOrMock =
       skipSignatureVerify ||
-      (!hasLiveKeys && (
+      (process.env.NODE_ENV === 'test' && !hasLiveKeys && (
         orderId?.startsWith('order_test_') ||
-        orderId?.startsWith('order_direct_') ||
         signature === 'mock_sig_sandbox'
       ));
 
@@ -178,18 +177,31 @@ export class IdentityWalletService {
 
     let finalAmount = typeof amountInr === 'number' && !isNaN(amountInr) && amountInr > 0 ? amountInr : null;
 
-    // If amount is missing or not provided, fetch verified amount directly from Razorpay API
-    if (!finalAmount && keyId && keySecret && paymentId && !paymentId.startsWith('mock_')) {
+    // Authoritative Live Razorpay API Verification & Amount Binding
+    if (keyId && keySecret && paymentId && paymentId.startsWith('pay_')) {
       try {
         const authHeader = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
         const rzpPayRes = await axios.get(`https://api.razorpay.com/v1/payments/${paymentId}`, {
           headers: { Authorization: `Basic ${authHeader}` },
         });
-        if (rzpPayRes.data && typeof rzpPayRes.data.amount === 'number') {
-          finalAmount = rzpPayRes.data.amount / 100;
+        const pData = rzpPayRes.data;
+        if (pData) {
+          if (pData.order_id && orderId && pData.order_id !== orderId) {
+            throw new Error('Payment order ID does not match the requested order');
+          }
+          if (pData.status !== 'captured' && pData.status !== 'authorized') {
+            throw new Error(`Razorpay payment is in invalid status: ${pData.status}`);
+          }
+          if (typeof pData.amount === 'number' && pData.amount > 0) {
+            // Strictly bind to the amount verified by Razorpay
+            finalAmount = pData.amount / 100;
+          }
         }
       } catch (err: any) {
-        console.warn('[IdentityWalletService] Could not fetch payment details from Razorpay:', err.message);
+        console.warn('[IdentityWalletService] Razorpay payment verification warning:', err.message);
+        if (err.message?.includes('does not match') || err.message?.includes('invalid status')) {
+          throw err;
+        }
       }
     }
 

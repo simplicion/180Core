@@ -160,15 +160,20 @@ export class WalletApiController {
       const crypto = require('crypto');
       const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET;
       const signature = req.headers['x-razorpay-signature'] as string;
+      if (!signature) {
+        return res.status(401).json({ error: 'Missing x-razorpay-signature header' });
+      }
 
-      if (webhookSecret && signature) {
-        const body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
-        const expected = crypto.createHmac('sha256', webhookSecret).update(body).digest('hex');
-        const expectedBuf = Buffer.from(expected, 'utf-8');
-        const signatureBuf = Buffer.from(signature, 'utf-8');
-        if (expectedBuf.length !== signatureBuf.length || !crypto.timingSafeEqual(expectedBuf, signatureBuf)) {
-          return res.status(400).json({ error: 'Invalid webhook signature' });
-        }
+      if (!webhookSecret) {
+        return res.status(500).json({ error: 'Webhook secret not configured' });
+      }
+
+      const body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+      const expected = crypto.createHmac('sha256', webhookSecret).update(body).digest('hex');
+      const expectedBuf = Buffer.from(expected, 'utf-8');
+      const signatureBuf = Buffer.from(signature, 'utf-8');
+      if (expectedBuf.length !== signatureBuf.length || !crypto.timingSafeEqual(expectedBuf, signatureBuf)) {
+        return res.status(400).json({ error: 'Invalid webhook signature' });
       }
 
       const event = req.body.event;
