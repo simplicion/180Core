@@ -32,6 +32,21 @@ function getPlatformCredentials() {
   };
 }
 
+export const APP_CHECKOUT_SELECT = {
+  id: true,
+  clientId: true,
+  name: true,
+  description: true,
+  logoUrl: true,
+  isVerified: true,
+  allowedOrigins: true,
+  redirectUris: true,
+  customGatewayType: true,
+  customGatewayKeyId: true,
+  customGatewaySecret: true,
+  customGatewayWebhookSecret: true,
+};
+
 export interface CreateCheckoutSessionInput {
   clientId: string;
   clientSecret: string;
@@ -271,25 +286,12 @@ export class CheckoutService {
    * Features zero-drop resiliency: auto-heals payment links, top-ups, dev sessions,
    * client-side sandbox sessions, and auto-renews active checkouts.
    */
-  static async getSession(sessionId: string, fallbackData?: any) {
+  static async getSession(sessionId: string, fallbackData?: any, options?: { skipReconcile?: boolean }) {
     let session: any = await prisma.checkoutSession.findUnique({
       where: { id: sessionId },
       include: {
         app: {
-          select: {
-            id: true,
-            clientId: true,
-            name: true,
-            description: true,
-            logoUrl: true,
-            isVerified: true,
-            allowedOrigins: true,
-            redirectUris: true,
-            customGatewayType: true,
-            customGatewayKeyId: true,
-            customGatewaySecret: true,
-            customGatewayWebhookSecret: true,
-          },
+          select: APP_CHECKOUT_SELECT,
         },
       },
     });
@@ -392,14 +394,7 @@ export class CheckoutService {
             },
             include: {
               app: {
-                select: {
-                  id: true,
-                  clientId: true,
-                  name: true,
-                  description: true,
-                  logoUrl: true,
-                  isVerified: true,
-                },
+                select: APP_CHECKOUT_SELECT,
               },
             },
           });
@@ -440,14 +435,7 @@ export class CheckoutService {
             },
             include: {
               app: {
-                select: {
-                  id: true,
-                  clientId: true,
-                  name: true,
-                  description: true,
-                  logoUrl: true,
-                  isVerified: true,
-                },
+                select: APP_CHECKOUT_SELECT,
               },
             },
           });
@@ -475,13 +463,7 @@ export class CheckoutService {
           },
           include: {
             app: {
-              select: {
-                id: true,
-                name: true,
-                description: true,
-                logoUrl: true,
-                isVerified: true,
-              },
+              select: APP_CHECKOUT_SELECT,
             },
           },
         });
@@ -503,14 +485,7 @@ export class CheckoutService {
             },
             include: {
               app: {
-                select: {
-                  id: true,
-                  clientId: true,
-                  name: true,
-                  description: true,
-                  logoUrl: true,
-                  isVerified: true,
-                },
+                select: APP_CHECKOUT_SELECT,
               },
             },
             orderBy: { createdAt: 'desc' },
@@ -559,14 +534,7 @@ export class CheckoutService {
               },
               include: {
                 app: {
-                  select: {
-                    id: true,
-                    clientId: true,
-                    name: true,
-                    description: true,
-                    logoUrl: true,
-                    isVerified: true,
-                  },
+                  select: APP_CHECKOUT_SELECT,
                 },
               },
             });
@@ -615,14 +583,7 @@ export class CheckoutService {
             },
             include: {
               app: {
-                select: {
-                  id: true,
-                  clientId: true,
-                  name: true,
-                  description: true,
-                  logoUrl: true,
-                  isVerified: true,
-                },
+                select: APP_CHECKOUT_SELECT,
               },
             },
           });
@@ -640,6 +601,7 @@ export class CheckoutService {
     // This guarantees that if a customer completed payment in UPI / bank app, the session is captured immediately,
     // even if client callbacks dropped or the nominal 30-minute window passed while user was completing 3DS/UPI.
     if (
+      !options?.skipReconcile &&
       session.status !== 'CAPTURED' &&
       ((session.metadata as any)?.razorpayOrderId || (session.metadata as any)?.stripePaymentIntentId)
     ) {
@@ -702,7 +664,7 @@ export class CheckoutService {
 
     if (!session) {
       try {
-        session = await this.getSession(sessionId);
+        session = await this.getSession(sessionId, undefined, { skipReconcile: true });
       } catch (_) {}
     }
 
@@ -767,14 +729,7 @@ export class CheckoutService {
               where: { id: session.id },
               include: {
                 app: {
-                  select: {
-                    id: true,
-                    clientId: true,
-                    name: true,
-                    description: true,
-                    logoUrl: true,
-                    isVerified: true,
-                  },
+                  select: APP_CHECKOUT_SELECT,
                 },
               },
             });
@@ -815,14 +770,7 @@ export class CheckoutService {
               where: { id: session.id },
               include: {
                 app: {
-                  select: {
-                    id: true,
-                    clientId: true,
-                    name: true,
-                    description: true,
-                    logoUrl: true,
-                    isVerified: true,
-                  },
+                  select: APP_CHECKOUT_SELECT,
                 },
               },
             });
@@ -1686,7 +1634,7 @@ export class CheckoutService {
   }) {
     const { sessionId, orderId, paymentId, signature } = input;
 
-    let session = await this.getSession(sessionId);
+    let session = await this.getSession(sessionId, undefined, { skipReconcile: true });
 
     const { gatewayType, keyId, keySecret } = this.resolveGatewayConfig(session.app);
     const isStripe = gatewayType === 'STRIPE' || orderId.startsWith('pi_') || paymentId.startsWith('pi_');
@@ -1717,14 +1665,14 @@ export class CheckoutService {
       }
     } else {
       // Razorpay HMAC-SHA256 signature verification
-      if (!keySecret) {
-        throw new Error('Payment gateway key secret not configured');
-      }
-
       const hasLiveKey = Boolean(keySecret && !keySecret.includes('simulated'));
       const isTestMock = !hasLiveKey && (orderId?.startsWith('order_sim_') || signature === 'mock_sig_sandbox');
 
       if (!isTestMock && signature !== 'auto_polled_capture') {
+        if (!keySecret) {
+          throw new Error('Payment gateway key secret not configured');
+        }
+
         const expectedSignature = crypto
           .createHmac('sha256', keySecret)
           .update(`${orderId}|${paymentId}`)

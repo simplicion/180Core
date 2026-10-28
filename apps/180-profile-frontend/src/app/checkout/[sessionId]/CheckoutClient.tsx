@@ -51,6 +51,7 @@ function formatReturnUrl(baseUrl: string, details: {
   orderId?: string;
   amount?: number | string;
   currency?: string;
+  payment_id?: string;
 }): string {
   if (!baseUrl) return '';
   try {
@@ -59,8 +60,13 @@ function formatReturnUrl(baseUrl: string, details: {
       const separator = baseUrl.includes('?') ? '&' : '?';
       const params = new URLSearchParams();
       if (details.sessionId) {
+        params.set('session', details.sessionId);
         params.set('session_id', details.sessionId);
         params.set('sessionId', details.sessionId);
+      }
+      if (details.payment_id || details.transactionId) {
+        const pid = details.payment_id || details.transactionId || '';
+        params.set('payment_id', pid);
       }
       if (details.status) params.set('status', details.status);
       if (details.transactionId) {
@@ -77,8 +83,13 @@ function formatReturnUrl(baseUrl: string, details: {
     }
     const url = new URL(baseUrl, typeof window !== 'undefined' ? window.location.origin : 'https://profile.180core.cloud');
     if (details.sessionId) {
+      url.searchParams.set('session', details.sessionId);
       url.searchParams.set('session_id', details.sessionId);
       url.searchParams.set('sessionId', details.sessionId);
+    }
+    if (details.payment_id || details.transactionId) {
+      const pid = details.payment_id || details.transactionId || '';
+      url.searchParams.set('payment_id', pid);
     }
     if (details.status) url.searchParams.set('status', details.status);
     if (details.transactionId) {
@@ -917,14 +928,28 @@ export function CheckoutClient({
     }
 
     const txId = details.transactionId || session?.metadata?.transactionId || 'tx_' + Math.random().toString(36).substring(2, 10);
+    const targetSessionId = session?.id || sessionId;
+    const destUrl = details.customReturnUrl || session?.returnUrl || '';
+    const formattedReturnUrl = destUrl ? formatReturnUrl(destUrl, {
+      sessionId: targetSessionId,
+      status: 'success',
+      payment_id: txId,
+      transactionId: txId,
+      orderId: (session?.metadata as any)?.orderId,
+      amount: activeFinalAmount,
+      currency: activeCurrency,
+    }) : `/thankyou?session=${encodeURIComponent(targetSessionId)}&payment_id=${encodeURIComponent(txId)}&status=success`;
+
     const liveSuccessPayload = {
       type: '180_PAYMENT_SUCCESS',
-      sessionId,
+      sessionId: targetSessionId,
       transactionId: txId,
       amount: activeFinalAmount,
       currency: activeCurrency,
       creditedUserBalance: details.creditedUserBalance,
       newBalance: details.creditedUserBalance,
+      returnUrl: formattedReturnUrl,
+      status: 'success',
     };
     const liveSuccessPayloadPay = {
       type: '180_PAY_SUCCESS',
@@ -945,33 +970,73 @@ export function CheckoutClient({
     }
 
     setTimeout(() => {
-      const destUrl = details.customReturnUrl || session?.returnUrl;
-      if (destUrl) {
-        window.location.href = formatReturnUrl(destUrl, {
-          sessionId,
-          status: 'success',
+      if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+        // Send explicit close and success messages to iframe bottom sheet container
+        window.parent.postMessage({
+          type: '180_PAYMENT_SUCCESS',
+          sessionId: targetSessionId,
           transactionId: txId,
-          orderId: (session?.metadata as any)?.orderId,
+          returnUrl: formattedReturnUrl,
           amount: activeFinalAmount,
           currency: activeCurrency,
-        });
+          status: 'success',
+        }, '*');
+        window.parent.postMessage({
+          type: '180_PAYMENT_CLOSE',
+          sessionId: targetSessionId,
+          success: true,
+          returnUrl: formattedReturnUrl,
+          transactionId: txId,
+          status: 'success',
+        }, '*');
+        window.parent.postMessage({
+          type: '180_PAY_CLOSE',
+          sessionId: targetSessionId,
+          success: true,
+          returnUrl: formattedReturnUrl,
+          transactionId: txId,
+          status: 'success',
+        }, '*');
+
+        // Direct top window redirect if accessible
+        try {
+          if (formattedReturnUrl && window.top && window.top !== window) {
+            window.top.location.href = formattedReturnUrl;
+            return;
+          }
+        } catch (_) {
+          // If cross-origin prevents direct top access, parent postMessage listener handles it
+        }
+      }
+
+      if (formattedReturnUrl) {
+        window.location.href = formattedReturnUrl;
       } else if (onClose) {
         onClose();
       } else if (typeof window !== 'undefined') {
         if (window.opener) {
           window.close();
         } else if (window.parent && window.parent !== window) {
-          window.parent.postMessage({ type: '180_PAYMENT_CLOSE', sessionId }, '*');
-          window.parent.postMessage({ type: '180_PAY_CLOSE', sessionId }, '*');
+          window.parent.postMessage({ type: '180_PAYMENT_CLOSE', sessionId: targetSessionId, success: true }, '*');
+          window.parent.postMessage({ type: '180_PAY_CLOSE', sessionId: targetSessionId, success: true }, '*');
         }
       }
-    }, 1500);
+    }, 1000);
   }, [completed, session, sessionId, activeFinalAmount, activeCurrency, onSuccess, onClose]);
 
   const checkStatusRef = React.useRef(false);
   const checkSessionStatus = useCallback(async (isSilent = true) => {
     const targetId = session?.id || sessionId;
-    if (!targetId || targetId === 'default' || completed || checkStatusRef.current) return false;
+    if (!targetId || targetId === 'default' || completed) return false;
+    if (checkStatusRef.current) {
+      if (isSilent) return false;
+      let waited = 0;
+      while (checkStatusRef.current && waited < 2500) {
+        await new Promise((r) => setTimeout(r, 100));
+        waited += 100;
+      }
+      if (completed) return true;
+    }
     checkStatusRef.current = true;
     try {
       const controller = new AbortController();
@@ -987,6 +1052,7 @@ export function CheckoutClient({
         handlePaymentCompletion({
           transactionId: data.transactionId,
           fulfillment: data.fulfillment,
+          customReturnUrl: data.returnUrl,
         });
         return true;
       }
@@ -1133,6 +1199,7 @@ export function CheckoutClient({
           handlePaymentCompletion({
             transactionId: sessionInfo.metadata?.transactionId,
             fulfillment: sessionInfo.metadata?.fulfillment,
+            customReturnUrl: sessionInfo.returnUrl,
           });
         }
       } else {
@@ -1249,50 +1316,9 @@ export function CheckoutClient({
         await new Promise((r) => setTimeout(r, 600));
         const demoTxId = 'tx_180pay_' + Math.random().toString(36).substring(2, 10);
         toast.success('Payment completed successfully!', { id: toastId });
-        setCompleted(true);
-        setPaying(false);
-        const successPayload = {
-          type: '180_PAYMENT_SUCCESS',
-          sessionId,
+        handlePaymentCompletion({
           transactionId: demoTxId,
-          amount: session?.amount !== undefined ? session.amount : (initialAmount !== undefined ? initialAmount : 0),
-          currency: (session?.currency || 'USD').toUpperCase(),
-        };
-        const successPayloadPay = {
-          type: '180_PAY_SUCCESS',
-          ...successPayload,
-        };
-        if (typeof window !== 'undefined') {
-          dispatchMobilePaymentEvent(successPayload);
-          dispatchMobilePaymentEvent(successPayloadPay);
-          if (window.opener) {
-            window.opener.postMessage(successPayload, '*');
-            window.opener.postMessage(successPayloadPay, '*');
-          }
-          if (window.parent && window.parent !== window) {
-            window.parent.postMessage(successPayload, '*');
-            window.parent.postMessage(successPayloadPay, '*');
-          }
-        }
-        setTimeout(() => {
-          if (session?.returnUrl) {
-            window.location.href = formatReturnUrl(session.returnUrl, {
-              sessionId,
-              status: 'success',
-              transactionId: demoTxId,
-              orderId: (session.metadata as any)?.orderId,
-              amount: successPayload.amount,
-              currency: successPayload.currency,
-            });
-          } else if (typeof window !== 'undefined') {
-            if (window.opener) {
-              window.close();
-            } else if (window.parent && window.parent !== window) {
-              window.parent.postMessage({ type: '180_PAYMENT_CLOSE', sessionId }, '*');
-              window.parent.postMessage({ type: '180_PAY_CLOSE', sessionId }, '*');
-            }
-          }
-        }, 1200);
+        });
         return;
       }
 
@@ -1320,55 +1346,12 @@ export function CheckoutClient({
       }
 
       toast.success('Payment completed successfully!', { id: toastId });
-      setCompleted(true);
-
-      const liveSuccessPayload = {
-        type: '180_PAYMENT_SUCCESS',
-        sessionId,
+      handlePaymentCompletion({
         transactionId: data.data?.transactionId,
-        amount: session?.amount,
-        currency: session?.currency,
-      };
-      const liveSuccessPayloadPay = {
-        type: '180_PAY_SUCCESS',
-        ...liveSuccessPayload,
-      };
-
-      // Notify mobile bridge, opener window if in popup, and parent if in bottom sheet
-      if (typeof window !== 'undefined') {
-        dispatchMobilePaymentEvent(liveSuccessPayload);
-        dispatchMobilePaymentEvent(liveSuccessPayloadPay);
-        if (window.opener) {
-          window.opener.postMessage(liveSuccessPayload, '*');
-          window.opener.postMessage(liveSuccessPayloadPay, '*');
-        }
-        if (window.parent && window.parent !== window) {
-          window.parent.postMessage(liveSuccessPayload, '*');
-          window.parent.postMessage(liveSuccessPayloadPay, '*');
-        }
-      }
-
-      // Auto redirect or close after 2 seconds
-      setTimeout(() => {
-        const destUrl = data.data?.returnUrl || session?.returnUrl;
-        if (destUrl) {
-          window.location.href = formatReturnUrl(destUrl, {
-            sessionId,
-            status: 'success',
-            transactionId: data.data?.transactionId,
-            orderId: (session?.metadata as any)?.orderId,
-            amount: session?.amount,
-            currency: session?.currency,
-          });
-        } else if (typeof window !== 'undefined') {
-          if (window.opener) {
-            window.close();
-          } else if (window.parent && window.parent !== window) {
-            window.parent.postMessage({ type: '180_PAYMENT_CLOSE', sessionId }, '*');
-            window.parent.postMessage({ type: '180_PAY_CLOSE', sessionId }, '*');
-          }
-        }
-      }, 2000);
+        fulfillment: data.data?.fulfillment,
+        customReturnUrl: data.data?.returnUrl,
+      });
+      return;
     } catch (err: any) {
       toast.error(err.message || 'Payment authorization failed', { id: toastId });
     } finally {
