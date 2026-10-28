@@ -36,10 +36,9 @@ export default function RootLayout({
           href="https://api.fontshare.com/v2/css?f[]=satoshi@900,700,500,400,300&display=swap"
           rel="stylesheet"
         />
-        {/* Preload Razorpay Checkout Core for < 5ms instant payment popup */}
+        {/* Preconnect to Razorpay for fast subsequent background loading */}
         <link rel="preconnect" href="https://checkout.razorpay.com" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://checkout.razorpay.com" />
-        <link rel="preload" href="https://checkout.razorpay.com/v1/checkout.js" as="script" />
         {/* Non-render-blocking developer code font loading */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />

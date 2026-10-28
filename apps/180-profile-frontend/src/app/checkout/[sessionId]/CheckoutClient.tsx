@@ -187,12 +187,37 @@ export function CheckoutClient({
 
   const [sessionId, setSessionId] = useState<string>(getInitialSessionId);
 
+  const [session, setSession] = useState<any>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const optAmount = parseFloat(sp.get('amount') || '') || initialAmount || null;
+      const optTitle = sp.get('title') || null;
+      if (optAmount || optTitle) {
+        return {
+          id: getInitialSessionId() || 'pending',
+          amount: optAmount || 0,
+          currency: sp.get('currency') || 'INR',
+          title: optTitle || '180 Checkout',
+          description: sp.get('description') || '',
+          status: 'PENDING',
+          app: {
+            name: sp.get('appName') || '180 Merchant',
+            logoUrl: sp.get('appLogo') || '',
+            isVerified: true,
+          },
+        };
+      }
+    } catch (_) {}
+    return null;
+  });
+
   useEffect(() => {
     const currentId = getInitialSessionId();
-    if (currentId && currentId !== sessionId) {
+    if (currentId && currentId !== sessionId && !session) {
       setSessionId(currentId);
     }
-  }, [getInitialSessionId]);
+  }, [getInitialSessionId, session, sessionId]);
 
   const clientSessionId = useMemo(() => {
     if (typeof window === 'undefined') return '';
@@ -215,9 +240,10 @@ export function CheckoutClient({
   }, []);
 
   useEffect(() => {
-    if (!sessionId || sessionId === 'default') return;
+    const targetId = session?.id || sessionId;
+    if (!targetId || targetId === 'default') return;
     try {
-      fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/track-event`), {
+      fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${targetId}/track-event`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -229,32 +255,7 @@ export function CheckoutClient({
         }),
       }).catch(() => {});
     } catch (_) {}
-  }, [sessionId, clientSessionId]);
-
-  const [session, setSession] = useState<any>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      const sp = new URLSearchParams(window.location.search);
-      const optAmount = parseFloat(sp.get('amount') || '') || initialAmount || null;
-      const optTitle = sp.get('title') || null;
-      if (optAmount || optTitle) {
-        return {
-          id: sessionId || 'pending',
-          amount: optAmount || 0,
-          currency: sp.get('currency') || 'INR',
-          title: optTitle || '180 Checkout',
-          description: sp.get('description') || '',
-          status: 'PENDING',
-          app: {
-            name: sp.get('appName') || '180 Merchant',
-            logoUrl: sp.get('appLogo') || '',
-            isVerified: true,
-          },
-        };
-      }
-    } catch (_) {}
-    return null;
-  });
+  }, [session?.id, sessionId, clientSessionId]);
 
   const [loading, setLoading] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
@@ -768,7 +769,8 @@ export function CheckoutClient({
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const res = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/apply-coupon`), {
+      const targetId = session?.id || sessionId;
+      const res = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${targetId}/apply-coupon`), {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -841,7 +843,8 @@ export function CheckoutClient({
       prewarmedOrderRef.current = null;
       prewarmingPromiseRef.current = null;
 
-      const res = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/remove-coupon`), {
+      const targetId = session?.id || sessionId;
+      const res = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${targetId}/remove-coupon`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -967,12 +970,13 @@ export function CheckoutClient({
 
   const checkStatusRef = React.useRef(false);
   const checkSessionStatus = useCallback(async (isSilent = true) => {
-    if (!sessionId || sessionId === 'default' || completed || checkStatusRef.current) return false;
+    const targetId = session?.id || sessionId;
+    if (!targetId || targetId === 'default' || completed || checkStatusRef.current) return false;
     checkStatusRef.current = true;
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 12000);
-      const res = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/status`), {
+      const res = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${targetId}/status`), {
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -992,7 +996,7 @@ export function CheckoutClient({
       checkStatusRef.current = false;
     }
     return false;
-  }, [sessionId, completed, handlePaymentCompletion]);
+  }, [session?.id, sessionId, completed, handlePaymentCompletion]);
 
   const fetchSessionAndWallet = async () => {
     try {
@@ -1154,11 +1158,13 @@ export function CheckoutClient({
     }
   }, [sessionId]);
 
-  // ─── Pre-load Razorpay SDK & Preconnect to Gateways ─────────────────────────
+  // ─── Two-Stage Loading: 180 Pay bottom sheet loads FIRST, then Razorpay loads in background ───
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    // CRITICAL: Prioritize 180 Pay bottom sheet load & render first!
+    if (loading || !session) return;
 
-    // 1. Preconnect DNS & SSL to Razorpay endpoints
+    // 1. Preconnect DNS & SSL to Razorpay endpoints in background
     const addPreconnect = (href: string) => {
       if (!document.querySelector(`link[href="${href}"]`)) {
         const link = document.createElement('link');
@@ -1170,21 +1176,22 @@ export function CheckoutClient({
     addPreconnect('https://checkout.razorpay.com');
     addPreconnect('https://api.razorpay.com');
 
-    // 2. Pre-fetch and compile Razorpay Checkout SDK immediately into DOM
+    // 2. Instantly start loading Razorpay Checkout SDK into DOM in background
     if (!window.Razorpay && !document.querySelector('script[src*="checkout.razorpay.com"]')) {
       const script = document.createElement('script');
       script.src = 'https://checkout.razorpay.com/v1/checkout.js';
       script.async = true;
       document.head.appendChild(script);
     }
-  }, []);
+  }, [loading, session]);
 
-  // ─── Speculative Order Pre-Warming on Dwell Time (Zero Perceived Latency) ────
+  // ─── Speculative Order Pre-Warming (Starts immediately after 180 Pay finishes loading) ────
   useEffect(() => {
-    if (!session || !sessionId || session.status === 'COMPLETED' || !activeFinalAmount) return;
+    if (loading || !session || session.status === 'COMPLETED' || session.status === 'CAPTURED' || !activeFinalAmount) return;
 
+    const targetId = session?.id || sessionId;
     // Do not pre-warm if session is a pure mock/default or if amount is free/0
-    if (!sessionId || sessionId === 'default' || sessionId.startsWith('sess_demo_') || sessionId.startsWith('sess_sandbox_')) return;
+    if (!targetId || targetId === 'default' || targetId.startsWith('sess_demo_') || targetId.startsWith('sess_sandbox_')) return;
     if (activeFinalAmount <= 0 || chargeAmount <= 0) return;
 
     // If order already pre-warmed for current charge amount and gateway currency, reuse it
@@ -1198,7 +1205,7 @@ export function CheckoutClient({
 
     const prewarm = async () => {
       try {
-        const res = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/direct-order`), {
+        const res = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${targetId}/direct-order`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1226,7 +1233,7 @@ export function CheckoutClient({
     };
 
     prewarmingPromiseRef.current = prewarm();
-  }, [chargeAmount, chargeCurrency, sessionId, isProduction]);
+  }, [loading, session, chargeAmount, chargeCurrency, sessionId, isProduction, activeFinalAmount]);
 
   const handlePay = async () => {
     setPaying(true);
@@ -1300,7 +1307,8 @@ export function CheckoutClient({
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       };
 
-      const res = await fetch(getCoreApiUrl(`/api/oauth/checkout/sessions/${sessionId}/pay`), {
+      const targetId = session?.id || sessionId;
+      const res = await fetch(getCoreApiUrl(`/api/oauth/checkout/sessions/${targetId}/pay`), {
         method: 'POST',
         headers: authHeaders,
         credentials: 'include',
@@ -1377,7 +1385,8 @@ export function CheckoutClient({
       const toastId = 'direct-pay-action';
       toast.loading('Completing promotional free checkout...', { id: toastId });
       try {
-        const res = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/direct-execute`), {
+        const targetId = session?.id || sessionId;
+        const res = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${targetId}/direct-execute`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1503,7 +1512,8 @@ export function CheckoutClient({
           orderInfo.amount !== chargeAmount ||
           orderInfo.currency !== chargeCurrency
         ) {
-          const res = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/direct-order`), {
+          const targetId = session?.id || sessionId;
+          const res = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${targetId}/direct-order`), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1655,9 +1665,10 @@ export function CheckoutClient({
 
           try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 4500);
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-            const verifyRes = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/direct-verify`), {
+            const targetId = session?.id || sessionId;
+            const verifyRes = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${targetId}/direct-verify`), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               signal: controller.signal,
@@ -1698,8 +1709,8 @@ export function CheckoutClient({
                 toast.success('Payment authorized & completed!', { id: verifyToastId });
                 return;
               }
-              // Fast retry after 1.2s in case gateway processing took a second
-              await new Promise((r) => setTimeout(r, 1200));
+              // Fast retry after 800ms in case gateway processing took a moment
+              await new Promise((r) => setTimeout(r, 800));
               const isDoneRetry = await checkSessionStatus(false);
               if (isDoneRetry) {
                 verified = true;
@@ -1723,8 +1734,9 @@ export function CheckoutClient({
             // Polling check: did the user complete payment in UPI app before returning and dismissing?
             const isDone = await checkSessionStatus(false);
             stopPolling();
-            if (!isDone && sessionId && sessionId !== 'default') {
-              fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/track-event`), {
+            const targetId = session?.id || sessionId;
+            if (!isDone && targetId && targetId !== 'default') {
+              fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${targetId}/track-event`), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ event: 'GATEWAY_DISMISSED', clientSessionId: clientSessionId || undefined }),
@@ -1745,8 +1757,9 @@ export function CheckoutClient({
       rzp.open();
       startPolling();
 
-      if (sessionId && sessionId !== 'default') {
-        fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/track-event`), {
+      const targetId = session?.id || sessionId;
+      if (targetId && targetId !== 'default') {
+        fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${targetId}/track-event`), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ event: 'GATEWAY_OPENED', clientSessionId: clientSessionId || undefined }),

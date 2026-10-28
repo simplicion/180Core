@@ -859,7 +859,7 @@ export class CheckoutApiController {
       });
 
       // Redeem coupon if attached
-      const session = await prisma.checkoutSession.findUnique({ where: { id } });
+      const session = result.session || (await prisma.checkoutSession.findUnique({ where: { id } })) || (await CheckoutService.getSession(id).catch(() => null));
       if (session && session.couponId) {
         try {
           const customerEmail = (session.metadata as any)?.customerEmail || (session.metadata as any)?.email || session.id;
@@ -964,9 +964,14 @@ export class CheckoutApiController {
         '127.0.0.1';
       const ip = Array.isArray(rawIp) ? rawIp[0] : String(rawIp).split(',')[0].trim();
 
-      const session = await prisma.checkoutSession.findUnique({ where: { id } });
+      let session = await prisma.checkoutSession.findUnique({ where: { id } });
       if (!session) {
-        return res.status(404).json({ success: false, error: 'Checkout session not found' });
+        try {
+          session = await CheckoutService.getSession(id);
+        } catch (_) {}
+      }
+      if (!session) {
+        return res.status(200).json({ success: true, ignored: true });
       }
 
       const existingMeta = (session.metadata as any) || {};
@@ -995,7 +1000,7 @@ export class CheckoutApiController {
       }
 
       await prisma.checkoutSession.update({
-        where: { id },
+        where: { id: session.id },
         data: {
           metadata: updatedMeta,
           updatedAt: new Date(),

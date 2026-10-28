@@ -496,11 +496,10 @@ export class CheckoutService {
             throw new Error('This payment link has expired.');
           }
 
-          const activeSessions = await prisma.checkoutSession.findMany({
+          const candidateSessions = await prisma.checkoutSession.findMany({
             where: {
               appId: paymentLink.appId,
-              status: 'PENDING',
-              expiresAt: { gt: new Date() },
+              createdAt: { gt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
             },
             include: {
               app: {
@@ -515,15 +514,27 @@ export class CheckoutService {
               },
             },
             orderBy: { createdAt: 'desc' },
-            take: 20,
+            take: 30,
           });
 
-          const matchingSession = activeSessions.find(
+          const matchingSessions = candidateSessions.filter(
             (s) => (s.metadata as any)?.paymentLinkId === paymentLink.id || (s.metadata as any)?.paymentLinkSlug === paymentLink.slug
           );
 
-          if (matchingSession) {
-            session = matchingSession;
+          const capturedSession = matchingSessions.find(
+            (s) => s.status === 'CAPTURED' || s.status === 'COMPLETED'
+          );
+
+          const pendingSession = matchingSessions.find(
+            (s) => s.status === 'PENDING' && new Date(s.expiresAt) > new Date()
+          );
+
+          if (capturedSession && (!pendingSession || capturedSession.updatedAt >= pendingSession.updatedAt)) {
+            session = capturedSession;
+          } else if (pendingSession) {
+            session = pendingSession;
+          } else if (capturedSession) {
+            session = capturedSession;
           } else {
             const isCustomAmount = Number(paymentLink.amount) === 0 || Boolean((paymentLink as any).allowCustomAmount) || Boolean((paymentLink.metadata as any)?.allowCustomAmount);
             session = await prisma.checkoutSession.create({
@@ -688,6 +699,12 @@ export class CheckoutService {
         app: true,
       },
     });
+
+    if (!session) {
+      try {
+        session = await this.getSession(sessionId);
+      } catch (_) {}
+    }
 
     if (!session) {
       throw new Error(`Checkout session ${sessionId} not found`);
@@ -1671,7 +1688,7 @@ export class CheckoutService {
 
     let session = await this.getSession(sessionId);
 
-    const { gatewayType, keySecret } = this.resolveGatewayConfig(session.app);
+    const { gatewayType, keyId, keySecret } = this.resolveGatewayConfig(session.app);
     const isStripe = gatewayType === 'STRIPE' || orderId.startsWith('pi_') || paymentId.startsWith('pi_');
 
     if (isStripe) {
@@ -1731,8 +1748,8 @@ export class CheckoutService {
         // query Razorpay directly via REST API with orderId & paymentId
         if (!isValid && paymentId && paymentId.startsWith('pay_')) {
           try {
-            const activeKeyId = (process.env.RAZORPAY_KEY_ID || '').trim();
-            const activeKeySec = (process.env.RAZORPAY_KEY_SECRET || keySecret || '').trim();
+            const activeKeyId = (keyId || (session.app as any)?.customGatewayKeyId || process.env.RAZORPAY_KEY_ID || '').trim();
+            const activeKeySec = (keySecret || (session.app as any)?.customGatewaySecret || process.env.RAZORPAY_KEY_SECRET || '').trim();
             if (activeKeyId && activeKeySec) {
               const auth = Buffer.from(`${activeKeyId}:${activeKeySec}`).toString('base64');
               const rzpPayRes = await axios.get(`https://api.razorpay.com/v1/payments/${paymentId}`, {
@@ -1741,7 +1758,20 @@ export class CheckoutService {
               });
               const pData = rzpPayRes.data;
               if (pData && (pData.status === 'captured' || pData.status === 'authorized')) {
-                // Verified directly against bank / gateway ledger
+                if (pData.status === 'authorized') {
+                  try {
+                    const capRes = await axios.post(
+                      `https://api.razorpay.com/v1/payments/${paymentId}/capture`,
+                      { amount: pData.amount, currency: pData.currency },
+                      { headers: { Authorization: `Basic ${auth}` }, timeout: 5000 }
+                    );
+                    if (capRes.data?.status === 'captured') {
+                      isValid = true;
+                    }
+                  } catch (capErr: any) {
+                    console.warn('[CheckoutService:verifyDirectPayment] Auto-capture authorized payment warning:', capErr.message);
+                  }
+                }
                 isValid = true;
               }
             }
