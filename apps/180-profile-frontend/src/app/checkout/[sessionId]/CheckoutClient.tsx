@@ -1615,37 +1615,72 @@ export function CheckoutClient({
           },
         } : {}),
         handler: async function (response: any) {
-          stopPolling();
           toast.dismiss(directToastId);
-          const verifyToastId = toast.loading('Verifying payment signature...');
+          const verifyToastId = toast.loading('Confirming payment...');
+          let verified = false;
+
           try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4500);
+
             const verifyRes = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${sessionId}/direct-verify`), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
+              signal: controller.signal,
               body: JSON.stringify({
                 orderId: response.razorpay_order_id,
                 paymentId: response.razorpay_payment_id,
                 signature: response.razorpay_signature,
               }),
             });
+            clearTimeout(timeoutId);
 
-            const verifyData = await verifyRes.json();
-            if (!verifyData.success) {
-              throw new Error(verifyData.error || 'Payment signature verification failed');
+            if (verifyRes.ok) {
+              const verifyData = await verifyRes.json();
+              if (verifyData.success) {
+                verified = true;
+                stopPolling();
+                toast.success('Payment authorized & completed!', { id: verifyToastId });
+                handlePaymentCompletion({
+                  transactionId: response.razorpay_payment_id,
+                  creditedUserBalance: verifyData.creditedUserBalance,
+                  fulfillment: verifyData.fulfillment || verifyData.session?.metadata?.fulfillment,
+                  customReturnUrl: verifyData.returnUrl,
+                });
+                return;
+              }
             }
-
-            toast.success('Payment authorized & completed!', { id: verifyToastId });
-            handlePaymentCompletion({
-              transactionId: response.razorpay_payment_id,
-              creditedUserBalance: verifyData.creditedUserBalance,
-              fulfillment: verifyData.fulfillment || verifyData.session?.metadata?.fulfillment,
-              customReturnUrl: verifyData.returnUrl,
-            });
           } catch (e: any) {
-            toast.error(e.message || 'Payment verification failed', { id: verifyToastId });
-          } finally {
-            setTopupLoading(false);
+            console.warn('[180 Pay] Direct verify attempt warning, falling back to authoritative reconciliation:', e.message);
           }
+
+          // Authoritative Fallback: Fast Reconciliation via Gateway Status
+          if (!verified) {
+            try {
+              const isDone = await checkSessionStatus(false);
+              if (isDone) {
+                verified = true;
+                stopPolling();
+                toast.success('Payment authorized & completed!', { id: verifyToastId });
+                return;
+              }
+              // Fast retry after 1.2s in case gateway processing took a second
+              await new Promise((r) => setTimeout(r, 1200));
+              const isDoneRetry = await checkSessionStatus(false);
+              if (isDoneRetry) {
+                verified = true;
+                stopPolling();
+                toast.success('Payment authorized & completed!', { id: verifyToastId });
+                return;
+              }
+            } catch (_) {}
+          }
+
+          if (!verified) {
+            toast.dismiss(verifyToastId);
+            toast.error('Payment verification in progress. Please check status in a moment.');
+          }
+          setTopupLoading(false);
         },
         modal: {
           ondismiss: async () => {
