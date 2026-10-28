@@ -282,6 +282,11 @@ export function CheckoutClient({
   const [wallet, setWallet] = useState<any>(null);
   const [paying, setPaying] = useState(false);
   const [completed, setCompleted] = useState(false);
+  const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
+  const [verifyingText, setVerifyingText] = useState('Verifying payment with banking network...');
+  const closeTimeoutRef = React.useRef<any>(null);
+  const hasClosedRef = React.useRef(false);
+  const successPayloadRef = React.useRef<any>(null);
   const [topupLoading, setTopupLoading] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedDetails, setCopiedDetails] = useState(false);
@@ -300,6 +305,14 @@ export function CheckoutClient({
   useEffect(() => {
     setLogoFailed(false);
   }, [session?.app?.logoUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimeoutRef.current) {
+        clearTimeout(closeTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // ─── Custom Amount & Wallet Top-Up State ────────────────────────────────────
   const [customAmountInput, setCustomAmountInput] = useState<string>('');
@@ -529,51 +542,7 @@ export function CheckoutClient({
     }
   };
 
-  const handleReturnToApp = () => {
-    if (onClose) {
-      onClose();
-      return;
-    }
-    if (typeof window !== 'undefined') {
-      const closePayload = {
-        type: '180_PAYMENT_CLOSE',
-        sessionId,
-        referenceCode: payReferenceCode,
-        error: 'SESSION_EXPIRED',
-      };
-      const closePayloadPay = {
-        type: '180_PAY_CLOSE',
-        sessionId,
-      };
 
-      dispatchMobilePaymentEvent(closePayload);
-      dispatchMobilePaymentEvent(closePayloadPay);
-
-      if (window.parent && window.parent !== window) {
-        try { window.parent.postMessage(closePayload, '*'); } catch (_) {}
-        try { window.parent.postMessage(JSON.stringify(closePayload), '*'); } catch (_) {}
-        try { window.parent.postMessage(closePayloadPay, '*'); } catch (_) {}
-        try { window.parent.postMessage(JSON.stringify(closePayloadPay), '*'); } catch (_) {}
-      }
-
-      if (window.opener && !window.opener.closed) {
-        try { window.opener.postMessage(closePayload, '*'); } catch (_) {}
-        try { window.opener.postMessage(JSON.stringify(closePayload), '*'); } catch (_) {}
-        try { window.opener.postMessage(closePayloadPay, '*'); } catch (_) {}
-        try { window.close(); } catch (_) {}
-      }
-
-      if (session?.cancelUrl) {
-        const targetCancel = formatCancelUrl(session.cancelUrl, { sessionId, status: 'cancelled' });
-        window.location.href = targetCancel;
-        return;
-      }
-
-      if ((!window.parent || window.parent === window) && (!window.opener || window.opener.closed)) {
-        window.history.back();
-      }
-    }
-  };
 
   // ─── Currency & Monetary Amount Computations ───────────────────────────────
   // Active Country Code (user chosen country overrides detected country, fallback to IN)
@@ -895,6 +864,140 @@ export function CheckoutClient({
     }
   };
 
+  const notifyParentAndClose = useCallback((
+    customSuccessPayload?: any,
+    customSuccessPayloadPay?: any,
+    redirectUrl?: string
+  ) => {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+    if (hasClosedRef.current) return;
+    hasClosedRef.current = true;
+
+    const targetSessionId = session?.id || sessionId;
+    const finalPayload = customSuccessPayload || successPayloadRef.current || {
+      type: '180_PAYMENT_SUCCESS',
+      sessionId: targetSessionId,
+      transactionId: session?.metadata?.transactionId || 'tx_' + Math.random().toString(36).substring(2, 10),
+      amount: activeFinalAmount,
+      currency: activeCurrency,
+      status: 'success',
+    };
+    const finalPayloadPay = customSuccessPayloadPay || {
+      type: '180_PAY_SUCCESS',
+      ...finalPayload,
+    };
+    const closePayload = {
+      type: '180_PAYMENT_CLOSE',
+      sessionId: targetSessionId,
+      success: true,
+      transactionId: finalPayload.transactionId,
+      status: 'success',
+      returnUrl: redirectUrl || finalPayload.returnUrl,
+    };
+    const closePayloadPay = {
+      type: '180_PAY_CLOSE',
+      ...closePayload,
+    };
+
+    if (typeof window !== 'undefined') {
+      dispatchMobilePaymentEvent(finalPayload);
+      dispatchMobilePaymentEvent(finalPayloadPay);
+      dispatchMobilePaymentEvent(closePayload);
+      dispatchMobilePaymentEvent(closePayloadPay);
+
+      if (window.opener && !window.opener.closed) {
+        try { window.opener.postMessage(finalPayload, '*'); } catch (_) {}
+        try { window.opener.postMessage(finalPayloadPay, '*'); } catch (_) {}
+        try { window.opener.postMessage(closePayload, '*'); } catch (_) {}
+        try { window.opener.postMessage(closePayloadPay, '*'); } catch (_) {}
+      }
+
+      if (window.parent && window.parent !== window) {
+        try { window.parent.postMessage(finalPayload, '*'); } catch (_) {}
+        try { window.parent.postMessage(finalPayloadPay, '*'); } catch (_) {}
+        try { window.parent.postMessage(closePayload, '*'); } catch (_) {}
+        try { window.parent.postMessage(closePayloadPay, '*'); } catch (_) {}
+      }
+    }
+
+    if (onClose) {
+      onClose();
+    }
+
+    const dest = redirectUrl || finalPayload.returnUrl;
+    if (dest) {
+      try {
+        if (typeof window !== 'undefined' && window.top && window.top !== window) {
+          window.top.location.href = dest;
+          return;
+        }
+      } catch (_) {}
+      if (typeof window !== 'undefined') {
+        window.location.href = dest;
+      }
+    }
+  }, [session, sessionId, activeFinalAmount, activeCurrency, onClose]);
+
+  const handleReturnToApp = useCallback(() => {
+    if (completed) {
+      notifyParentAndClose();
+      return;
+    }
+
+    if (onClose) {
+      onClose();
+      return;
+    }
+
+    if (typeof window !== 'undefined') {
+      const closePayload = {
+        type: '180_PAYMENT_CLOSE',
+        sessionId: session?.id || sessionId,
+        referenceCode: payReferenceCode,
+        error: 'SESSION_CANCELLED',
+      };
+      const closePayloadPay = {
+        type: '180_PAY_CLOSE',
+        sessionId: session?.id || sessionId,
+      };
+      const cancelPayload = {
+        type: '180_PAYMENT_CANCEL',
+        sessionId: session?.id || sessionId,
+        status: 'cancelled',
+      };
+
+      dispatchMobilePaymentEvent(closePayload);
+      dispatchMobilePaymentEvent(closePayloadPay);
+      dispatchMobilePaymentEvent(cancelPayload);
+
+      if (window.parent && window.parent !== window) {
+        try { window.parent.postMessage(closePayload, '*'); } catch (_) {}
+        try { window.parent.postMessage(closePayloadPay, '*'); } catch (_) {}
+        try { window.parent.postMessage(cancelPayload, '*'); } catch (_) {}
+      }
+
+      if (window.opener && !window.opener.closed) {
+        try { window.opener.postMessage(closePayload, '*'); } catch (_) {}
+        try { window.opener.postMessage(closePayloadPay, '*'); } catch (_) {}
+        try { window.opener.postMessage(cancelPayload, '*'); } catch (_) {}
+        try { window.close(); } catch (_) {}
+      }
+
+      if (session?.cancelUrl) {
+        const targetCancel = formatCancelUrl(session.cancelUrl, { sessionId: session?.id || sessionId, status: 'cancelled' });
+        window.location.href = targetCancel;
+        return;
+      }
+
+      if ((!window.parent || window.parent === window) && (!window.opener || window.opener.closed)) {
+        window.history.back();
+      }
+    }
+  }, [completed, notifyParentAndClose, session, sessionId, payReferenceCode, onClose]);
+
   const handlePaymentCompletion = useCallback((details: {
     transactionId?: string;
     creditedUserBalance?: number;
@@ -902,6 +1005,7 @@ export function CheckoutClient({
     customReturnUrl?: string;
   } = {}) => {
     if (completed) return;
+    setIsVerifyingPayment(false);
     setCompleted(true);
     setPaying(false);
     setTopupLoading(false);
@@ -955,66 +1059,16 @@ export function CheckoutClient({
       type: '180_PAY_SUCCESS',
       ...liveSuccessPayload,
     };
+    successPayloadRef.current = liveSuccessPayload;
 
-    if (typeof window !== 'undefined') {
-      dispatchMobilePaymentEvent(liveSuccessPayload);
-      dispatchMobilePaymentEvent(liveSuccessPayloadPay);
-      if (window.opener) {
-        window.opener.postMessage(liveSuccessPayload, '*');
-        window.opener.postMessage(liveSuccessPayloadPay, '*');
-      }
-      if (window.parent && window.parent !== window) {
-        window.parent.postMessage(liveSuccessPayload, '*');
-        window.parent.postMessage(liveSuccessPayloadPay, '*');
-      }
-    }
-
-    // Only auto-redirect if an external return URL was explicitly configured by the merchant/developer
-    if (formattedReturnUrl) {
-      setTimeout(() => {
-        if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
-          // Send explicit close and success messages to iframe bottom sheet container
-          window.parent.postMessage({
-            type: '180_PAYMENT_SUCCESS',
-            sessionId: targetSessionId,
-            transactionId: txId,
-            returnUrl: formattedReturnUrl,
-            amount: activeFinalAmount,
-            currency: activeCurrency,
-            status: 'success',
-          }, '*');
-          window.parent.postMessage({
-            type: '180_PAYMENT_CLOSE',
-            sessionId: targetSessionId,
-            success: true,
-            returnUrl: formattedReturnUrl,
-            transactionId: txId,
-            status: 'success',
-          }, '*');
-          window.parent.postMessage({
-            type: '180_PAY_CLOSE',
-            sessionId: targetSessionId,
-            success: true,
-            returnUrl: formattedReturnUrl,
-            transactionId: txId,
-            status: 'success',
-          }, '*');
-
-          // Direct top window redirect if accessible
-          try {
-            if (formattedReturnUrl && window.top && window.top !== window) {
-              window.top.location.href = formattedReturnUrl;
-              return;
-            }
-          } catch (_) {
-            // If cross-origin prevents direct top access, parent postMessage listener handles it
-          }
-        }
-
-        window.location.href = formattedReturnUrl;
-      }, 3500);
-    }
-  }, [completed, session, sessionId, activeFinalAmount, activeCurrency, onSuccess, onClose]);
+    // Graceful view period: Keep the confirmed bottom sheet visible for ~2.8 seconds
+    // (or 3.5s if merchant redirectUrl configured) before auto-dismissing,
+    // or dismiss immediately if user taps "Done" / "Continue to Merchant".
+    if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
+    closeTimeoutRef.current = setTimeout(() => {
+      notifyParentAndClose(liveSuccessPayload, liveSuccessPayloadPay, formattedReturnUrl);
+    }, formattedReturnUrl ? 3500 : 2800);
+  }, [completed, session, sessionId, activeFinalAmount, activeCurrency, onSuccess, notifyParentAndClose]);
 
   const checkStatusRef = React.useRef(false);
   const checkSessionStatus = useCallback(async (isSilent = true) => {
@@ -1336,27 +1390,12 @@ export function CheckoutClient({
               },
             }));
           }
-          setCompleted(true);
-          setTopupLoading(false);
           const txId = data.transactionId || 'tx_free_' + Math.random().toString(36).substring(2, 10);
-          const payload = {
-            type: '180_PAYMENT_SUCCESS',
-            sessionId,
+          handlePaymentCompletion({
             transactionId: txId,
-            amount: 0,
-            currency: activeCurrency,
-          };
-          if (typeof window !== 'undefined') {
-            if (window.opener) window.opener.postMessage(payload, '*');
-            if (window.parent && window.parent !== window) window.parent.postMessage(payload, '*');
-            setTimeout(() => {
-              if (session?.returnUrl) {
-                window.location.href = session.returnUrl;
-              } else if (window.opener) {
-                window.close();
-              }
-            }, 1500);
-          }
+            fulfillment: data.fulfillment || data.session?.metadata?.fulfillment,
+            customReturnUrl: session?.returnUrl,
+          });
           return;
         } else {
           throw new Error(data.error || 'Failed to complete free promotional checkout');
@@ -1482,7 +1521,6 @@ export function CheckoutClient({
           const isDone = await checkSessionStatus(true);
           if (isDone) {
             stopPolling();
-            try { rzpInstance?.close?.(); } catch (_) {}
           }
         }, 2500);
 
@@ -1491,7 +1529,6 @@ export function CheckoutClient({
             const isDone = await checkSessionStatus(true);
             if (isDone) {
               stopPolling();
-              try { rzpInstance?.close?.(); } catch (_) {}
             }
           }
         };
@@ -1500,7 +1537,6 @@ export function CheckoutClient({
           const isDone = await checkSessionStatus(true);
           if (isDone) {
             stopPolling();
-            try { rzpInstance?.close?.(); } catch (_) {}
           }
         };
 
@@ -1539,7 +1575,9 @@ export function CheckoutClient({
         } : {}),
         handler: async function (response: any) {
           toast.dismiss(directToastId);
-          const verifyToastId = toast.loading('Confirming payment...');
+          setIsVerifyingPayment(true);
+          setVerifyingText('Verifying cryptographic signature and securing transaction...');
+          const verifyStart = Date.now();
           let verified = false;
 
           try {
@@ -1564,7 +1602,11 @@ export function CheckoutClient({
               if (verifyData.success) {
                 verified = true;
                 stopPolling();
-                toast.success('Payment authorized & completed!', { id: verifyToastId });
+                const elapsed = Date.now() - verifyStart;
+                if (elapsed < 650) {
+                  await new Promise((r) => setTimeout(r, 650 - elapsed));
+                }
+                setIsVerifyingPayment(false);
                 handlePaymentCompletion({
                   transactionId: response.razorpay_payment_id,
                   creditedUserBalance: verifyData.creditedUserBalance,
@@ -1581,27 +1623,28 @@ export function CheckoutClient({
           // Authoritative Fallback: Fast Reconciliation via Gateway Status
           if (!verified) {
             try {
-              const isDone = await checkSessionStatus(false);
+              setVerifyingText('Confirming bank settlement status...');
+              const isDone = await checkSessionStatus(true);
               if (isDone) {
                 verified = true;
                 stopPolling();
-                toast.success('Payment authorized & completed!', { id: verifyToastId });
+                setIsVerifyingPayment(false);
                 return;
               }
               // Fast retry after 800ms in case gateway processing took a moment
               await new Promise((r) => setTimeout(r, 800));
-              const isDoneRetry = await checkSessionStatus(false);
+              const isDoneRetry = await checkSessionStatus(true);
               if (isDoneRetry) {
                 verified = true;
                 stopPolling();
-                toast.success('Payment authorized & completed!', { id: verifyToastId });
+                setIsVerifyingPayment(false);
                 return;
               }
             } catch (_) {}
           }
 
+          setIsVerifyingPayment(false);
           if (!verified) {
-            toast.dismiss(verifyToastId);
             toast.error('Payment verification in progress. Please check status in a moment.');
           }
           setTopupLoading(false);
@@ -1610,11 +1653,34 @@ export function CheckoutClient({
           ondismiss: async () => {
             toast.dismiss(directToastId);
             setTopupLoading(false);
-            // Polling check: did the user complete payment in UPI app before returning and dismissing?
-            const isDone = await checkSessionStatus(false);
+            if (completed) return;
+
+            // When returning from UPI apps, the modal may dismiss while payment was authorized in PhonePe/Paytm
+            setIsVerifyingPayment(true);
+            setVerifyingText('Verifying payment confirmation from UPI application...');
+            const dismissStart = Date.now();
+            let verified = false;
+
+            for (let attempt = 0; attempt < 3; attempt++) {
+              const isDone = await checkSessionStatus(true);
+              if (isDone) {
+                verified = true;
+                break;
+              }
+              if (attempt < 2) {
+                await new Promise((r) => setTimeout(r, 700));
+              }
+            }
+
             stopPolling();
+            const elapsed = Date.now() - dismissStart;
+            if (verified && elapsed < 650) {
+              await new Promise((r) => setTimeout(r, 650 - elapsed));
+            }
+            setIsVerifyingPayment(false);
+
             const targetId = session?.id || sessionId;
-            if (!isDone && targetId && targetId !== 'default') {
+            if (!verified && targetId && targetId !== 'default') {
               fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${targetId}/track-event`), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1655,6 +1721,77 @@ export function CheckoutClient({
 
   if (loading) {
     return <AdaptiveSkeleton screen="checkout" />;
+  }
+
+  if (isVerifyingPayment) {
+    return (
+      <div 
+        role="status" 
+        aria-live="polite"
+        className="w-full py-12 px-4 text-center space-y-6 animate-in fade-in zoom-in-95 duration-200 font-sans flex flex-col items-center justify-center min-h-[380px]"
+      >
+        <div className="relative flex items-center justify-center">
+          {/* Revolving glowing aura */}
+          <div className="absolute -inset-4 rounded-full bg-gradient-to-tr from-blue-500/20 via-indigo-500/20 to-emerald-500/20 blur-xl animate-pulse" />
+          
+          {/* Spinning concentric progression rings */}
+          <div className="relative w-24 h-24 flex items-center justify-center">
+            {/* Outer track */}
+            <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 100 100">
+              <circle
+                cx="50"
+                cy="50"
+                r="42"
+                className="stroke-slate-200 dark:stroke-slate-800"
+                strokeWidth="5"
+                fill="none"
+              />
+              <circle
+                cx="50"
+                cy="50"
+                r="42"
+                className="stroke-blue-600 dark:stroke-blue-400"
+                strokeWidth="5"
+                strokeDasharray="264"
+                strokeDashoffset="70"
+                strokeLinecap="round"
+                fill="none"
+              >
+                <animateTransform
+                  attributeName="transform"
+                  type="rotate"
+                  from="0 50 50"
+                  to="360 50 50"
+                  dur="1.2s"
+                  repeatCount="indefinite"
+                />
+              </circle>
+            </svg>
+
+            {/* Inner 180 Core Icon */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-12 h-12 rounded-full bg-white dark:bg-slate-900 shadow-md border border-slate-100 dark:border-slate-800 flex items-center justify-center">
+                <OneEightyCoreIcon className="w-7 h-7 text-blue-600 dark:text-blue-400 animate-pulse" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-2 max-w-xs">
+          <h2 className="text-lg font-extrabold text-slate-900 dark:text-white tracking-tight">
+            Verifying Payment
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+            {verifyingText}
+          </p>
+        </div>
+
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-300 font-medium">
+          <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping inline-block" />
+          <span>Confirming with banking network...</span>
+        </div>
+      </div>
+    );
   }
 
   if (completed) {
@@ -1754,7 +1891,11 @@ export function CheckoutClient({
             <>
               <a
                 href={session?.returnUrl || fulfillment?.redirectUrl}
-                className="w-full inline-flex items-center justify-center gap-1.5 px-5 py-3 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 font-semibold text-xs transition-all shadow-sm"
+                onClick={(e) => {
+                  e.preventDefault();
+                  notifyParentAndClose(undefined, undefined, session?.returnUrl || fulfillment?.redirectUrl);
+                }}
+                className="w-full inline-flex items-center justify-center gap-1.5 px-5 py-3 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 font-semibold text-xs transition-all shadow-sm cursor-pointer"
               >
                 <span>Continue to {session?.app?.name || 'Merchant'}</span>
                 <ExternalLink className="w-3.5 h-3.5" />
