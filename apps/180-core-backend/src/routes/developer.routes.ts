@@ -52,7 +52,9 @@ router.post('/apps/:id/custom-domain/verify', protect, DeveloperApiController.ve
 
 // ─── Earnings & Manual Payouts ───────────────────────────────────────────────
 router.post('/apps/:appId/payouts', protect, DeveloperApiController.requestPayout);
+router.post('/apps/:appId/payouts/request', protect, DeveloperApiController.requestPayout);
 router.get('/apps/:appId/payouts', protect, DeveloperApiController.listPayouts);
+router.get('/apps/:appId/payouts/ledger', protect, DeveloperApiController.listPayouts);
 
 // ─── Super Admin Vendor Payouts & Global Intelligence ────────────────────────
 router.get('/admin/payouts', DeveloperApiController.listAdminPayouts);

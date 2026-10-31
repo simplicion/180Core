@@ -84,11 +84,26 @@ export interface TransactionRecord {
   gatewayTxId?: string;
 }
 
+export interface AppLedgerEntry {
+  id: string;
+  walletId?: string;
+  amount: number;
+  balanceAfter: number;
+  type: 'TOPUP' | 'CHECKOUT_PAY' | 'CHECKOUT_RECEIVE' | 'PAYOUT' | 'REFUND' | string;
+  referenceId?: string | null;
+  description?: string | null;
+  metadata?: any;
+  createdAt: string;
+}
+
 export interface PaymentAnalyticsData {
   grossVolume: number;
   platformFeePercent?: number;
   totalPlatformFee?: number;
   netMerchantVolume?: number;
+  totalWithdrawn?: number;
+  totalPaidOut?: number;
+  totalPendingPayouts?: number;
   thisMonthVolume: number;
   lastMonthVolume: number;
   pendingSettlements: number;
@@ -102,6 +117,8 @@ export interface PaymentAnalyticsData {
   intentOnlyCount?: number;
   conversionRate?: number;
   transactions: TransactionRecord[];
+  payouts?: PayoutRecord[];
+  ledgerEntries?: AppLedgerEntry[];
 }
 
 export interface BankDetailsData {
@@ -116,11 +133,20 @@ export interface PayoutRecord {
   id: string;
   amount: number;
   currency: string;
-  status: 'REQUESTED' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | string;
-  method: 'UPI' | 'BANK_TRANSFER' | string;
-  destination: string;
+  status: 'PENDING_REVIEW' | 'APPROVED' | 'PROCESSING' | 'PAID' | 'COMPLETED' | 'REJECTED' | string;
+  payoutMethod?: 'UPI' | 'BANK_TRANSFER' | string;
+  method?: 'UPI' | 'BANK_TRANSFER' | string;
+  destination?: string;
+  accountDetails?: {
+    upiId?: string;
+    accountHolderName?: string;
+    accountNumber?: string;
+    ifscCode?: string;
+    bankName?: string;
+  };
   adminNote?: string;
   transactionRef?: string;
+  requestedAt?: string;
   createdAt: string;
   processedAt?: string;
 }

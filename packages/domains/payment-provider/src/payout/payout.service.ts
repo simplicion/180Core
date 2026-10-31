@@ -24,8 +24,19 @@ export class PayoutService {
   static async requestPayout(input: CreatePayoutInput) {
     const { userId, appId, amount, payoutMethod, accountDetails } = input;
 
-    if (!amount || amount < 100) {
-      throw new Error('Minimum payout request amount is ₹100');
+    if (!amount || amount < 1) {
+      throw new Error('Minimum payout request amount is ₹1.00');
+    }
+
+    if (payoutMethod === 'UPI' && (!accountDetails?.upiId || accountDetails.upiId.trim().length < 3)) {
+      throw new Error('A valid UPI ID / VPA is required for instant UPI withdrawal');
+    }
+
+    if (
+      payoutMethod === 'BANK_TRANSFER' &&
+      (!accountDetails?.accountNumber || !accountDetails?.ifscCode || !accountDetails?.accountHolderName)
+    ) {
+      throw new Error('Account number, IFSC code, and account holder name are required for bank transfer');
     }
 
     // 1. Verify app ownership
@@ -37,21 +48,42 @@ export class PayoutService {
       throw new Error('OAuth Application not found or access unauthorized');
     }
 
-    // 2. Check App Wallet Balance
-    const appWallet = await IdentityWalletService.getOrCreateAppWallet(appId);
-    if (appWallet.balance < amount) {
+    // 2. Calculate true available withdrawable balance
+    // Net volume (Gross - 1.5% Fee) MINUS any existing non-rejected payouts
+    const checkouts = await prisma.checkoutSession.findMany({
+      where: { appId, status: { in: ['CAPTURED', 'SUCCESS'] } },
+      select: { amount: true },
+    });
+    const grossVolume = checkouts.reduce((sum, c) => sum + c.amount, 0);
+    const platformFee = Math.round(grossVolume * 0.015 * 100) / 100;
+    const netMerchantVolume = Math.round((grossVolume - platformFee) * 100) / 100;
+
+    const existingPayouts = await prisma.payoutRequest.findMany({
+      where: { appId, status: { not: 'REJECTED' } },
+      select: { amount: true },
+    });
+    const currentTotalWithdrawn = existingPayouts.reduce((sum, p) => sum + p.amount, 0);
+    const availableWithdrawable = Math.max(0, Math.round((netMerchantVolume - currentTotalWithdrawn) * 100) / 100);
+
+    if (amount > availableWithdrawable) {
       throw new Error(
-        `Insufficient available balance. You have ₹${appWallet.balance.toFixed(2)} in your app earnings.`
+        `Insufficient available withdrawable balance. You have ₹${availableWithdrawable.toFixed(2)} available for withdrawal.`
       );
     }
 
-    // 3. Atomically deduct and create Payout Request
+    // 3. App Wallet
+    const appWallet = await IdentityWalletService.getOrCreateAppWallet(appId);
+
+    // 4. Atomically deduct balance, create Payout Request, and record Ledger entry
     const result = await prisma.$transaction(async (tx: any) => {
-      const newBalance = Math.round((appWallet.balance - amount) * 100) / 100;
+      const newRemainingBalance = Math.max(
+        0,
+        Math.round((availableWithdrawable - amount) * 100) / 100
+      );
 
       await tx.wallet.update({
         where: { id: appWallet.id },
-        data: { balance: newBalance },
+        data: { balance: newRemainingBalance },
       });
 
       const payout = await tx.payoutRequest.create({
@@ -66,22 +98,28 @@ export class PayoutService {
         },
       });
 
+      const destLabel =
+        payoutMethod === 'UPI'
+          ? `UPI (${accountDetails?.upiId?.trim() || 'VPA'})`
+          : `Bank A/C ending ${accountDetails?.accountNumber?.slice(-4) || '****'}`;
+
       await tx.ledgerEntry.create({
         data: {
           walletId: appWallet.id,
           amount: -amount,
-          balanceAfter: newBalance,
+          balanceAfter: newRemainingBalance,
           type: 'PAYOUT',
           referenceId: payout.id,
-          description: `Payout Request #${payout.id.slice(0, 8)} to ${payoutMethod}`,
+          description: `Payout Withdrawal Request #${payout.id.slice(0, 8)} to ${destLabel}`,
           metadata: {
             payoutId: payout.id,
             payoutMethod,
+            accountDetails,
           },
         },
       });
 
-      return { payout, newBalance };
+      return { payout, newRemainingBalance };
     });
 
     return {
@@ -89,13 +127,13 @@ export class PayoutService {
       payoutId: result.payout.id,
       amount: result.payout.amount,
       status: result.payout.status,
-      remainingBalance: result.newBalance,
+      remainingBalance: result.newRemainingBalance,
       requestedAt: result.payout.requestedAt,
     };
   }
 
   /**
-   * List payout requests for a developer application
+   * List payout requests and transaction ledger for a developer application
    */
   static async listPayouts(appId: string, userId: string) {
     const app = await prisma.oAuthApp.findFirst({
@@ -106,18 +144,68 @@ export class PayoutService {
       throw new Error('OAuth Application not found or access unauthorized');
     }
 
+    const appWallet = await IdentityWalletService.getOrCreateAppWallet(appId);
+
+    // 1. Calculate Gross Volume and 180 Pay Split
+    const checkouts = await prisma.checkoutSession.findMany({
+      where: { appId, status: { in: ['CAPTURED', 'SUCCESS'] } },
+      select: { amount: true },
+    });
+
+    const grossVolume = Math.round(checkouts.reduce((sum, c) => sum + c.amount, 0) * 100) / 100;
+    const platformFee = Math.round(grossVolume * 0.015 * 100) / 100;
+    const netMerchantVolume = Math.round((grossVolume - platformFee) * 100) / 100;
+
+    // 2. Fetch all Payout Requests
     const payouts = await prisma.payoutRequest.findMany({
       where: { appId },
       orderBy: { requestedAt: 'desc' },
     });
 
-    const appWallet = await IdentityWalletService.getOrCreateAppWallet(appId);
+    const totalWithdrawn = payouts
+      .filter((p) => p.status !== 'REJECTED')
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    const totalPaidOut = payouts
+      .filter((p) => p.status === 'PAID' || p.status === 'COMPLETED')
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    const totalPendingPayouts = payouts
+      .filter((p) => ['PENDING_REVIEW', 'PROCESSING', 'APPROVED'].includes(p.status))
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    const roundedTotalWithdrawn = Math.round(totalWithdrawn * 100) / 100;
+    const withdrawableBalance = Math.max(0, Math.round((netMerchantVolume - roundedTotalWithdrawn) * 100) / 100);
+
+    // Keep app wallet balance in sync with true available withdrawable balance
+    if (Math.abs(appWallet.balance - withdrawableBalance) > 0.01) {
+      await prisma.wallet.update({
+        where: { id: appWallet.id },
+        data: { balance: withdrawableBalance },
+      });
+      appWallet.balance = withdrawableBalance;
+    }
+
+    // 3. Fetch Double-Entry Ledger Entries
+    const ledgerEntries = await prisma.ledgerEntry.findMany({
+      where: { walletId: appWallet.id },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
 
     return {
       success: true,
-      availableBalance: appWallet.balance,
+      grossVolume,
+      platformFee,
+      netMerchantVolume,
+      totalWithdrawn: roundedTotalWithdrawn,
+      totalPaidOut: Math.round(totalPaidOut * 100) / 100,
+      totalPendingPayouts: Math.round(totalPendingPayouts * 100) / 100,
+      availableBalance: withdrawableBalance,
+      withdrawableBalance,
       currency: appWallet.currency,
       payouts,
+      ledgerEntries,
     };
   }
 

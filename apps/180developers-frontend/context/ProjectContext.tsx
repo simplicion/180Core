@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter, usePathname } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { DeveloperAppDetail, PaymentAnalyticsData, BankDetailsData, PayoutRecord, WebhookTestResult } from '@/components/apps/types';
+import { DeveloperAppDetail, PaymentAnalyticsData, BankDetailsData, PayoutRecord, AppLedgerEntry, WebhookTestResult } from '@/components/apps/types';
 import { purgeAuthSession, getStoredAuthToken } from '@/lib/auth';
 import { cachedFetch, invalidateCache } from '@/lib/cache';
 import { getAppSlug } from '@/lib/slug';
@@ -72,7 +72,9 @@ interface ProjectContextValue {
   loadingAnalytics: boolean;
   fetchPaymentAnalytics: (forceBypass?: any) => Promise<void>;
   payoutBalance: number;
+  totalWithdrawn: number;
   payoutHistory: PayoutRecord[];
+  ledgerEntries: AppLedgerEntry[];
   loadingPayoutHistory: boolean;
   fetchPayoutHistory: (forceBypass?: any) => Promise<void>;
   bankDetails: BankDetailsData | null;
@@ -175,6 +177,8 @@ export function ProjectProvider({
     setBankDetails(null);
     setPayoutHistory([]);
     setPayoutBalance(0);
+    setTotalWithdrawn(0);
+    setLedgerEntries([]);
     setTestResult(null);
   }, [projectId]);
 
@@ -211,7 +215,9 @@ export function ProjectProvider({
   const [paymentAnalytics, setPaymentAnalytics] = useState<PaymentAnalyticsData | null>(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
   const [payoutBalance, setPayoutBalance] = useState<number>(0);
+  const [totalWithdrawn, setTotalWithdrawn] = useState<number>(0);
   const [payoutHistory, setPayoutHistory] = useState<PayoutRecord[]>([]);
+  const [ledgerEntries, setLedgerEntries] = useState<AppLedgerEntry[]>([]);
   const [loadingPayoutHistory, setLoadingPayoutHistory] = useState(false);
   const [bankDetails, setBankDetails] = useState<BankDetailsData | null>(null);
 
@@ -621,6 +627,15 @@ export function ProjectProvider({
         if (typeof analyticsData?.withdrawableBalance === 'number') {
           setPayoutBalance(analyticsData.withdrawableBalance);
         }
+        if (typeof analyticsData?.totalWithdrawn === 'number') {
+          setTotalWithdrawn(analyticsData.totalWithdrawn);
+        }
+        if (Array.isArray(analyticsData?.ledgerEntries) && analyticsData.ledgerEntries.length > 0) {
+          setLedgerEntries(analyticsData.ledgerEntries);
+        }
+        if (Array.isArray(analyticsData?.payouts) && analyticsData.payouts.length > 0) {
+          setPayoutHistory(analyticsData.payouts);
+        }
       }
     } catch (_) {}
     finally {
@@ -646,13 +661,31 @@ export function ProjectProvider({
         });
         if (res.ok) {
           const data = await res.json();
-          return data.payouts || data.data || [];
+          return data;
         }
         return null;
       }, 30000);
 
       if (payoutsData) {
-        setPayoutHistory(payoutsData);
+        const list = Array.isArray(payoutsData)
+          ? payoutsData
+          : payoutsData.payouts || payoutsData.data?.payouts || (Array.isArray(payoutsData.data) ? payoutsData.data : []);
+        setPayoutHistory(list);
+
+        const entries = payoutsData.ledgerEntries || payoutsData.data?.ledgerEntries || [];
+        if (Array.isArray(entries) && entries.length > 0) {
+          setLedgerEntries(entries);
+        }
+
+        const bal = payoutsData.withdrawableBalance ?? payoutsData.availableBalance ?? payoutsData.data?.withdrawableBalance ?? payoutsData.data?.availableBalance;
+        if (typeof bal === 'number') {
+          setPayoutBalance(bal);
+        }
+
+        const withdrawn = payoutsData.totalWithdrawn ?? payoutsData.data?.totalWithdrawn;
+        if (typeof withdrawn === 'number') {
+          setTotalWithdrawn(withdrawn);
+        }
       }
     } catch (_) {}
     finally {
@@ -856,7 +889,9 @@ export function ProjectProvider({
         loadingAnalytics,
         fetchPaymentAnalytics,
         payoutBalance,
+        totalWithdrawn,
         payoutHistory,
+        ledgerEntries,
         loadingPayoutHistory,
         fetchPayoutHistory,
         bankDetails,

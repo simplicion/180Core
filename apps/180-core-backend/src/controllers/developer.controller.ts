@@ -1066,19 +1066,55 @@ export class DeveloperApiController {
       const totalPlatformFee = Math.round(grossVolume * 0.015 * 100) / 100;
       const netMerchantVolume = Math.round((grossVolume - totalPlatformFee) * 100) / 100;
 
-      // Net available balance ready for instant payout (settled wallet funds, capped to net merchant earnings)
-      const withdrawableBalance = grossVolume > 0 ? Math.min(rawWalletBalance, netMerchantVolume) : rawWalletBalance;
+      // Payouts calculation: Total Withdrawn, Paid Out, and Pending Settlements
+      const allPayouts = await prisma.payoutRequest.findMany({
+        where: { appId: { in: appIds } },
+        orderBy: { requestedAt: 'desc' },
+      });
+
+      const totalWithdrawn = allPayouts
+        .filter((p) => p.status !== 'REJECTED')
+        .reduce((sum, p) => sum + p.amount, 0);
+
+      const totalPaidOut = allPayouts
+        .filter((p) => p.status === 'PAID' || p.status === 'COMPLETED')
+        .reduce((sum, p) => sum + p.amount, 0);
+
+      const totalPendingPayouts = allPayouts
+        .filter((p) => ['PENDING_REVIEW', 'PROCESSING', 'APPROVED'].includes(p.status))
+        .reduce((sum, p) => sum + p.amount, 0);
+
+      const roundedTotalWithdrawn = Math.round(totalWithdrawn * 100) / 100;
+      const roundedTotalPaidOut = Math.round(totalPaidOut * 100) / 100;
+      const roundedTotalPendingPayouts = Math.round(totalPendingPayouts * 100) / 100;
+
+      // Net available balance ready for instant payout:
+      // Net Merchant Volume (Gross - 1.5% Fee) MINUS Total Withdrawn
+      const withdrawableBalance = Math.max(0, Math.round((netMerchantVolume - roundedTotalWithdrawn) * 100) / 100);
       const pendingSettlements = Math.max(0, Math.round((grossVolume - rawWalletBalance) * 100) / 100);
+
+      // Ledger entries for this app's revenue wallet
+      let ledgerEntries: any[] = [];
+      if (appWallet) {
+        ledgerEntries = await prisma.ledgerEntry.findMany({
+          where: { walletId: appWallet.id },
+          orderBy: { createdAt: 'desc' },
+          take: 100,
+        });
+      }
 
       const analyticsData = {
         grossVolume: Math.round(grossVolume * 100) / 100,
         platformFeePercent,
         totalPlatformFee,
         netMerchantVolume,
+        totalWithdrawn: roundedTotalWithdrawn,
+        totalPaidOut: roundedTotalPaidOut,
+        totalPendingPayouts: roundedTotalPendingPayouts,
         thisMonthVolume: Math.round(thisMonthVolume * 100) / 100,
         lastMonthVolume: Math.round(lastMonthVolume * 100) / 100,
         pendingSettlements,
-        withdrawableBalance: Math.round(withdrawableBalance * 100) / 100,
+        withdrawableBalance,
         rawWalletBalance: Math.round(rawWalletBalance * 100) / 100,
         currency: appWallet?.currency || 'INR',
         totalTransactionsCount: capturedSessions.length,
@@ -1091,6 +1127,8 @@ export class DeveloperApiController {
         intentOnlyCount: intentOnlySessions.length,
         conversionRate,
         transactions,
+        payouts: allPayouts,
+        ledgerEntries,
       };
 
       return res.json({
@@ -1239,7 +1277,7 @@ export class DeveloperApiController {
 
       const result = await PayoutService.listPayouts(app.id, userId);
 
-      return res.json({ success: true, data: result });
+      return res.json({ success: true, data: result, ...result });
     } catch (err: any) {
       console.error('[DeveloperApiController:listPayouts] Error:', err);
       return res.status(400).json({ success: false, error: err.message });
