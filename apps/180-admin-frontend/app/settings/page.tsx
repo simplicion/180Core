@@ -33,7 +33,7 @@ export default function SecurityAuditLogsPage() {
   const [securityConfig, setSecurityConfig] = useState<any>({
     enforce2FA: true,
     standardFeePercent: 2.0,
-    ipWhitelist: '27.34.70.69, 127.0.0.1, ::1',
+    ipWhitelist: '*',
   });
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);

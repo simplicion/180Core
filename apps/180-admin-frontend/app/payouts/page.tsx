@@ -50,9 +50,12 @@ export default function PayoutsSettlementDeskPage() {
       if (res.success) {
         const fetched = res.payouts || res.data?.payouts || [];
         setPayouts(fetched);
+      } else {
+        toast.error(res.error || 'Failed to load payouts');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load payouts', err);
+      toast.error(err.message || 'Failed to load payouts desk');
     } finally {
       setLoading(false);
     }
@@ -137,8 +140,25 @@ export default function PayoutsSettlementDeskPage() {
     const appName = (p.app?.name || p.appName || '').toLowerCase();
     const id = (p.id || '').toLowerCase();
     const utr = (p.transactionRef || p.utrReference || '').toLowerCase();
-    return devName.includes(term) || appName.includes(term) || id.includes(term) || utr.includes(term);
+    const upi = (p.accountDetails?.upiId || p.upiId || '').toLowerCase();
+    const acc = (p.accountDetails?.accountNumber || p.accountNumber || '').toLowerCase();
+    return (
+      devName.includes(term) ||
+      appName.includes(term) ||
+      id.includes(term) ||
+      utr.includes(term) ||
+      upi.includes(term) ||
+      acc.includes(term)
+    );
   });
+
+  const formatMoney = (amount: number, currency: string = 'INR') => {
+    const sym = currency === 'INR' ? '₹' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency + ' ';
+    return `${sym}${Number(amount || 0).toLocaleString(currency === 'INR' ? 'en-IN' : 'en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
 
   const handleExportCsv = () => {
     if (!filteredPayouts.length) {
@@ -150,11 +170,20 @@ export default function PayoutsSettlementDeskPage() {
       DeveloperName: p.app?.user?.name || p.developer?.name || p.developerName || 'Unknown',
       DeveloperEmail: p.app?.user?.email || p.developer?.email || '',
       AppName: p.app?.name || p.appName || '',
-      Currency: p.currency || 'USD',
+      Currency: p.currency || 'INR',
       Amount: (p.amount || 0).toFixed(2),
       Status: p.status,
-      BankName: p.bankName || 'Wire Transfer',
-      AccountOrUpi: p.accountNumber || p.upiId || '•••• ' + (p.accountLast4 || '8910'),
+      PayoutMethod: p.payoutMethod || 'UPI',
+      BankOrUPI:
+        p.payoutMethod === 'UPI'
+          ? p.accountDetails?.upiId || p.upiId || '—'
+          : p.accountDetails?.bankName || p.bankName || 'Bank Transfer',
+      AccountNumberOrVPA:
+        p.accountDetails?.upiId ||
+        p.upiId ||
+        p.accountDetails?.accountNumber ||
+        p.accountNumber ||
+        '•••• ' + (p.accountLast4 || '8910'),
       BankReferenceUTR: p.transactionRef || p.utrReference || '',
       AdminNotes: p.adminNote || p.adminNotes || '',
       RequestedAt: new Date(p.requestedAt || p.createdAt).toLocaleString(),
@@ -175,15 +204,20 @@ export default function PayoutsSettlementDeskPage() {
 
   // Metrics
   const pendingCount = payouts.filter((p) => p.status === 'PENDING_REVIEW' || p.status === 'PENDING').length;
-  const pendingVolume = payouts
+  const pendingVolumeNative = payouts
+    .filter((p) => p.status === 'PENDING_REVIEW' || p.status === 'PENDING')
+    .reduce((acc, p) => acc + (p.amount || 0), 0);
+  const pendingVolumeUsd = payouts
     .filter((p) => p.status === 'PENDING_REVIEW' || p.status === 'PENDING')
     .reduce((acc, p) => acc + toUsd(p.amount || 0, p.currency), 0);
-  const processingVolume = payouts
+
+  const processingVolumeNative = payouts
     .filter((p) => p.status === 'PROCESSING' || p.status === 'APPROVED')
-    .reduce((acc, p) => acc + toUsd(p.amount || 0, p.currency), 0);
-  const settledVolume = payouts
+    .reduce((acc, p) => acc + (p.amount || 0), 0);
+
+  const settledVolumeNative = payouts
     .filter((p) => p.status === 'PAID' || p.status === 'SETTLED')
-    .reduce((acc, p) => acc + toUsd(p.amount || 0, p.currency), 0);
+    .reduce((acc, p) => acc + (p.amount || 0), 0);
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
@@ -207,10 +241,10 @@ export default function PayoutsSettlementDeskPage() {
             <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
             <input
               type="text"
-              placeholder="Search developer, UTR, app..."
+              placeholder="Search developer, UTR, app, UPI..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 pr-4 py-2 rounded-xl text-xs bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 w-56"
+              className="pl-9 pr-4 py-2 rounded-xl text-xs bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 w-64"
             />
           </div>
 
@@ -242,9 +276,11 @@ export default function PayoutsSettlementDeskPage() {
           <div>
             <div className="text-xs text-zinc-500">Pending Review Queue</div>
             <div className="text-2xl font-black font-mono text-amber-500 mt-1">
-              ${pendingVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              {formatMoney(pendingVolumeNative, 'INR')}
             </div>
-            <div className="text-[11px] text-zinc-500">{pendingCount} requests awaiting verification</div>
+            <div className="text-[11px] text-zinc-500">
+              {pendingCount} requests awaiting verification {pendingVolumeUsd > 0 && `(~$${pendingVolumeUsd.toFixed(2)} USD)`}
+            </div>
           </div>
           <div className="h-12 w-12 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
             <Clock className="h-6 w-6" />
@@ -255,7 +291,7 @@ export default function PayoutsSettlementDeskPage() {
           <div>
             <div className="text-xs text-zinc-500">In Banking Dispatch (Processing)</div>
             <div className="text-2xl font-black font-mono text-blue-500 mt-1">
-              ${processingVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              {formatMoney(processingVolumeNative, 'INR')}
             </div>
             <div className="text-[11px] text-zinc-500">Approved, awaiting UTR reference confirmation</div>
           </div>
@@ -268,7 +304,7 @@ export default function PayoutsSettlementDeskPage() {
           <div>
             <div className="text-xs text-zinc-500">Settled to Bank Accounts</div>
             <div className="text-2xl font-black font-mono text-emerald-500 mt-1">
-              ${settledVolume.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              {formatMoney(settledVolumeNative, 'INR')}
             </div>
             <div className="text-[11px] text-zinc-500">Fully settled with verified bank UTRs</div>
           </div>
@@ -317,6 +353,16 @@ export default function PayoutsSettlementDeskPage() {
                   const isPaid = payout.status === 'PAID' || payout.status === 'SETTLED';
                   const isRejected = payout.status === 'REJECTED';
 
+                  const isUpi = payout.payoutMethod === 'UPI' || Boolean(payout.accountDetails?.upiId);
+                  const beneficiaryPrimary = isUpi
+                    ? 'Instant UPI'
+                    : payout.accountDetails?.bankName || payout.bankName || 'Bank Transfer';
+                  const beneficiarySecondary = isUpi
+                    ? `UPI: ${payout.accountDetails?.upiId || payout.upiId || '—'}`
+                    : payout.accountDetails?.accountNumber
+                    ? `A/C: •••• ${String(payout.accountDetails.accountNumber).slice(-4)} (${payout.accountDetails?.ifscCode || 'IFSC'})`
+                    : `A/C: •••• ${payout.accountLast4 || '8910'}`;
+
                   return (
                     <tr key={payout.id} className="hover:bg-zinc-50 dark:hover:bg-white/[0.02] transition-colors">
                       <td className="py-3.5 px-6 font-sans">
@@ -329,18 +375,18 @@ export default function PayoutsSettlementDeskPage() {
                         <div className="text-[11px] text-zinc-500">{devEmail}</div>
                       </td>
                       <td className="py-3.5 px-4 font-bold text-zinc-900 dark:text-white text-sm">
-                        {payout.currency || 'USD'} {(payout.amount || 0).toFixed(2)}
+                        {formatMoney(payout.amount, payout.currency || 'INR')}
                       </td>
                       <td className="py-3.5 px-4 font-semibold text-purple-600 dark:text-purple-400">
-                        ${walletBal.toFixed(2)}
+                        {formatMoney(walletBal, payout.app?.wallet?.currency || payout.currency || 'INR')}
                       </td>
                       <td className="py-3.5 px-4 font-sans text-zinc-700 dark:text-zinc-300">
                         <div className="flex items-center gap-1.5 font-medium">
                           <Landmark className="h-3.5 w-3.5 text-zinc-400" />
-                          <span>{payout.bankName || 'Wire Transfer'}</span>
+                          <span>{beneficiaryPrimary}</span>
                         </div>
                         <div className="text-[10px] text-zinc-500 font-mono">
-                          {payout.accountNumber || payout.upiId || `Acc: •••• ${payout.accountLast4 || '8910'}`}
+                          {beneficiarySecondary}
                         </div>
                       </td>
                       <td className="py-3.5 px-4 font-sans">
@@ -459,10 +505,18 @@ export default function PayoutsSettlementDeskPage() {
               <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.03] border border-zinc-100 dark:border-white/5 space-y-1">
                 <div className="text-zinc-500">Amount Requested</div>
                 <div className="text-2xl font-black font-mono text-zinc-900 dark:text-white">
-                  {selectedPayout.currency || 'USD'} {(selectedPayout.amount || 0).toFixed(2)}
+                  {formatMoney(selectedPayout.amount, selectedPayout.currency || 'INR')}
                 </div>
-                <div className="text-[11px] text-zinc-500">
-                  Developer: {selectedPayout.app?.user?.name || selectedPayout.developerName}
+                <div className="text-[11px] text-zinc-500 flex flex-col gap-0.5 mt-1">
+                  <div>Developer: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{selectedPayout.app?.user?.name || selectedPayout.developerName}</span> ({selectedPayout.app?.name || 'App'})</div>
+                  <div>
+                    Beneficiary:{' '}
+                    <span className="font-mono text-zinc-800 dark:text-zinc-200">
+                      {selectedPayout.payoutMethod === 'UPI' || selectedPayout.accountDetails?.upiId
+                        ? `UPI VPA: ${selectedPayout.accountDetails?.upiId || selectedPayout.upiId || '—'}`
+                        : `A/C: ${selectedPayout.accountDetails?.accountNumber || selectedPayout.accountNumber || '—'} (${selectedPayout.accountDetails?.bankName || 'Bank'})`}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -524,10 +578,18 @@ export default function PayoutsSettlementDeskPage() {
               <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.03] border border-zinc-100 dark:border-white/5 space-y-1">
                 <div className="text-zinc-500">Settlement Amount</div>
                 <div className="text-2xl font-black font-mono text-zinc-900 dark:text-white">
-                  {selectedPayout.currency || 'USD'} {(selectedPayout.amount || 0).toFixed(2)}
+                  {formatMoney(selectedPayout.amount, selectedPayout.currency || 'INR')}
                 </div>
-                <div className="text-[11px] text-zinc-500">
-                  Target Beneficiary: {selectedPayout.bankName || 'Wire Transfer'} ({selectedPayout.accountNumber || selectedPayout.upiId || '•••• ' + (selectedPayout.accountLast4 || '8910')})
+                <div className="text-[11px] text-zinc-500 flex flex-col gap-0.5 mt-1">
+                  <div>Developer: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{selectedPayout.app?.user?.name || selectedPayout.developerName}</span> ({selectedPayout.app?.name || 'App'})</div>
+                  <div>
+                    Target Beneficiary:{' '}
+                    <span className="font-mono text-zinc-800 dark:text-zinc-200">
+                      {selectedPayout.payoutMethod === 'UPI' || selectedPayout.accountDetails?.upiId
+                        ? `UPI VPA: ${selectedPayout.accountDetails?.upiId || selectedPayout.upiId || '—'}`
+                        : `${selectedPayout.accountDetails?.bankName || 'Bank Transfer'} (A/C: ${selectedPayout.accountDetails?.accountNumber || selectedPayout.accountNumber || '—'})`}
+                    </span>
+                  </div>
                 </div>
               </div>
 

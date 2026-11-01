@@ -9,7 +9,7 @@ const router = express.Router();
 export let platformSecurityConfig = {
   enforce2FA: true,
   standardFeePercent: 2.0,
-  ipWhitelist: '27.34.70.69, 127.0.0.1, ::1',
+  ipWhitelist: process.env.ADMIN_IP_WHITELIST || '*',
   autoLockOnFailedLogins: true,
 };
 
@@ -30,9 +30,13 @@ export const pendingDeletions = new Set<string>();
 
 /**
  * Sovereign IP Whitelist Enforcement Middleware
- * Ensures administrative operations are restricted to authorized IPs (including 27.34.70.69).
+ * Ensures administrative operations are restricted to authorized IPs or wildcard (*).
  */
 router.use((req: Request, res: Response, next) => {
+  if (req.method === 'OPTIONS') {
+    return next();
+  }
+
   const rawIp =
     (req.headers['cf-connecting-ip'] as string) ||
     ((req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()) ||
@@ -42,15 +46,15 @@ router.use((req: Request, res: Response, next) => {
 
   const cleanIp = rawIp.replace(/^::ffff:/, '').trim();
 
-  const allowedIps = platformSecurityConfig.ipWhitelist
+  const allowedIps = (platformSecurityConfig.ipWhitelist || '*')
     .split(',')
     .map((ip) => ip.trim())
     .filter(Boolean);
 
   const isAllowed =
     process.env.NODE_ENV !== 'production' ||
-    allowedIps.includes(cleanIp) ||
     allowedIps.includes('*') ||
+    allowedIps.includes(cleanIp) ||
     cleanIp === '127.0.0.1' ||
     cleanIp === '::1' ||
     cleanIp === 'localhost' ||
@@ -1556,47 +1560,36 @@ router.patch('/payouts/:id/settle', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Payout is already settled' });
     }
 
-    // Debit App Wallet if balance allows
-    if (payout.app?.wallet) {
-      const currentBalance = payout.app.wallet.balance;
-      const newBalance = Math.max(0, currentBalance - payout.amount);
-
-      await corePrisma.$transaction([
-        corePrisma.wallet.update({
-          where: { id: payout.app.wallet.id },
-          data: { balance: newBalance },
-        }),
-        corePrisma.ledgerEntry.create({
-          data: {
-            walletId: payout.app.wallet.id,
-            amount: -payout.amount,
-            balanceAfter: newBalance,
-            type: 'PAYOUT',
-            referenceId: transactionRef,
-            description: `Settlement payout approved & transferred. UTR: ${transactionRef}`,
-          },
-        }),
-        corePrisma.payoutRequest.update({
-          where: { id: payout.id },
-          data: {
-            status: 'PAID',
-            transactionRef,
-            adminNote: adminNote || `Settled via bank transfer. Ref: ${transactionRef}`,
-            processedAt: new Date(),
-          },
-        }),
-      ]);
-    } else {
-      await corePrisma.payoutRequest.update({
+    // Mark payout as PAID and record settlement in ledger
+    await corePrisma.$transaction(async (tx) => {
+      await tx.payoutRequest.update({
         where: { id: payout.id },
         data: {
           status: 'PAID',
           transactionRef,
-          adminNote: adminNote || `Settled. Ref: ${transactionRef}`,
+          adminNote: adminNote || `Settled via bank transfer. Ref: ${transactionRef}`,
           processedAt: new Date(),
         },
       });
-    }
+
+      if (payout.app?.wallet) {
+        await tx.ledgerEntry.create({
+          data: {
+            walletId: payout.app.wallet.id,
+            amount: 0,
+            balanceAfter: payout.app.wallet.balance,
+            type: 'PAYOUT',
+            referenceId: transactionRef,
+            description: `Settlement payout #${payout.id.slice(0, 8)} disbursed. Bank UTR / Tx ID: ${transactionRef}`,
+            metadata: {
+              payoutId: payout.id,
+              transactionRef,
+              adminNote,
+            },
+          },
+        });
+      }
+    });
 
     await recordAuditLog(
       'admin@180core.cloud',
@@ -1635,7 +1628,7 @@ router.patch('/payouts/:id/approve', async (req: Request, res: Response) => {
     const updated = await corePrisma.payoutRequest.update({
       where: { id: req.params.id },
       data: {
-        status: 'APPROVED',
+        status: 'PROCESSING',
         adminNote: adminNote || 'Approved by administrator',
       },
     });
@@ -1645,13 +1638,13 @@ router.patch('/payouts/:id/approve', async (req: Request, res: Response) => {
       'APPROVE_PAYOUT',
       'PAYOUT',
       updated.id,
-      { status: 'APPROVED', adminNote },
+      { status: 'PROCESSING', adminNote },
       req.ip
     );
 
     return res.status(200).json({
       success: true,
-      message: 'Payout request marked as APPROVED',
+      message: 'Payout request marked as APPROVED / PROCESSING',
       payout: updated,
     });
   } catch (err: any) {
@@ -1662,7 +1655,7 @@ router.patch('/payouts/:id/approve', async (req: Request, res: Response) => {
 
 /**
  * PATCH /api/v1/admin/payouts/:id/reject
- * Reject payout request with admin reason
+ * Reject payout request with admin reason and refund developer wallet balance
  */
 router.patch('/payouts/:id/reject', async (req: Request, res: Response) => {
   try {
@@ -1675,28 +1668,71 @@ router.patch('/payouts/:id/reject', async (req: Request, res: Response) => {
       });
     }
 
-    const updated = await corePrisma.payoutRequest.update({
+    const payout = await corePrisma.payoutRequest.findUnique({
       where: { id: req.params.id },
-      data: {
-        status: 'REJECTED',
-        adminNote,
-        processedAt: new Date(),
+      include: {
+        app: { include: { wallet: true } },
       },
+    });
+
+    if (!payout) {
+      return res.status(404).json({ success: false, error: 'Payout request not found' });
+    }
+
+    if (payout.status === 'PAID') {
+      return res.status(400).json({ success: false, error: 'Cannot reject an already settled payout' });
+    }
+
+    if (payout.status === 'REJECTED') {
+      return res.status(400).json({ success: false, error: 'Payout is already rejected' });
+    }
+
+    await corePrisma.$transaction(async (tx) => {
+      await tx.payoutRequest.update({
+        where: { id: payout.id },
+        data: {
+          status: 'REJECTED',
+          adminNote,
+          processedAt: new Date(),
+        },
+      });
+
+      if (payout.app?.wallet) {
+        const refundedBalance = Math.round(((payout.app.wallet.balance || 0) + payout.amount) * 100) / 100;
+        await tx.wallet.update({
+          where: { id: payout.app.wallet.id },
+          data: { balance: refundedBalance },
+        });
+
+        await tx.ledgerEntry.create({
+          data: {
+            walletId: payout.app.wallet.id,
+            amount: payout.amount,
+            balanceAfter: refundedBalance,
+            type: 'REFUND',
+            referenceId: payout.id,
+            description: `Payout #${payout.id.slice(0, 8)} rejected: ${adminNote}. Balance refunded.`,
+            metadata: {
+              payoutId: payout.id,
+              adminNote,
+            },
+          },
+        });
+      }
     });
 
     await recordAuditLog(
       'admin@180core.cloud',
       'REJECT_PAYOUT',
       'PAYOUT',
-      updated.id,
-      { reason: adminNote },
+      payout.id,
+      { status: 'REJECTED', adminNote, amount: payout.amount },
       req.ip
     );
 
     return res.status(200).json({
       success: true,
-      message: 'Payout request marked as rejected',
-      payout: updated,
+      message: 'Payout request marked as REJECTED and developer wallet balance refunded',
     });
   } catch (err: any) {
     console.error('[AdminRoutes:rejectPayout] Error:', err);
