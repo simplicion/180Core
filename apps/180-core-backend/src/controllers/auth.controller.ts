@@ -20,6 +20,7 @@ export class AuthApiController {
   static getAppPublicConfig = DomainOAuthController.getAppPublicConfig;
   static submitConsent = DomainOAuthController.submitConsent;
   static exchangeToken = DomainOAuthController.exchangeToken;
+  static refreshToken = DomainOAuthController.refreshToken;
   static getUserInfo = DomainOAuthController.getUserInfo;
   static verifyToken = DomainOAuthController.verifyToken;
   static revokeToken = DomainOAuthController.revokeToken;

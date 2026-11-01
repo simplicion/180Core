@@ -188,12 +188,20 @@ export async function dispatchOAuthSuccess(
   } : userData;
 
   const effectiveToken = authToken || idToken;
+  const storedRefreshToken =
+    (typeof window !== 'undefined'
+      ? localStorage.getItem('platform_refresh_token') ||
+        localStorage.getItem('refresh_token') ||
+        localStorage.getItem('180_refresh_token')
+      : null) || null;
 
   const payload = {
     type: '180_IDENTITY_SUCCESS',
     code: authCode,
     token: effectiveToken,
     accessToken: effectiveToken,
+    refreshToken: storedRefreshToken,
+    refresh_token: storedRefreshToken,
     authToken: authToken || '',
     id_token: idToken || null,
     state: params.state,

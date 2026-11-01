@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { SubscriptionService, RecurringBillingEngine, RazorpaySubscriptionService } from '@workspace/payment-provider';
 import { developersPrisma as prisma } from '@workspace/db-180core';
 import crypto from 'crypto';
+import { getActiveCreatorAccessStatus, stackCreatorPass } from '../middleware/subscription.middleware';
 
 const JWT_SECRET = process.env.JWT_SECRET || process.env.JWT_ACCESS_SECRET || '';
 
@@ -506,6 +507,62 @@ export class SubscriptionApiController {
         valid: false,
         error: err.message || 'Verification process failed',
       });
+    }
+  }
+
+  /**
+   * GET /api/v1/subscriptions/status
+   * Retrieves active creator pass & subscription status
+   */
+  static async getCreatorStatus(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user?.id || extractUserIdFromRequest(req);
+      if (!userId) {
+        return res.status(401).json({ success: false, error: 'Authentication required' });
+      }
+
+      const appId = (req.query?.appId as string) || undefined;
+      const status = await getActiveCreatorAccessStatus(userId, appId);
+
+      return res.json({
+        success: true,
+        data: status,
+      });
+    } catch (err: any) {
+      console.error('[SubscriptionApiController:getCreatorStatus] Error:', err);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
+  /**
+   * POST /api/v1/subscriptions/daily-pass/stack
+   * Stacks 24h Daily Pass or 30-day Monthly Subscription access hours
+   */
+  static async stackPass(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user?.id || extractUserIdFromRequest(req);
+      if (!userId) {
+        return res.status(401).json({ success: false, error: 'Authentication required' });
+      }
+
+      const { days, planType, appId } = req.body;
+      const numDays = Math.max(1, Number(days) || 1);
+
+      const result = await stackCreatorPass(
+        userId,
+        numDays,
+        planType === 'MONTHLY' ? 'MONTHLY' : 'DAILY_PASS',
+        appId
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: `Successfully stacked ${result.daysAdded} days of creator access!`,
+        data: result,
+      });
+    } catch (err: any) {
+      console.error('[SubscriptionApiController:stackPass] Error:', err);
+      return res.status(500).json({ success: false, error: err.message });
     }
   }
 }

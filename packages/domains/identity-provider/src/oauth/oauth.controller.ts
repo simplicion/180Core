@@ -774,13 +774,28 @@ export class OAuthController {
      */
     static async exchangeToken(req: any, res: any) {
         try {
-            const grant_type = req.body?.grant_type || req.body?.grantType || 'authorization_code';
+            const pathStr = String(req.path || req.originalUrl || req.url || '');
+            const rawRefreshToken =
+                req.body?.refresh_token ||
+                req.body?.refreshToken ||
+                req.query?.refresh_token ||
+                req.query?.refreshToken ||
+                (req.headers?.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
+
+            let grant_type = req.body?.grant_type || req.body?.grantType;
+            if (!grant_type) {
+                if (pathStr.includes('/refresh') || (rawRefreshToken && !req.body?.code)) {
+                    grant_type = 'refresh_token';
+                } else {
+                    grant_type = 'authorization_code';
+                }
+            }
             const code = req.body?.code;
             const redirect_uri = req.body?.redirect_uri || req.body?.redirectUri;
             const client_id = req.body?.client_id || req.body?.clientId;
             const client_secret = req.body?.client_secret || req.body?.clientSecret;
             const code_verifier = req.body?.code_verifier || req.body?.codeVerifier;
-            const refresh_token = req.body?.refresh_token || req.body?.refreshToken;
+            const refresh_token = rawRefreshToken;
 
             // Handle Authorization Code Grant
             if (grant_type === 'authorization_code') {
@@ -896,13 +911,20 @@ export class OAuthController {
                     data: { usedAt: new Date() }
                 });
 
+                // Detect Native Mobile / PKCE Client or Offline Access request
+                const isNativeOrMobile =
+                    Boolean(authCode.codeChallenge) ||
+                    (authCode.redirectUri && !authCode.redirectUri.startsWith('http://') && !authCode.redirectUri.startsWith('https://')) ||
+                    (Array.isArray(authCode.scopes) && authCode.scopes.includes('offline_access'));
+
                 // Issue Access Token & Refresh Token
                 const accessToken = generateRandomToken('180_acc', 32);
                 const newRefreshToken = generateRandomToken('180_ref', 32);
                 const appSettings = (authCode.app as any)?.bankDetails as any;
+                const defaultAccessLifetime = isNativeOrMobile ? 3600 : 900;
                 const accessLifetime = (appSettings?.accessTokenTtl && Number(appSettings.accessTokenTtl) > 0)
                     ? Number(appSettings.accessTokenTtl)
-                    : 900; // 15 minutes standard (RFC 6749 compliant)
+                    : defaultAccessLifetime;
                 const expiresAt = new Date(Date.now() + accessLifetime * 1000);
 
                 await prisma.oAuthToken.create({
@@ -953,7 +975,7 @@ export class OAuthController {
                     }
                 } catch (_) {}
 
-                const idToken = signIdToken({ ...authCode.user, appScopedUsername }, authCode.app.clientId);
+                const idToken = signIdToken({ ...authCode.user, appScopedUsername }, authCode.app.clientId, null, accessLifetime);
 
                 return res.json({
                     access_token: accessToken,
@@ -968,7 +990,7 @@ export class OAuthController {
             // Handle Refresh Token Grant
             if (grant_type === 'refresh_token') {
                 if (!refresh_token) {
-                    return res.status(400).json({ error: 'invalid_request', error_description: 'Missing refresh_token' });
+                    return res.status(400).json({ error: 'invalid_request', error_description: 'Missing refresh_token parameter' });
                 }
 
                 const existingToken = await prisma.oAuthToken.findUnique({
@@ -996,11 +1018,17 @@ export class OAuthController {
                     }
                 } catch (_) {}
 
-                // Enforce 7-Day (or configured) Refresh Token Lifecycle
+                // Enforce 30-Day for Native/Mobile or configured Refresh Token Lifecycle
                 const appSettings = (existingToken.app as any)?.bankDetails as any;
+                const isNativeOrMobile =
+                    (Array.isArray(existingToken.app?.redirectUris) &&
+                        existingToken.app.redirectUris.some((u: string) => !u.startsWith('http://') && !u.startsWith('https://'))) ||
+                    (Array.isArray(existingToken.scopes) && existingToken.scopes.includes('offline_access'));
+
+                const defaultRefreshDays = isNativeOrMobile ? 30 : 7;
                 const refreshLifetimeDays = (appSettings?.refreshTokenDays && Number(appSettings.refreshTokenDays) > 0)
                     ? Number(appSettings.refreshTokenDays)
-                    : 7; // 7 days standard cycle
+                    : defaultRefreshDays;
                 const maxRefreshAgeMs = refreshLifetimeDays * 24 * 3600 * 1000;
 
                 if (Date.now() - new Date(existingToken.createdAt).getTime() > maxRefreshAgeMs) {
@@ -1013,9 +1041,10 @@ export class OAuthController {
                 // Rotate refresh token
                 const newAccessToken = generateRandomToken('180_acc', 32);
                 const rotatedRefreshToken = generateRandomToken('180_ref', 32);
+                const defaultAccessLifetime = isNativeOrMobile ? 3600 : 900;
                 const accessLifetime = (appSettings?.accessTokenTtl && Number(appSettings.accessTokenTtl) > 0)
                     ? Number(appSettings.accessTokenTtl)
-                    : 900; // 15 minutes standard
+                    : defaultAccessLifetime;
                 const expiresAt = new Date(Date.now() + accessLifetime * 1000);
 
                 await prisma.oAuthToken.update({
@@ -1028,7 +1057,7 @@ export class OAuthController {
                     }
                 });
 
-                const idToken = signIdToken(existingToken.user, existingToken.app.clientId);
+                const idToken = signIdToken(existingToken.user, existingToken.app.clientId, null, accessLifetime);
 
                 return res.json({
                     access_token: newAccessToken,
@@ -1045,6 +1074,16 @@ export class OAuthController {
             console.error('[OAuthController] exchangeToken error:', err);
             return res.status(500).json({ error: 'server_error', error_description: err.message });
         }
+    }
+
+    /**
+     * Dedicated Token Refresh Endpoint (OAuth 2.0 / RFC 6749)
+     * POST /api/v1/auth/refresh
+     */
+    static async refreshToken(req: any, res: any) {
+        if (!req.body) req.body = {};
+        req.body.grant_type = 'refresh_token';
+        return OAuthController.exchangeToken(req, res);
     }
 
     /**

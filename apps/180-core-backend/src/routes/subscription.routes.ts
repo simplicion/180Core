@@ -7,6 +7,8 @@ const router = express.Router();
 
 router.post('/plans', SubscriptionApiController.createPlan);
 router.get('/plans', SubscriptionApiController.listPlans);
+router.get('/status', SubscriptionApiController.getCreatorStatus);
+router.post('/daily-pass/stack', SubscriptionApiController.stackPass);
 router.post('/sessions', SubscriptionApiController.createSubscriptionSession);
 router.get('/entitlements', SubscriptionApiController.getUserEntitlements);
 router.post('/verify-token', SubscriptionApiController.verifyEntitlementToken);

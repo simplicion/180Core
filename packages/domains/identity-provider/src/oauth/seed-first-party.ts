@@ -98,6 +98,7 @@ export function getFirstPartyAppsConfig() {
             allowedOrigins: getPlatformAllowedOrigins(),
             allowedScopes: [
                 'openid',
+                'offline_access',
                 'identity:read',
                 'identity:email',
                 'identity:phone',
@@ -124,7 +125,7 @@ export function getFirstPartyAppsConfig() {
         description: 'First-party sovereign core platform',
         redirectUris: ['http://localhost:3000/auth/callback', 'http://localhost:3000/callback', 'https://profile.180core.cloud/auth/callback'],
         allowedOrigins: ['http://localhost:3000', 'https://profile.180core.cloud'],
-        allowedScopes: ['openid', 'identity:read', 'identity:email', 'identity:phone'],
+        allowedScopes: ['openid', 'offline_access', 'identity:read', 'identity:email', 'identity:phone'],
         isVerified: true,
         isActive: true,
         enableAuth: true,
@@ -142,7 +143,7 @@ export function getFirstPartyAppsConfig() {
         description: 'First-party social studio mobile client',
         redirectUris: ['180social://oauth-callback'],
         allowedOrigins: [],
-        allowedScopes: ['openid', 'identity:read'],
+        allowedScopes: ['openid', 'offline_access', 'identity:read'],
         isVerified: true,
         isActive: true,
         enableAuth: true,
@@ -243,6 +244,13 @@ export async function seedFirstPartyOAuthApps(): Promise<void> {
                     }
                 }
 
+                if (app.allowedScopes && app.allowedScopes.length > 0) {
+                    const mergedScopes = Array.from(new Set([...(existing.allowedScopes || []), ...app.allowedScopes]));
+                    if (mergedScopes.length !== (existing.allowedScopes || []).length) {
+                        updateData.allowedScopes = mergedScopes;
+                    }
+                }
+
                 if (!existing.clientSecretHash) {
                     updateData.clientSecretHash = hashSecret(knownSecret);
                     updateData.clientSecretHint = knownSecret.slice(-4);
@@ -256,6 +264,38 @@ export async function seedFirstPartyOAuthApps(): Promise<void> {
                     console.log(`[SeedFirstParty] Updated configurations for: ${existing.name} (${existing.clientId})`);
                 }
             }
+        }
+
+        // Provision/upgrade native mobile OAuth clients (e.g. 180 Social Studio) with offline_access and durable 30-day lifecycle
+        try {
+            const mobileApps = await prisma.oAuthApp.findMany({
+                where: {
+                    OR: [
+                        { clientId: '180_client_a61725d6de73908b150480da80991fc4' },
+                        { clientId: '180-social-studio-mobile' },
+                        { name: { contains: 'Social studio', mode: 'insensitive' } }
+                    ]
+                }
+            });
+            for (const mApp of mobileApps) {
+                const currentScopes = Array.isArray(mApp.allowedScopes) ? mApp.allowedScopes : [];
+                const mergedScopes = Array.from(new Set([...currentScopes, 'openid', 'offline_access', 'identity:read', 'identity:email', 'identity:phone']));
+                const existingDetails = (mApp.bankDetails as any) || {};
+                await prisma.oAuthApp.update({
+                    where: { id: mApp.id },
+                    data: {
+                        allowedScopes: mergedScopes,
+                        bankDetails: {
+                            ...existingDetails,
+                            accessTokenTtl: 3600,
+                            refreshTokenDays: 30
+                        }
+                    }
+                });
+                console.log(`[SeedFirstParty] Provisioned mobile client: ${mApp.name} (${mApp.clientId}) with offline_access & 30-day token lifecycle`);
+            }
+        } catch (e: any) {
+            console.warn('[SeedFirstParty] Note updating mobile OAuth apps:', e.message);
         }
 
         // Consolidate legacy alias duplicate app rows if any exist in DB

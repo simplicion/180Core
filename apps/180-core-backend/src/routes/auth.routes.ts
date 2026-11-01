@@ -27,6 +27,8 @@ router.post('/authorize/consent', protect, AuthApiController.submitConsent);
 
 // ─── Token Endpoints ─────────────────────────────────────────────────────────
 router.post('/token', tokenRateLimiter, AuthApiController.exchangeToken);
+router.post('/refresh', tokenRateLimiter, AuthApiController.refreshToken);
+router.get('/refresh', tokenRateLimiter, AuthApiController.refreshToken);
 router.get('/userinfo', protect, AuthApiController.getUserInfo);
 router.post('/userinfo', protect, AuthApiController.getUserInfo);
 router.get('/me', protect, (req: any, res: any) => res.json({ success: true, user: req.user }));
