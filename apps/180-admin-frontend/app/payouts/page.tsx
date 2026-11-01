@@ -33,6 +33,7 @@ export default function PayoutsSettlementDeskPage() {
 
   // Form states
   const [utrReference, setUtrReference] = useState('');
+  const [proofUrl, setProofUrl] = useState('');
   const [adminNotes, setAdminNotes] = useState('');
   const [rejectReason, setRejectReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -92,6 +93,7 @@ export default function PayoutsSettlementDeskPage() {
       const res = await adminApi.settlePayout(selectedPayout.id, {
         utrReference: utrReference.trim(),
         adminNotes: adminNotes.trim(),
+        proofUrl: proofUrl.trim(),
       });
       if (res.success) {
         toast.success(`Settlement of ${selectedPayout.currency || 'USD'} ${selectedPayout.amount} marked as PAID!`);
@@ -129,6 +131,7 @@ export default function PayoutsSettlementDeskPage() {
     setSelectedPayout(null);
     setActionType(null);
     setUtrReference('');
+    setProofUrl('');
     setAdminNotes('');
     setRejectReason('');
   };
@@ -462,8 +465,28 @@ export default function PayoutsSettlementDeskPage() {
                             </button>
                           </div>
                         ) : isPaid ? (
-                          <div className="text-[11px] text-zinc-500 font-mono text-right">
-                            UTR: <span className="text-emerald-500 font-bold">{payout.transactionRef || payout.utrReference || 'CONFIRMED'}</span>
+                          <div className="text-[11px] text-zinc-500 font-mono text-right space-y-0.5">
+                            <div>
+                              UTR: <span className="text-emerald-500 font-bold">{payout.transactionRef || payout.utrReference || 'CONFIRMED'}</span>
+                            </div>
+                            {(payout.accountDetails?.proofUrl || payout.proofUrl) && (
+                              <div>
+                                <a
+                                  href={payout.accountDetails?.proofUrl || payout.proofUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-[10px] text-blue-500 hover:underline font-sans"
+                                >
+                                  <ExternalLink className="h-2.5 w-2.5" />
+                                  <span>View Proof</span>
+                                </a>
+                              </div>
+                            )}
+                            {payout.accountDetails?.receivedConfirmed && (
+                              <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-sans font-semibold">
+                                ✓ Confirmed by Merchant
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div className="text-[11px] text-rose-500 text-right truncate max-w-[140px]">
@@ -604,6 +627,19 @@ export default function PayoutsSettlementDeskPage() {
                   onChange={(e) => setUtrReference(e.target.value)}
                   className="w-full px-4 py-2.5 rounded-xl font-mono text-xs bg-zinc-50 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                   required
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                  Transfer Proof / Receipt Reference (URL or Document Reference)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. https://storage.180core.cloud/receipts/... or REC_99182"
+                  value={proofUrl}
+                  onChange={(e) => setProofUrl(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl text-xs bg-zinc-50 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                 />
               </div>
 

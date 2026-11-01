@@ -282,4 +282,39 @@ export class PayoutService {
 
     return { success: true, payout: updated };
   }
+
+  /**
+   * Developer confirms they received the settled payout funds
+   */
+  static async confirmPayoutReceipt(appId: string, userId: string, payoutId: string) {
+    const app = await prisma.oAuthApp.findFirst({
+      where: { id: appId, userId },
+    });
+    if (!app) {
+      throw new Error('OAuth Application not found or access unauthorized');
+    }
+
+    const payout = await prisma.payoutRequest.findFirst({
+      where: { id: payoutId, appId },
+    });
+    if (!payout) {
+      throw new Error('Payout request not found');
+    }
+
+    const currentDetails = (payout.accountDetails as any) || {};
+    const updatedDetails = {
+      ...currentDetails,
+      receivedConfirmed: true,
+      receivedConfirmedAt: new Date().toISOString(),
+    };
+
+    const updated = await prisma.payoutRequest.update({
+      where: { id: payout.id },
+      data: {
+        accountDetails: updatedDetails,
+      },
+    });
+
+    return { success: true, payout: updated };
+  }
 }

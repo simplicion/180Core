@@ -1285,6 +1285,32 @@ export class DeveloperApiController {
   }
 
   /**
+   * POST /api/v1/developer/apps/:appId/payouts/:payoutId/confirm
+   * Developer confirms they received the funds
+   */
+  static async confirmPayoutReceipt(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, error: 'Authentication required' });
+      }
+
+      const rawAppId = String(req.params.appId);
+      const payoutId = String(req.params.payoutId);
+      const app = await resolveApp(rawAppId, userId);
+      if (!app) {
+        return res.status(404).json({ success: false, error: 'OAuth Application not found' });
+      }
+
+      const result = await PayoutService.confirmPayoutReceipt(app.id, userId, payoutId);
+      return res.json({ success: true, message: 'Receipt confirmed successfully', ...result });
+    } catch (err: any) {
+      console.error('[DeveloperApiController:confirmPayoutReceipt] Error:', err);
+      return res.status(400).json({ success: false, error: err.message });
+    }
+  }
+
+  /**
    * GET /api/v1/developer/admin/payouts
    * Admin: List all vendor payout withdrawal requests across all developers
    */

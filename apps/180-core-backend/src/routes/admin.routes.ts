@@ -1536,7 +1536,7 @@ router.get('/payouts', async (req: Request, res: Response) => {
  */
 router.patch('/payouts/:id/settle', async (req: Request, res: Response) => {
   try {
-    const { transactionRef, adminNote } = req.body;
+    const { transactionRef, adminNote, proofUrl } = req.body;
 
     if (!transactionRef) {
       return res.status(400).json({
@@ -1560,7 +1560,14 @@ router.patch('/payouts/:id/settle', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Payout is already settled' });
     }
 
-    // Mark payout as PAID and record settlement in ledger
+    const existingDetails = (payout.accountDetails as any) || {};
+    const updatedDetails = {
+      ...existingDetails,
+      proofUrl: proofUrl || existingDetails.proofUrl || '',
+      settledAt: new Date().toISOString(),
+    };
+
+    // Mark payout as PAID, record proof reference, and record settlement in ledger
     await corePrisma.$transaction(async (tx) => {
       await tx.payoutRequest.update({
         where: { id: payout.id },
@@ -1568,6 +1575,7 @@ router.patch('/payouts/:id/settle', async (req: Request, res: Response) => {
           status: 'PAID',
           transactionRef,
           adminNote: adminNote || `Settled via bank transfer. Ref: ${transactionRef}`,
+          accountDetails: updatedDetails,
           processedAt: new Date(),
         },
       });
@@ -1585,6 +1593,7 @@ router.patch('/payouts/:id/settle', async (req: Request, res: Response) => {
               payoutId: payout.id,
               transactionRef,
               adminNote,
+              proofUrl: proofUrl || '',
             },
           },
         });
@@ -1596,7 +1605,7 @@ router.patch('/payouts/:id/settle', async (req: Request, res: Response) => {
       'SETTLE_PAYOUT',
       'PAYOUT',
       payout.id,
-      { amount: payout.amount, transactionRef },
+      { amount: payout.amount, transactionRef, proofUrl },
       req.ip
     );
 

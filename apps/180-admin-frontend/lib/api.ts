@@ -110,12 +110,13 @@ export const adminApi = {
     return fetchJson<any>(`${ADMIN_API_URL}/payouts?${query.toString()}`);
   },
 
-  settlePayout: async (payoutId: string, data: { transactionRef?: string; utrReference?: string; adminNotes?: string; adminNote?: string }) => {
+  settlePayout: async (payoutId: string, data: { transactionRef?: string; utrReference?: string; adminNotes?: string; adminNote?: string; proofUrl?: string }) => {
     return fetchJson<any>(`${ADMIN_API_URL}/payouts/${payoutId}/settle`, {
       method: 'PATCH',
       body: JSON.stringify({
         transactionRef: data.transactionRef || data.utrReference,
         adminNote: data.adminNote || data.adminNotes,
+        proofUrl: data.proofUrl,
       }),
     });
   },

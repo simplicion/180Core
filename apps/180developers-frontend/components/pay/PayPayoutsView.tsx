@@ -26,6 +26,9 @@ import {
   Coins,
   ArrowDownCircle,
   ArrowUpCircle,
+  LifeBuoy,
+  AlertTriangle,
+  ExternalLink,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useProject } from '@/context/ProjectContext';
@@ -36,6 +39,7 @@ import { BankDetailsDrawer } from './BankDetailsDrawer';
 export function PayPayoutsView() {
   const {
     projectId,
+    userProfile,
     payoutBalance,
     totalWithdrawn,
     payoutHistory,
@@ -62,6 +66,18 @@ export function PayPayoutsView() {
   const [activeTab, setActiveTab] = useState<'ledger' | 'payouts'>('ledger');
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Dispute ticket modal state
+  const [showDisputeModal, setShowDisputeModal] = useState(false);
+  const [disputePayout, setDisputePayout] = useState<any | null>(null);
+  const [disputeDescription, setDisputeDescription] = useState('');
+  const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
+
+  // Confirm receipt state
+  const [confirmingPayoutId, setConfirmingPayoutId] = useState<string | null>(null);
+
+  // Dismissed notification banner IDs
+  const [dismissedNotificationIds, setDismissedNotificationIds] = useState<string[]>([]);
 
   useEffect(() => {
     fetchPayoutHistory(true);
@@ -254,6 +270,132 @@ export function PayPayoutsView() {
       setIsSubmitting(false);
     }
   };
+
+  // Developer confirms receipt of settled funds
+  const handleConfirmReceipt = async (payoutId: string) => {
+    try {
+      setConfirmingPayoutId(payoutId);
+      const token =
+        getStoredAuthToken() ||
+        (typeof window !== 'undefined' ? localStorage.getItem('platform_auth_token') : null);
+
+      const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+      const apiBase = isLocal
+        ? 'http://localhost:4003'
+        : process.env.NEXT_PUBLIC_CORE_BACKEND_URL || 'https://api.180core.cloud';
+
+      const res = await fetch(`${apiBase}/api/v1/identity/developer/apps/${projectId}/payouts/${payoutId}/confirm`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to confirm payout receipt');
+      }
+
+      toast.success('Payout receipt confirmed! Thank you.');
+      fetchPayoutHistory(true);
+    } catch (err: any) {
+      toast.error(err.message || 'Error confirming receipt');
+    } finally {
+      setConfirmingPayoutId(null);
+    }
+  };
+
+  // Open the dispute support ticket modal
+  const handleOpenDispute = (payout: any) => {
+    setDisputePayout(payout);
+    const dest =
+      payout.accountDetails?.upiId ||
+      (payout.accountDetails?.accountNumber
+        ? `A/C ending ${payout.accountDetails.accountNumber.slice(-4)} (${payout.accountDetails.bankName || 'Bank'})`
+        : payout.destination || 'Bank/UPI');
+
+    setDisputeDescription(
+      `Hello 180 Core Support,\n\nI have not received the payout settlement of ₹${Number(payout.amount).toFixed(
+        2
+      )} for Payout Request #${payout.id}.\n\n` +
+        `Recorded Bank UTR / Tx ID: ${payout.transactionRef || 'N/A'}\n` +
+        `Disbursement Method: ${payout.payoutMethod || 'UPI'}\n` +
+        `Target Beneficiary: ${dest}\n` +
+        `Settlement Date: ${new Date(payout.processedAt || payout.updatedAt || Date.now()).toLocaleString()}\n\n` +
+        `I checked my bank/UPI statement and the amount has not credited. Please investigate this settlement with the corporate treasury bank.`
+    );
+    setShowDisputeModal(true);
+  };
+
+  // Submit dispute support ticket
+  const handleSubmitDispute = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!disputePayout || !disputeDescription.trim()) {
+      toast.error('Please provide a description of the issue');
+      return;
+    }
+
+    try {
+      setIsSubmittingDispute(true);
+      const token =
+        getStoredAuthToken() ||
+        (typeof window !== 'undefined' ? localStorage.getItem('platform_auth_token') : null);
+
+      const isLocal = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+      const apiBase = isLocal
+        ? 'http://localhost:4003'
+        : process.env.NEXT_PUBLIC_CORE_BACKEND_URL || 'https://api.180core.cloud';
+
+      const res = await fetch(`${apiBase}/api/v1/support/tickets`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          title: `Dispute: Settlement of ₹${Number(disputePayout.amount).toFixed(2)} not received (UTR: ${
+            disputePayout.transactionRef || disputePayout.id.slice(0, 8)
+          })`,
+          description: disputeDescription.trim(),
+          category: 'SETTLEMENT_QUERY',
+          priority: 'HIGH',
+          appId: projectId,
+          pageUrl: typeof window !== 'undefined' ? window.location.href : '',
+          userId: userProfile?.id || null,
+          userName: userProfile?.name || null,
+          userEmail: userProfile?.email || null,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to submit dispute ticket');
+      }
+
+      toast.success(
+        `Support ticket #${data.ticket?.ticketNumber || ''} created! Our compliance and banking desk has been notified.`,
+        { duration: 6000 }
+      );
+      setShowDisputeModal(false);
+      setDisputePayout(null);
+      setDisputeDescription('');
+    } catch (err: any) {
+      toast.error(err.message || 'Error submitting dispute ticket');
+    } finally {
+      setIsSubmittingDispute(false);
+    }
+  };
+
+  // Find latest settled payout for top notification banner
+  const latestSettledPayout = useMemo(() => {
+    if (!Array.isArray(payoutHistory)) return null;
+    return payoutHistory.find(
+      (p: any) =>
+        (p.status === 'PAID' || p.status === 'COMPLETED') &&
+        !dismissedNotificationIds.includes(p.id)
+    );
+  }, [payoutHistory, dismissedNotificationIds]);
 
   const getLedgerTypeInfo = (type: string, amount: number) => {
     switch (type) {
@@ -493,7 +635,221 @@ export function PayPayoutsView() {
         </div>
       )}
 
-      {/* 2. Balance & Treasury Financial Ledger */}
+      {/* 2. Settlement Dispute Ticket Modal */}
+      {showDisputeModal && disputePayout && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <form
+            onSubmit={handleSubmitDispute}
+            className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-white/10 rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-200 dark:border-white/10">
+              <span className="font-bold text-sm text-zinc-950 dark:text-white flex items-center gap-2">
+                <LifeBuoy className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                <span>Raise Settlement Dispute Ticket</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDisputeModal(false);
+                  setDisputePayout(null);
+                }}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Payout Details Card */}
+            <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/5 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-500">Disputed Settlement Amount:</span>
+                <span className="font-mono font-bold text-sm text-zinc-900 dark:text-white">
+                  ₹{Number(disputePayout.amount).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-500">Payout ID:</span>
+                <span className="font-mono text-[11px] text-zinc-700 dark:text-zinc-300">
+                  #{disputePayout.id.slice(0, 16)}...
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-500">Recorded Bank UTR:</span>
+                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-[11px]">
+                  {disputePayout.transactionRef || 'N/A'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-500">Disbursement Method:</span>
+                <span className="font-medium text-zinc-800 dark:text-zinc-200">
+                  {disputePayout.payoutMethod || 'UPI'} (
+                  {disputePayout.accountDetails?.upiId ||
+                    disputePayout.accountDetails?.accountNumber ||
+                    'Account'}
+                  )
+                </span>
+              </div>
+              {disputePayout.accountDetails?.proofUrl && (
+                <div className="flex items-center justify-between">
+                  <span className="text-zinc-500">Transfer Proof:</span>
+                  <a
+                    href={disputePayout.accountDetails.proofUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-500 hover:underline inline-flex items-center gap-1 font-sans text-[11px]"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    <span>View Proof Link</span>
+                  </a>
+                </div>
+              )}
+            </div>
+
+            {/* Description Textarea */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center justify-between">
+                <span>Dispute Details / Issue Description</span>
+                <span className="text-[10px] text-zinc-400 font-normal">Sent directly to Banking Desk</span>
+              </label>
+              <textarea
+                required
+                rows={5}
+                value={disputeDescription}
+                onChange={(e) => setDisputeDescription(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs font-mono text-zinc-900 dark:text-white focus:outline-none focus:border-rose-500"
+                placeholder="Explain the issue (e.g. amount not credited, UTR not recognized by bank)..."
+              />
+            </div>
+
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-700 dark:text-amber-400 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                Our banking operations and compliance desk will cross-verify this UTR with the sponsor bank. You will receive real-time updates on this ticket.
+              </span>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDisputeModal(false);
+                  setDisputePayout(null);
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-500 hover:text-zinc-900 dark:hover:text-white cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmittingDispute}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isSubmittingDispute ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <LifeBuoy className="w-3.5 h-3.5" />
+                )}
+                <span>Submit Dispute Ticket</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* 3. Real-time Settlement Disbursed Notification Banner */}
+      {latestSettledPayout && (
+        <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-transparent border border-emerald-500/20 flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in-50 slide-in-from-top-2">
+          <div className="flex items-start gap-3.5">
+            <div className="p-2.5 rounded-2xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 shrink-0">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-sm text-zinc-950 dark:text-white">
+                  Settlement Disbursed: ₹{Number(latestSettledPayout.amount).toFixed(2)}
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                  PAID
+                </span>
+                {latestSettledPayout.accountDetails?.receivedConfirmed && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center gap-1">
+                    <Check className="w-2.5 h-2.5" />
+                    <span>Confirmed by You</span>
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
+                Bank UTR / Tx ID: <span className="font-mono font-bold text-zinc-900 dark:text-white">{latestSettledPayout.transactionRef || 'CONFIRMED'}</span>
+                {' · '}Disbursed to {latestSettledPayout.payoutMethod || 'UPI'} on{' '}
+                {new Date(latestSettledPayout.processedAt || latestSettledPayout.updatedAt || Date.now()).toLocaleDateString()}
+              </p>
+              {latestSettledPayout.adminNote && (
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 italic">
+                  Note from Treasury: &ldquo;{latestSettledPayout.adminNote}&rdquo;
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap self-start md:self-center shrink-0">
+            {latestSettledPayout.accountDetails?.proofUrl && (
+              <a
+                href={latestSettledPayout.accountDetails.proofUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-1.5 transition-all shadow-xs"
+              >
+                <ExternalLink className="w-3.5 h-3.5 text-blue-500" />
+                <span>View Proof</span>
+              </a>
+            )}
+
+            {latestSettledPayout.accountDetails?.receivedConfirmed ? (
+              <div className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                <Check className="w-3.5 h-3.5" />
+                <span>Funds Received</span>
+              </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled={confirmingPayoutId === latestSettledPayout.id}
+                  onClick={() => handleConfirmReceipt(latestSettledPayout.id)}
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {confirmingPayoutId === latestSettledPayout.id ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5" />
+                  )}
+                  <span>I Received This</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenDispute(latestSettledPayout)}
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <LifeBuoy className="w-3.5 h-3.5" />
+                  <span>Not Received? Raise Ticket</span>
+                </button>
+              </>
+            )}
+
+            <button
+              type="button"
+              onClick={() =>
+                setDismissedNotificationIds((prev) => [...prev, latestSettledPayout.id])
+              }
+              className="p-1.5 rounded-xl text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+              title="Dismiss notification"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Balance & Treasury Financial Ledger */}
       <div className="rounded-3xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950 p-6 sm:p-8 space-y-6 shadow-sm dark:shadow-2xl">
         {/* Top Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-200 dark:border-white/10">
@@ -970,8 +1326,8 @@ export function PayPayoutsView() {
                         <th className="px-4 py-3">Amount</th>
                         <th className="px-4 py-3">Method &amp; Destination</th>
                         <th className="px-4 py-3">Status</th>
-                        <th className="px-4 py-3">Bank UTR / Ref</th>
-                        <th className="px-4 py-3">Requested At</th>
+                        <th className="px-4 py-3">Bank UTR / Proof</th>
+                        <th className="px-4 py-3 text-right">Settlement Confirmation</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-200 dark:divide-white/5">
@@ -1035,11 +1391,59 @@ export function PayPayoutsView() {
                                 <span>{p.status || 'PENDING'}</span>
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-zinc-500 text-[11px]">
-                              {p.transactionRef || 'Pending Settlement'}
+                            <td className="px-4 py-3 text-zinc-500 text-[11px] font-mono">
+                              <div>{p.transactionRef || 'Pending Settlement'}</div>
+                              {p.accountDetails?.proofUrl && (
+                                <a
+                                  href={p.accountDetails.proofUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-[10px] text-blue-500 hover:underline font-sans mt-0.5"
+                                >
+                                  <ExternalLink className="w-2.5 h-2.5" />
+                                  <span>View Proof</span>
+                                </a>
+                              )}
                             </td>
-                            <td className="px-4 py-3 text-zinc-500 text-[11px]">
-                              {new Date(p.requestedAt || p.createdAt || Date.now()).toLocaleDateString()}
+                            <td className="px-4 py-3 text-right font-sans">
+                              {isPaid ? (
+                                p.accountDetails?.receivedConfirmed ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                    <Check className="w-3 h-3" />
+                                    <span>Funds Received</span>
+                                  </span>
+                                ) : (
+                                  <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                    <button
+                                      type="button"
+                                      disabled={confirmingPayoutId === p.id}
+                                      onClick={() => handleConfirmReceipt(p.id)}
+                                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                      title="Confirm you received this payout"
+                                    >
+                                      {confirmingPayoutId === p.id ? (
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                      ) : (
+                                        <Check className="w-3 h-3" />
+                                      )}
+                                      <span>Received</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenDispute(p)}
+                                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 transition-colors flex items-center gap-1 cursor-pointer"
+                                      title="Raise dispute ticket if not received"
+                                    >
+                                      <LifeBuoy className="w-3 h-3" />
+                                      <span>Not Received?</span>
+                                    </button>
+                                  </div>
+                                )
+                              ) : (
+                                <span className="text-[11px] text-zinc-400 font-mono">
+                                  {new Date(p.requestedAt || p.createdAt || Date.now()).toLocaleDateString()}
+                                </span>
+                              )}
                             </td>
                           </tr>
                         );
