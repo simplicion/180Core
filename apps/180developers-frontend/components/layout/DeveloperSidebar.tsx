@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import {
-  Layers,
   LayoutDashboard,
   CreditCard,
   Code2,
@@ -13,16 +12,10 @@ import {
   LogOut,
   X,
   ExternalLink,
-  Plus,
-  ChevronDown,
   ChevronLeft,
-  ChevronRight,
-  FolderGit2,
 } from 'lucide-react';
-import { Button } from '@workspace/ui';
 import { OneEightyCoreLogo, OneEightyCoreIcon } from '@/components/OneEightyCoreLogo';
 import { getDocsUrl, DOCS_LINKS } from '@/lib/docs-url';
-import { getAppSlug } from '@/lib/slug';
 
 export interface DeveloperSidebarProps {
   activeTab: string;
@@ -83,7 +76,6 @@ export function DeveloperSidebar({
   // Sidebar collapse & hover states (matching 180 Core platform behavior)
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [isHovered, setIsHovered] = useState(false);
-  const [isProjectsOpen, setIsProjectsOpen] = useState(true);
 
   // Initialize collapse preference from localStorage
   useEffect(() => {
@@ -113,20 +105,6 @@ export function DeveloperSidebar({
   };
 
   const isProjectsActive = activeTab === 'apps' || isInsideAppDetail;
-
-  const handleRegisterNewProject = () => {
-    if (onOpenRegisterModal) {
-      onOpenRegisterModal();
-    } else {
-      window.dispatchEvent(new CustomEvent('open-register-modal'));
-      if (isInsideAppDetail) {
-        router.push('/dashboard?tab=apps&register=true');
-      } else {
-        onTabChange('apps');
-      }
-    }
-    onMobileClose();
-  };
 
   const handleToolClick = (item: NavToolItem) => {
     if (item.isExternal && item.href) {
@@ -253,21 +231,21 @@ export function DeveloperSidebar({
             </p>
           )}
 
-          {/* Main "Dashboard" Button & Projects Sub-Dropdown Trigger */}
-          <div
-            className={`w-full flex items-center justify-between p-1.5 rounded-xl transition-all duration-200 font-semibold group min-h-[44px] ${
+          {/* Main "Dashboard" Button */}
+          <Link
+            href="/dashboard"
+            onClick={() => {
+              if (activeTab !== 'apps') onTabChange('apps');
+              onMobileClose();
+            }}
+            className={`w-full flex items-center justify-between p-2.5 rounded-xl transition-all duration-200 font-semibold group cursor-pointer min-h-[44px] ${
               isProjectsActive && pathname === '/dashboard'
                 ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 shadow-xs'
                 : 'text-zinc-700 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white hover:bg-zinc-100/80 dark:hover:bg-zinc-900 border border-transparent'
-            } ${!isExpanded ? 'justify-center p-2' : ''}`}
+            } ${!isExpanded ? 'justify-center' : ''}`}
+            title={!isExpanded ? 'Dashboard' : undefined}
           >
-            {/* Direct Dashboard Link */}
-            <Link
-              href="/dashboard"
-              onClick={onMobileClose}
-              className="flex items-center gap-2.5 min-w-0 flex-1 px-1 py-1 cursor-pointer"
-              title={!isExpanded ? 'Dashboard' : undefined}
-            >
+            <div className="flex items-center gap-2.5 min-w-0">
               <div
                 className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
                   isProjectsActive && pathname === '/dashboard'
@@ -278,136 +256,8 @@ export function DeveloperSidebar({
                 <LayoutDashboard className="w-4 h-4" />
               </div>
               {isExpanded && <span className="truncate text-left text-sm font-bold">Dashboard</span>}
-            </Link>
-
-            {isExpanded && (
-              <div className="flex items-center gap-1.5 shrink-0 pr-1">
-                {appCount > 0 && (
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      isProjectsActive && pathname === '/dashboard'
-                        ? 'bg-white/20 text-white dark:bg-black/20 dark:text-zinc-950'
-                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700'
-                    }`}
-                  >
-                    {appCount}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsProjectsOpen(!isProjectsOpen);
-                  }}
-                  className="p-1 rounded-md hover:bg-zinc-200/60 dark:hover:bg-zinc-800 transition-colors cursor-pointer text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
-                  title={isProjectsOpen ? 'Collapse Projects List' : 'Expand Projects List'}
-                  aria-label="Toggle Projects Dropdown"
-                >
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                      isProjectsOpen ? 'rotate-180' : ''
-                    }`}
-                  />
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Sub-menu: Register Project & List of Projects */}
-          {isExpanded && isProjectsOpen && (
-            <div className="space-y-1 pl-4 pr-1 pt-1 animate-in fade-in slide-in-from-top-1 duration-200">
-              {/* Option 1: Register New Project */}
-              <button
-                type="button"
-                onClick={handleRegisterNewProject}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-zinc-900 dark:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900 border border-dashed border-zinc-300 dark:border-zinc-700 transition-colors cursor-pointer min-h-[38px] group"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="w-5 h-5 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 flex items-center justify-center shrink-0">
-                    <Plus className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-200" />
-                  </div>
-                  <span className="truncate">Register New Project</span>
-                </div>
-                {canCreateMore === false && (
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25 shrink-0 ml-1">
-                    Upgrade
-                  </span>
-                )}
-              </button>
-
-              {/* Option 2: Registered Projects List */}
-              {apps && apps.length > 0 ? (
-                <div className="space-y-0.5 pt-1">
-                  {apps.map((proj) => {
-                    const appSlug = getAppSlug(proj);
-                    const isSelected =
-                      currentAppId === proj.id ||
-                      currentAppId === appSlug ||
-                      pathname === `/apps/${proj.id}` ||
-                      pathname.startsWith(`/apps/${proj.id}/`) ||
-                      pathname === `/apps/${appSlug}` ||
-                      pathname.startsWith(`/apps/${appSlug}/`);
-                    return (
-                      <Link
-                        key={proj.id}
-                        href={`/apps/${appSlug}`}
-                        onClick={onMobileClose}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all min-h-[36px] group/item ${
-                          isSelected
-                            ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 font-bold shadow-2xs'
-                            : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white hover:bg-zinc-100/60 dark:hover:bg-zinc-900/60'
-                        }`}
-                        title={proj.name}
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                              isSelected
-                                ? 'bg-white dark:bg-zinc-950'
-                                : 'bg-zinc-300 dark:bg-zinc-600 group-hover/item:bg-zinc-500'
-                            }`}
-                          />
-                          <span className="truncate">{proj.name}</span>
-                        </div>
-
-                        {/* Active Apps Under Project Badges */}
-                        <div className="flex items-center gap-1 shrink-0 ml-1.5">
-                          {proj.enableAuth && (
-                            <span
-                              className={`text-[9px] px-1.5 py-0.5 rounded font-mono border ${
-                                isSelected
-                                  ? 'bg-white/20 text-white dark:bg-black/15 dark:text-zinc-950 border-white/20 dark:border-black/20'
-                                  : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700'
-                              }`}
-                              title="180 Identity Enabled"
-                            >
-                              Auth
-                            </span>
-                          )}
-                          {proj.enablePay && (
-                            <span
-                              className={`text-[9px] px-1.5 py-0.5 rounded font-mono border ${
-                                isSelected
-                                  ? 'bg-white/20 text-white dark:bg-black/15 dark:text-zinc-950 border-white/20 dark:border-black/20'
-                                  : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700'
-                              }`}
-                              title="180 Pay Enabled"
-                            >
-                              Pay
-                            </span>
-                          )}
-                        </div>
-                      </Link>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="px-3 py-2 text-[11px] text-zinc-400 dark:text-zinc-600 italic">
-                  No registered projects yet
-                </div>
-              )}
             </div>
-          )}
+          </Link>
 
           {/* Billing & Subscriptions Navigation Link */}
           <Link
