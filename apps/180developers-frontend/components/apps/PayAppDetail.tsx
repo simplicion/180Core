@@ -28,9 +28,7 @@ import {
   MapPin,
   Tag,
   Link2,
-  Bot,
   BarChart3,
-  Layers,
 } from 'lucide-react';
 import { Button } from '@workspace/ui';
 import {
@@ -43,9 +41,6 @@ import {
 } from './types';
 import { CouponsTab } from './pay/CouponsTab';
 import { PaymentLinksTab } from './pay/PaymentLinksTab';
-import { PricingTablesTab } from './pay/PricingTablesTab';
-import { AgentEnvelopesTab } from './pay/AgentEnvelopesTab';
-import { CustomGatewayTab } from './pay/CustomGatewayTab';
 
 export interface PayAppDetailProps {
   app: DeveloperAppDetail;
@@ -123,7 +118,7 @@ export function PayAppDetail({
   onSave,
   saving,
 }: PayAppDetailProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'coupons' | 'links' | 'pricing' | 'geo' | 'agents' | 'gateway'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'coupons' | 'links'>('overview');
 
   return (
     <div className="space-y-6">
@@ -217,51 +212,6 @@ export function PayAppDetail({
         >
           <Link2 className="w-3.5 h-3.5" />
           Payment Links
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('pricing')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
-            activeTab === 'pricing'
-              ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
-              : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
-          }`}
-        >
-          <Layers className="w-3.5 h-3.5" />
-          Pricing Tables
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('agents')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
-            activeTab === 'agents'
-              ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
-              : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
-          }`}
-        >
-          <Bot className="w-3.5 h-3.5" />
-          <span>AI Agents (AP2)</span>
-          <span
-            className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
-              activeTab === 'agents'
-                ? 'bg-white/20 text-white border-white/30'
-                : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20'
-            }`}
-          >
-            Soon
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('gateway')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
-            activeTab === 'gateway'
-              ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
-              : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
-          }`}
-        >
-          <CreditCard className="w-3.5 h-3.5" />
-          Custom Gateway (BYOG)
         </button>
       </div>
 
@@ -1149,9 +1099,6 @@ export function PayAppDetail({
 
   {activeTab === 'coupons' && <CouponsTab appId={app.id} />}
   {activeTab === 'links' && <PaymentLinksTab appId={app.id} />}
-  {activeTab === 'pricing' && <PricingTablesTab appId={app.id} />}
-  {activeTab === 'agents' && <AgentEnvelopesTab appId={app.id} />}
-  {activeTab === 'gateway' && <CustomGatewayTab appId={app.id} />}
 </div>
   );
 }

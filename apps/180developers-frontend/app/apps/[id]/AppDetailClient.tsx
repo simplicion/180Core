@@ -431,8 +431,18 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
         }),
       });
 
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'Failed to submit payout request');
+      let data: any = null;
+      const rawText = await res.text();
+      try {
+        data = JSON.parse(rawText);
+      } catch (_) {
+        if (!res.ok) {
+          throw new Error(`Server returned HTTP ${res.status}. Please check your connection.`);
+        }
+        throw new Error('Unexpected response format from server');
+      }
+
+      if (!res.ok || !data?.success) throw new Error(data?.error || data?.message || 'Failed to submit payout request');
 
       toast.success('Payout request submitted for review!');
       setShowPayoutModal(false);

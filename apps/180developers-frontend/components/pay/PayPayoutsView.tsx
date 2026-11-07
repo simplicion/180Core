@@ -244,17 +244,19 @@ export function PayPayoutsView() {
         }),
       });
 
-      let data: any;
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        data = await res.json();
-      } else {
-        const rawText = await res.text();
-        throw new Error(rawText?.slice(0, 120) || `Server returned HTTP ${res.status}`);
+      let data: any = null;
+      const rawText = await res.text();
+      try {
+        data = JSON.parse(rawText);
+      } catch (_) {
+        if (!res.ok) {
+          throw new Error(`Server returned HTTP ${res.status}. Please check your connection or session.`);
+        }
+        throw new Error('Unexpected response format from server');
       }
 
-      if (!res.ok || !data.success) {
-        throw new Error(data?.error || data?.message || 'Failed to submit payout request');
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || data?.message || `Payout request failed (HTTP ${res.status})`);
       }
 
       toast.success('Payout request submitted successfully for settlement disbursement!');
@@ -292,9 +294,18 @@ export function PayPayoutsView() {
         },
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to confirm payout receipt');
+      let data: any = null;
+      const rawText = await res.text();
+      try {
+        data = JSON.parse(rawText);
+      } catch (_) {
+        if (!res.ok) {
+          throw new Error(`Server returned HTTP ${res.status}`);
+        }
+        throw new Error('Unexpected response format');
+      }
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || data?.message || 'Failed to confirm payout receipt');
       }
 
       toast.success('Payout receipt confirmed! Thank you.');
@@ -368,9 +379,18 @@ export function PayPayoutsView() {
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to submit dispute ticket');
+      let data: any = null;
+      const rawText = await res.text();
+      try {
+        data = JSON.parse(rawText);
+      } catch (_) {
+        if (!res.ok) {
+          throw new Error(`Server returned HTTP ${res.status}`);
+        }
+        throw new Error('Unexpected response format');
+      }
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || data?.message || 'Failed to submit dispute ticket');
       }
 
       toast.success(

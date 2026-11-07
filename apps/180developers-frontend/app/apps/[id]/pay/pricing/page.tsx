@@ -1,25 +1,18 @@
 'use client';
 
-import React from 'react';
-import { AppShellLayout } from '@/components/common/AppShellLayout';
-import { PaySidebar } from '@/components/pay/PaySidebar';
-import { PayBottomNav } from '@/components/pay/PayBottomNav';
-import { PricingTablesTab } from '@/components/apps/pay/PricingTablesTab';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useProject } from '@/context/ProjectContext';
 
 export default function PayPricingPage() {
-  const { project, projectId } = useProject();
+  const router = useRouter();
+  const { projectId } = useProject();
 
-  return (
-    <AppShellLayout
-      sidebar={<PaySidebar />}
-      bottomNav={<PayBottomNav />}
-      title="Embeddable Pricing Tables"
-      badge="Tier Builder"
-      badgeColor="purple"
-      fullWidth
-    >
-      <PricingTablesTab appId={project?.id || projectId} />
-    </AppShellLayout>
-  );
+  useEffect(() => {
+    if (projectId && projectId !== 'default') {
+      router.replace(`/apps/${projectId}/pay`);
+    }
+  }, [projectId, router]);
+
+  return null;
 }

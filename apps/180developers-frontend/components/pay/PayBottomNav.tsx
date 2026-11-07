@@ -12,9 +12,6 @@ import {
   X,
   Tag,
   Link2,
-  Layers,
-  Bot,
-  Sliders,
   Landmark,
 } from 'lucide-react';
 import { useProject } from '@/context/ProjectContext';
@@ -63,9 +60,6 @@ export function PayBottomNav() {
   const moreItems = [
     { label: 'Coupons & Promos', href: `/apps/${projectId}/pay/coupons`, icon: Tag },
     { label: 'Payment Links', href: `/apps/${projectId}/pay/links`, icon: Link2 },
-    { label: 'Pricing Tables', href: `/apps/${projectId}/pay/pricing`, icon: Layers },
-    { label: 'Agent Envelopes', href: `/apps/${projectId}/pay/agents`, icon: Bot, badge: 'Soon' },
-    { label: 'Gateways & Routing', href: `/apps/${projectId}/pay/gateways`, icon: Sliders },
   ];
 
   const isMoreActive = moreItems.some((item) => pathname.startsWith(item.href));

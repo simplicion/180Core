@@ -12,7 +12,7 @@ export default function PayGeoPricingPage() {
   useEffect(() => {
     const id = extractAppIdFromPath(pathname) || (params?.id !== 'default' ? (params?.id as string) : '') || (typeof window !== 'undefined' ? extractAppIdFromPath(window.location.pathname) : '');
     if (id && id !== 'default') {
-      router.replace(`/apps/${id}/pay/pricing`);
+      router.replace(`/apps/${id}/pay`);
     }
   }, [pathname, params?.id, router]);
 
