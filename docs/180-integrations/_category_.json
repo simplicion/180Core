@@ -1,0 +1,8 @@
+﻿{
+  "label": "CMS & Integrations",
+  "position": 5,
+  "link": {
+    "type": "generated-index",
+    "description": "Official plugins and turnkey CMS integrations for 180 Core products including 180 Identity and 180 Pay."
+  }
+}

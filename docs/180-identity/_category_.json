@@ -1,0 +1,8 @@
+{
+  "label": "180 Identity",
+  "position": 3,
+  "link": {
+    "type": "generated-index",
+    "description": "Universal Authentication, WhatsApp 1-Tap OTP, OAuth 2.0 PKCE, and session management guides."
+  }
+}

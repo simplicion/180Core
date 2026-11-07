@@ -1,0 +1,8 @@
+{
+  "label": "180 Pay",
+  "position": 4,
+  "link": {
+    "type": "generated-index",
+    "description": "1-Click Sovereign Checkout, Recurring Subscriptions, HMAC Webhooks, BYOG, and Pricing Tables."
+  }
+}

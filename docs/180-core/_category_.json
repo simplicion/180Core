@@ -1,0 +1,9 @@
+{
+  "label": "180 Core",
+  "position": 3,
+  "collapsed": true,
+  "link": {
+    "type": "generated-index",
+    "description": "Universal Authentication (180 Identity) and 1-Click Sovereign Payments (180 Pay) integration blueprints, API specs, and AI prompts."
+  }
+}
