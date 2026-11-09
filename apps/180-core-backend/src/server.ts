@@ -31,6 +31,7 @@ import agentCheckoutRoutes from './routes/agent-checkout.routes';
 import pricingTableRoutes from './routes/pricing-table.routes';
 import adminRoutes from './routes/admin.routes';
 import supportRoutes from './routes/support.routes';
+import verificationRoutes from './routes/verification.routes';
 import { AuthApiController } from './controllers/auth.controller';
 import { generalApiLimiter } from './middleware/rate-limiter.middleware';
 import { RsaKeysService, seedFirstPartyOAuthApps, DeveloperBillingService } from '@workspace/identity-provider';
@@ -341,6 +342,10 @@ app.use('/api/v1/admin', adminRoutes);
 
 // Universal Support & Bug Reporting Ingestion Routes
 app.use('/api/v1/support', supportRoutes);
+
+// 180 Verify & Identity Biometrics Routes (Government API Setu, Razorpay Penny Drop, Face Match)
+app.use('/api/v1/identity/verify', verificationRoutes);
+app.use('/api/v1/verify', verificationRoutes);
 
 // Universal Webhooks Ingestion Aliases (Guarantees zero dropped Razorpay webhooks across all domain variants)
 app.use('/webhooks/razorpay', checkoutRoutes);

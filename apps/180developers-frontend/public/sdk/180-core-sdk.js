@@ -867,6 +867,269 @@
     }
   }
 
+  // ─── 180 VERIFY (KYC DOCUMENTS, BANK ACCOUNT & FACE MATCH) ────────────────
+  // SECURITY: onSuccess({ sessionId, status }) is NOT proof of verification and never
+  // contains personal data. Your server must fetch the signed result
+  // (GET /api/v1/identity/verify/session/:id/result, Basic auth) and verify its JWS,
+  // e.g. with fetchVerificationResult() from @workspace/identity-sdk/verify-server.
+  var VERIFY_DOCS = ['PAN', 'DRIVING_LICENSE', 'VOTER_ID', 'AADHAAR', 'BANK_ACCOUNT', 'FACE_MATCH'];
+  var activeVerify = null;
+
+  function verifyOriginOf(verifyUrl) {
+    var u = new URL(verifyUrl);
+    if (u.protocol === 'https:' || (u.protocol === 'http:' && /^(localhost|127\.0\.0\.1|\[::1\]|.*\.localhost)$/.test(u.hostname))) return u.origin;
+    throw new Error('[180 Verify] Refusing verifyUrl scheme ' + u.protocol);
+  }
+
+  // Strict gate: origin === verifyUrl origin, source === iframe window, sessionId matches.
+  // Only whitelisted fields are copied.
+  function filterVerifyMessage(event, ctx) {
+    if (!event || !ctx || !ctx.expectedOrigin || !ctx.sessionId) return null;
+    if (event.origin !== ctx.expectedOrigin || !ctx.iframeWindow || event.source !== ctx.iframeWindow) return null;
+    var d = event.data;
+    if (!d || typeof d !== 'object' || Array.isArray(d) || typeof d.sessionId !== 'string' || d.sessionId !== ctx.sessionId) return null;
+    var m = { type: d.type, sessionId: ctx.sessionId };
+    if (d.type === '180_VERIFY_READY' || d.type === '180_VERIFY_CLOSE') return m;
+    if (d.type === '180_VERIFY_COMPLETE') {
+      if (typeof d.status !== 'string' || !d.status) return null;
+      m.status = d.status;
+      return m;
+    }
+    if (d.type === '180_VERIFY_ERROR') {
+      m.code = (typeof d.code === 'string' && d.code) ? d.code.slice(0, 64) : 'VERIFICATION_ERROR';
+      return m;
+    }
+    return null;
+  }
+
+  function verifyOutcomeOf(msg) {
+    var sid = msg.sessionId;
+    function err(code, message) { return { kind: 'error', error: { code: code, message: message, sessionId: sid } }; }
+    if (msg.type === '180_VERIFY_READY') return { kind: 'ready' };
+    if (msg.type === '180_VERIFY_CLOSE') return { kind: 'close' };
+    if (msg.type === '180_VERIFY_ERROR') return err(msg.code, '180 Verify reported an error (' + msg.code + ')');
+    if (msg.status === 'APPROVED' || msg.status === 'MANUAL_REVIEW') return { kind: 'success', result: { sessionId: sid, status: msg.status } };
+    if (msg.status === 'REJECTED') return err('VERIFICATION_REJECTED', 'Verification was rejected');
+    return err('VERIFICATION_FAILED', 'Verification ended with status ' + msg.status);
+  }
+
+  function mkEl(tag, css, attrs) {
+    var n = document.createElement(tag);
+    if (css) n.style.cssText = css;
+    for (var k in attrs) n.setAttribute(k, attrs[k]);
+    return n;
+  }
+
+  function openVerifySurface(opts) {
+    var expectedOrigin = verifyOriginOf(opts.verifyUrl);
+    var mobile = isMobileViewport();
+    var prevFocus = document.activeElement;
+    var title = opts.title || '180 Verify';
+    var titleId = '__180_verify_' + generateRandomString(8);
+    var closedT = mobile ? 'translateY(100%)' : 'scale(0.96)';
+    var openT = mobile ? 'translateY(0)' : 'scale(1)';
+    var ease = 'transform .28s cubic-bezier(.16,1,.3,1)';
+
+    var root = mkEl('div', 'position:fixed;inset:0;z-index:999999;display:flex;flex-direction:column;align-items:center;justify-content:' + (mobile ? 'flex-end' : 'center') + ';opacity:0;transition:opacity .22s;font-family:system-ui,sans-serif', { 'data-180-verify-root': '' });
+    var backdrop = mkEl('div', 'position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(8px)', { 'aria-hidden': 'true' });
+    var dialog = mkEl('div', 'position:relative;width:100%;max-width:' + (mobile ? '100%' : 'min(480px,calc(100vw - 32px))') + ';height:' + (mobile ? '80vh' : 'min(720px,90vh)') + ';background:#09090b;color:#fafafa;border:1px solid rgba(255,255,255,.12);border-radius:' + (mobile ? '24px 24px 0 0' : '24px') + ';display:flex;flex-direction:column;overflow:hidden;outline:none;transform:' + closedT + ';transition:' + ease, { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId, tabindex: '-1' });
+    if (mobile) dialog.style.height = '80dvh';
+    var header = mkEl('div', 'flex-shrink:0;padding:10px 16px;text-align:center;border-bottom:1px solid rgba(255,255,255,.08);position:relative;font-size:13px;font-weight:700' + (mobile ? ';cursor:grab;touch-action:none' : ''));
+    if (mobile) header.appendChild(mkEl('div', 'width:44px;height:4px;border-radius:9px;background:rgba(255,255,255,.22);margin:0 auto 8px', { 'aria-hidden': 'true' }));
+    var titleEl = mkEl('div', '', { id: titleId });
+    titleEl.textContent = title;
+    header.appendChild(titleEl);
+    var closeBtn = mkEl('button', 'position:absolute;right:12px;bottom:4px;background:none;border:0;color:#a1a1aa;cursor:pointer;font-size:22px;line-height:1;padding:4px 8px', { type: 'button', 'aria-label': 'Close verification' });
+    closeBtn.textContent = '×';
+    header.appendChild(closeBtn);
+    var body = mkEl('div', 'flex:1;position:relative');
+    var skeleton = mkEl('div', 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#71717a;font-size:12px;background:#09090b', { role: 'status' });
+    skeleton.textContent = 'Starting secure verification...';
+    var iframe = mkEl('iframe', 'width:100%;height:100%;border:0;display:block', {
+      title: title,
+      allow: 'camera; fullscreen',
+      sandbox: 'allow-scripts allow-same-origin allow-forms allow-popups',
+      allowfullscreen: '',
+      referrerpolicy: 'strict-origin-when-cross-origin'
+    });
+    body.appendChild(skeleton);
+    body.appendChild(iframe);
+    dialog.appendChild(header);
+    dialog.appendChild(body);
+    root.appendChild(backdrop);
+    root.appendChild(dialog);
+
+    var htmlEl = document.documentElement;
+    var prevOverflow = [htmlEl.style.overflow, document.body.style.overflow];
+    htmlEl.style.overflow = document.body.style.overflow = 'hidden';
+    document.body.appendChild(root);
+    iframe.src = opts.verifyUrl;
+
+    var destroyed = false;
+    function dismiss() { if (!destroyed) opts.onDismiss(); }
+    function onMessage(event) {
+      if (destroyed) return;
+      var msg = filterVerifyMessage(event, { expectedOrigin: expectedOrigin, sessionId: opts.sessionId, iframeWindow: iframe.contentWindow });
+      if (!msg) return;
+      var outcome = verifyOutcomeOf(msg);
+      if (outcome.kind === 'ready') skeleton.style.display = 'none';
+      opts.onOutcome(outcome);
+    }
+    function onKeyDown(e) {
+      if (e.key === 'Escape' || e.key === 'Esc') { e.preventDefault(); dismiss(); return; }
+      if (e.key !== 'Tab') return;
+      var a = document.activeElement;
+      if (e.shiftKey ? (a === closeBtn || !root.contains(a)) : (a === iframe || !root.contains(a))) {
+        e.preventDefault();
+        (e.shiftKey ? iframe : closeBtn).focus();
+      }
+    }
+    function onFocusIn(e) { if (!destroyed && e.target && !root.contains(e.target)) closeBtn.focus(); }
+
+    // Drag-to-dismiss (mobile bottom sheet)
+    var startY = null, delta = 0, startT = 0;
+    function onDown(e) {
+      if (e.target === closeBtn) return;
+      startY = e.clientY; delta = 0; startT = Date.now();
+      dialog.style.transition = 'none';
+      try { header.setPointerCapture(e.pointerId); } catch (_) {}
+    }
+    function onMove(e) {
+      if (startY === null) return;
+      delta = e.clientY - startY;
+      if (delta < 0) delta *= 0.2;
+      dialog.style.transform = 'translateY(' + delta + 'px)';
+    }
+    function onUp() {
+      if (startY === null) return;
+      startY = null;
+      dialog.style.transition = ease;
+      if (delta > 100 || (delta > 30 && delta / Math.max(1, Date.now() - startT) > 0.6)) dismiss();
+      else dialog.style.transform = openT;
+    }
+
+    var listeners = [
+      [closeBtn, 'click', dismiss], [backdrop, 'click', dismiss], [window, 'message', onMessage],
+      [document, 'keydown', onKeyDown, true], [document, 'focusin', onFocusIn, true]
+    ];
+    if (mobile) listeners.push([header, 'pointerdown', onDown], [header, 'pointermove', onMove], [header, 'pointerup', onUp], [header, 'pointercancel', onUp]);
+    listeners.forEach(function (l) { l[0].addEventListener(l[1], l[2], !!l[3]); });
+
+    requestAnimationFrame(function () {
+      if (destroyed) return;
+      root.style.opacity = '1';
+      dialog.style.transform = openT;
+      dialog.focus();
+    });
+
+    return {
+      iframe: iframe,
+      destroy: function () {
+        if (destroyed) return;
+        destroyed = true;
+        listeners.forEach(function (l) { l[0].removeEventListener(l[1], l[2], !!l[3]); });
+        // Remove the iframe immediately so the camera stream is released.
+        try { iframe.src = 'about:blank'; body.removeChild(iframe); } catch (_) {}
+        htmlEl.style.overflow = prevOverflow[0];
+        document.body.style.overflow = prevOverflow[1];
+        dialog.style.transition = ease;
+        dialog.style.transform = closedT;
+        root.style.opacity = '0';
+        root.style.pointerEvents = 'none';
+        setTimeout(function () { if (root.parentNode) root.parentNode.removeChild(root); }, 300);
+        if (prevFocus && prevFocus.focus && document.contains(prevFocus)) { try { prevFocus.focus(); } catch (_) {} }
+      }
+    };
+  }
+
+  var OneEightyVerify = {
+    /**
+     * Starts a verification and returns { promise, close(), getSessionId() }.
+     * promise resolves { sessionId, status } (NOT proof, verify server-side) or null.
+     */
+    start: function (options) {
+      options = options || {};
+      var settled = false, surface = null, sessionId, resolveFn;
+      var promise = new Promise(function (r) { resolveFn = r; });
+      function safe(fn, arg) { try { if (typeof fn === 'function') fn(arg); } catch (e) { console.error('[180 Verify] callback threw:', e); } }
+      function settle(o) {
+        if (settled) return;
+        settled = true;
+        if (surface) { surface.destroy(); surface = null; }
+        if (activeVerify === ctrl) activeVerify = null;
+        if (o.kind === 'success') safe(options.onSuccess, o.result);
+        else if (o.kind === 'error') safe(options.onError, o.error);
+        else if (!o.silent) safe(options.onClose);
+        resolveFn(o.kind === 'success' ? o.result : null);
+      }
+      function fail(code, message) { settle({ kind: 'error', error: { code: code, message: message } }); return ctrl; }
+      var ctrl = {
+        promise: promise,
+        close: function (c) { settle({ kind: 'close', silent: Boolean(c && c.silent) }); },
+        getSessionId: function () { return sessionId; }
+      };
+      if (activeVerify) activeVerify.close({ silent: true });
+      activeVerify = ctrl;
+
+      var clientId = options.clientId || (isBrowser && window.__180_CLIENT_ID) || (_config.clientId !== '180-core-client' ? _config.clientId : '');
+      var docs = options.documents;
+      if (!isBrowser) return fail('BROWSER_ONLY', '180 Verify can only be launched in a browser');
+      if (!clientId) return fail('MISSING_CLIENT_ID', '`clientId` is required');
+      if (!Array.isArray(docs) || !docs.length || docs.some(function (d) { return VERIFY_DOCS.indexOf(d) === -1; })) {
+        return fail('INVALID_DOCUMENTS', 'documents must be a non-empty array of: ' + VERIFY_DOCS.join(', '));
+      }
+
+      var apiBase = String(options.apiBaseUrl || _config.apiServerUrl || DEFAULT_API_SERVER).replace(/\/+$/, '');
+      var payload = { clientId: clientId, documents: docs, parentOrigin: window.location.origin };
+      if (options.strictNameMatching !== undefined) payload.strictNameMatching = Boolean(options.strictNameMatching);
+
+      fetch(apiBase + '/api/v1/identity/verify/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        credentials: 'omit',
+        body: JSON.stringify(payload)
+      }).then(function (res) {
+        return res.json().catch(function () { return null; }).then(function (b) {
+          var s = b && (b.data && b.data.sessionId ? b.data : b);
+          var e;
+          if (!res.ok) {
+            e = new Error((b && (b.message || b.error_description || b.error)) || ('Session creation failed (' + res.status + ')'));
+            e.code = (b && (b.code || b.errorCode || (typeof b.error === 'string' && b.error))) || (res.status === 403 ? 'ORIGIN_NOT_ALLOWED' : 'HTTP_' + res.status);
+          } else if (!s || typeof s.sessionId !== 'string' || typeof s.verifyUrl !== 'string') {
+            e = new Error('Session response is missing sessionId or verifyUrl');
+            e.code = 'INVALID_SESSION_RESPONSE';
+          }
+          if (e) throw e;
+          return s;
+        });
+      }).then(function (session) {
+        if (settled) return;
+        sessionId = session.sessionId;
+        surface = openVerifySurface({
+          verifyUrl: session.verifyUrl,
+          sessionId: sessionId,
+          title: options.title,
+          onDismiss: function () { settle({ kind: 'close' }); },
+          onOutcome: function (o) { if (o.kind !== 'ready') settle(o); }
+        });
+      }).catch(function (err) {
+        fail((err && err.code) || 'SESSION_CREATE_FAILED', (err && err.message) || 'Could not start verification');
+      });
+      return ctrl;
+    },
+    /** Promise-based launch: resolves { sessionId, status } (NOT proof) or null. */
+    launch: function (options) {
+      return OneEightyVerify.start(options).promise;
+    },
+    /** Closes the active verification surface, if any. */
+    close: function () {
+      if (activeVerify) activeVerify.close();
+    },
+    documentTypes: VERIFY_DOCS.slice(),
+    // Exposed for tests / auditing only.
+    _internal: { filterMessage: filterVerifyMessage, resolveOutcome: verifyOutcomeOf, originOf: verifyOriginOf }
+  };
+
   // ─── 180 UI ADAPTIVE SERVICE ──────────────────────────────────────────────
   var OneEightyUi = {
     openModal: openAdaptiveModal,
@@ -916,6 +1179,7 @@
     },
     auth: OneEightyAuth,
     pay: OneEightyPay,
+    verify: OneEightyVerify,
     ui: OneEightyUi,
     webhooks: OneEightyPay.webhooks,
     verifyWebhook: function (options) {
@@ -1240,6 +1504,7 @@
   global.OneEightyIdentity = OneEightyAuth;
   global.OneEightyAuth = OneEightyAuth;
   global.OneEightyPay = OneEightyPay;
+  global.OneEightyVerify = OneEightyVerify;
 
   if (isBrowser) {
     window.__180_SDK_LOADED = true;
@@ -1286,5 +1551,6 @@
     module.exports.OneEightyIdentity = OneEightyAuth;
     module.exports.OneEightyAuth = OneEightyAuth;
     module.exports.OneEightyPay = OneEightyPay;
+    module.exports.OneEightyVerify = OneEightyVerify;
   }
 })(typeof window !== 'undefined' ? window : global);

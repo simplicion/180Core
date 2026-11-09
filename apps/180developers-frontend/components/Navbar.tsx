@@ -257,15 +257,16 @@ export default function Navbar() {
           </div>
 
           {/* 2. Docs Link */}
-          <a
-            href={getDocsUrl(DOCS_LINKS.CORE_OVERVIEW)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="py-2 text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-colors flex items-center gap-1 cursor-pointer"
+          <Link
+            href="/docs"
+            className={`py-2 transition-colors flex items-center gap-1 cursor-pointer ${
+              pathname.startsWith('/docs')
+                ? 'text-blue-600 dark:text-blue-400 font-bold'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white'
+            }`}
           >
             <span>Docs</span>
-            <ExternalLink className="w-3 h-3 text-zinc-400 opacity-70" />
-          </a>
+          </Link>
         </nav>
 
         {/* Right: Theme Toggle & Single Action Button */}

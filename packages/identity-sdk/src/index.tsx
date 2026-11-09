@@ -3,12 +3,14 @@
  * Official Universal Client SDK for 180 Identity (SSO/Auth) & 180 Pay (Checkout)
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { JwksVerifier } from './jwks-verifier';
 import { TokenExchangeClient } from './token-exchange';
 import { UserInfoClient } from './userinfo-client';
 import { generatePkcePair } from './pkce';
 import { Sovereign180Pay } from './pay-server';
+import { startVerification, VerifyController } from './verify-client';
+import type { VerifyClientError, VerifyClientResult, VerifyDocumentType } from './verify-types';
 
 
 // ============================================================================
@@ -1464,6 +1466,71 @@ export function verifyWebhookSignature(options: VerifyWebhookOptions): boolean {
 }
 
 // ============================================================================
+// 4B. 180 Verify: KYC documents, bank account & face match drop-in
+// ============================================================================
+
+/**
+ * Options for `OneEightyVerify.launch()` / `use180Verify()` / `<OneEightyVerify />`.
+ *
+ * ⚠️ SECURITY: `onSuccess` only receives `{ sessionId, status }` and is NOT proof of
+ * verification (anything in the browser can be forged). Send `sessionId` to your backend
+ * and call `fetchVerificationResult()` from `@workspace/identity-sdk/verify-server` to get
+ * the signed result and the verified profile.
+ */
+export interface OneEightyVerifyOptions {
+  /** Your 180 Core app client id. Falls back to `window.__180_CLIENT_ID` / `NEXT_PUBLIC_180_CLIENT_ID`. */
+  clientId?: string;
+  documents: VerifyDocumentType[];
+  strictNameMatching?: boolean;
+  /** 180 Core API base URL. Defaults to the same backend resolution used by 180 Identity. */
+  apiBaseUrl?: string;
+  environment?: EnvironmentMode;
+  /** Sheet / modal title. */
+  title?: string;
+  /** APPROVED or MANUAL_REVIEW. NOT proof — verify server-side. */
+  onSuccess?: (result: VerifyClientResult) => void;
+  /** Errors, including REJECTED → `{ code: 'VERIFICATION_REJECTED' }`. */
+  onError?: (error: VerifyClientError) => void;
+  /** Surface dismissed without completing. */
+  onClose?: () => void;
+}
+
+const resolveVerifyClientId = (clientId?: string): string =>
+  clientId ||
+  (typeof window !== 'undefined' && (window as any).__180_CLIENT_ID) ||
+  (typeof process !== 'undefined' ? (process.env?.NEXT_PUBLIC_CORE_CLIENT_ID || process.env?.NEXT_PUBLIC_180_CLIENT_ID) : undefined) ||
+  '';
+
+/**
+ * Starts a 180 Verify session and opens the hosted flow in an adaptive surface
+ * (80vh bottom sheet on mobile, centered modal on desktop). Returns a controller with
+ * `promise` (resolves `{ sessionId, status }` or `null`) and `close()`.
+ */
+export function launchOneEightyVerify(options: OneEightyVerifyOptions): VerifyController {
+  return startVerification({
+    clientId: resolveVerifyClientId(options.clientId),
+    documents: options.documents,
+    strictNameMatching: options.strictNameMatching,
+    apiBaseUrl: getAuthApiServerUrl(options.apiBaseUrl, options.environment),
+    title: options.title || '180 Verify',
+    onSuccess: options.onSuccess,
+    onError: options.onError,
+    onClose: options.onClose,
+  });
+}
+
+/** Vanilla API surface, attached as statics to the `<OneEightyVerify />` component. */
+const OneEightyVerifyApi = {
+  version: '1.0.0',
+  /** Promise-based launch. Resolves `{ sessionId, status }` (NOT proof) or `null`. */
+  launch(options: OneEightyVerifyOptions): Promise<VerifyClientResult | null> {
+    return launchOneEightyVerify(options).promise;
+  },
+  /** Like `launch` but returns the controller (with `close()`). */
+  start: launchOneEightyVerify,
+};
+
+// ============================================================================
 // 5. Universal React Hooks: use180Identity & use180Pay
 // ============================================================================
 
@@ -1550,6 +1617,71 @@ export function use180Pay() {
     isOpeningPay,
     isLoading: isOpeningPay,
   };
+}
+
+export type Use180VerifyOptions = OneEightyVerifyOptions & {
+  onSuccess: (result: VerifyClientResult) => void;
+  onError: (error: VerifyClientError) => void;
+};
+
+/**
+ * React hook for 180 Verify.
+ *
+ * ```tsx
+ * const { launchVerification, isVerifying } = use180Verify({
+ *   clientId: '180_client_...',
+ *   documents: ['PAN', 'DRIVING_LICENSE', 'BANK_ACCOUNT', 'FACE_MATCH'],
+ *   strictNameMatching: true,
+ *   onSuccess: ({ sessionId, status }) => fetch('/api/kyc/confirm', { method: 'POST', body: JSON.stringify({ sessionId }) }),
+ *   onError: (err) => console.error(err.code, err.message),
+ * });
+ * ```
+ *
+ * ⚠️ `onSuccess` is NOT proof of verification and never contains the verified profile.
+ * Your server must call `fetchVerificationResult({ sessionId, clientId, clientSecret })`.
+ *
+ * The latest callbacks are always used (no need to memoize options). The surface is closed
+ * silently when the component unmounts.
+ */
+export function use180Verify(options: Use180VerifyOptions) {
+  const [isVerifying, setIsVerifying] = useState(false);
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
+  const controllerRef = useRef<VerifyController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      const ctrl = controllerRef.current;
+      controllerRef.current = null;
+      ctrl?.close({ silent: true });
+    };
+  }, []);
+
+  const launchVerification = useCallback((): Promise<VerifyClientResult | null> => {
+    if (controllerRef.current) return controllerRef.current.promise;
+    const opts = optionsRef.current;
+    setIsVerifying(true);
+    const ctrl = launchOneEightyVerify({
+      ...opts,
+      onSuccess: (result) => optionsRef.current.onSuccess?.(result),
+      onError: (error) => optionsRef.current.onError?.(error),
+      onClose: () => optionsRef.current.onClose?.(),
+    });
+    controllerRef.current = ctrl;
+    ctrl.promise.then(() => {
+      if (controllerRef.current === ctrl) {
+        controllerRef.current = null;
+        setIsVerifying(false);
+      }
+    });
+    return ctrl.promise;
+  }, []);
+
+  const close = useCallback(() => {
+    controllerRef.current?.close();
+  }, []);
+
+  return { launchVerification, isVerifying, close };
 }
 
 // ============================================================================
@@ -1817,6 +1949,77 @@ export const OneEightyIdentityButton: React.FC<OneEightyIdentityButtonProps> = (
 };
 
 // ============================================================================
+// 6B. Universal React Component: <OneEightyVerify /> (+ vanilla statics)
+// ============================================================================
+
+export interface OneEightyVerifyProps extends Use180VerifyOptions {
+  /** Button label (ignored when `children` is a render function). */
+  text?: string;
+  /** Label while the verification surface is open. */
+  loadingText?: string;
+  className?: string;
+  style?: React.CSSProperties;
+  disabled?: boolean;
+  /** Custom trigger: `({ launchVerification, isVerifying, close }) => <MyButton … />` */
+  children?: React.ReactNode | ((api: ReturnType<typeof use180Verify>) => React.ReactNode);
+}
+
+const OneEightyVerifyComponent: React.FC<OneEightyVerifyProps> = ({
+  text = 'Verify with 180',
+  loadingText = 'Verifying…',
+  className = '',
+  style,
+  disabled = false,
+  children,
+  ...verifyOptions
+}) => {
+  const api = use180Verify(verifyOptions);
+  if (typeof children === 'function') {
+    return <>{(children as (a: ReturnType<typeof use180Verify>) => React.ReactNode)(api)}</>;
+  }
+  return (
+    <button
+      type="button"
+      disabled={disabled || api.isVerifying}
+      aria-busy={api.isVerifying}
+      onClick={() => {
+        void api.launchVerification();
+      }}
+      className={className}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        minHeight: 44,
+        padding: '8px 16px',
+        borderRadius: 14,
+        border: '1px solid rgba(255, 255, 255, 0.12)',
+        background: '#09090b',
+        color: '#fafafa',
+        fontSize: 13,
+        fontWeight: 700,
+        cursor: disabled || api.isVerifying ? 'wait' : 'pointer',
+        opacity: disabled ? 0.6 : 1,
+        ...style,
+      }}
+    >
+      {api.isVerifying ? <LoadingSpinner className="w-3.5 h-3.5" /> : null}
+      {children ?? (api.isVerifying ? loadingText : text)}
+    </button>
+  );
+};
+
+/**
+ * 180 Verify drop-in.
+ * - React: `<OneEightyVerify clientId=… documents={[…]} onSuccess={…} onError={…} />`
+ * - Vanilla: `OneEightyVerify.launch({ … })` / `OneEightyVerify.start({ … })`
+ *
+ * ⚠️ The client result is NOT proof. Verify server-side with `fetchVerificationResult()`.
+ */
+export const OneEightyVerify = Object.assign(OneEightyVerifyComponent, OneEightyVerifyApi);
+
+// ============================================================================
 // 7. Global Window Exports & Sovereign Namespace (180 Core SDK)
 // ============================================================================
 
@@ -1832,6 +2035,7 @@ export const OneEighty = {
   getUser: () => OneEightyIdentity.getUser(),
   getAccessToken: () => OneEightyIdentity.getAccessToken(),
   checkout: (opts?: any) => OneEightyPay.checkout(opts),
+  verify: OneEightyVerify,
 };
 
 export const OneEightyAuth = OneEightyIdentity;
@@ -1841,6 +2045,7 @@ export const OneEightyCore = OneEighty;
 export const OneEightyProfile = {
   auth: OneEightyIdentity,
   pay: OneEightyPay,
+  verify: OneEightyVerify,
 };
 
 /**
@@ -1895,6 +2100,7 @@ if (typeof window !== 'undefined') {
   (window as any).OneEightyIdentity = OneEightyIdentity;
   (window as any).OneEightyAuth = OneEightyAuth;
   (window as any).OneEightyPay = OneEightyPay;
+  (window as any).OneEightyVerify = OneEightyVerify;
   (window as any).OneEightyProfile = OneEightyProfile;
 }
 
@@ -1908,6 +2114,9 @@ export * from './token-lifecycle';
 export * from './userinfo-client';
 export * from './pkce';
 export * from './pay-server';
+export * from './verify-types';
+export * from './verify-client';
+export * from './verify-server';
 
 // 9. Client Components, Hooks & Web Components
 export * from './hooks/useGeoPricing';

@@ -1,0 +1,9 @@
+.venv/
+venv/
+models/
+*.onnx
+*.part
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/.cache/

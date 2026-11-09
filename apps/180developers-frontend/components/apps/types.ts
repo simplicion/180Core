@@ -143,12 +143,15 @@ export interface PayoutRecord {
     accountNumber?: string;
     ifscCode?: string;
     bankName?: string;
+    proofUrl?: string;
+    receivedConfirmed?: boolean;
   };
   adminNote?: string;
   transactionRef?: string;
   requestedAt?: string;
-  createdAt: string;
   processedAt?: string;
+  updatedAt?: string;
+  createdAt: string;
 }
 
 export interface WebhookTestResult {

@@ -1,39 +1,38 @@
 /**
- * Utility helper for dynamic deep links into the dedicated 180 Documentation app.
- * Resolves to http://localhost:3005 in local development, and https://docs.180core.cloud in production.
+ * Utility helper for deep links into 180 Documentation.
+ * Routes directly to the internal /docs hub or respects NEXT_PUBLIC_DOCS_URL if configured.
  */
 export function getDocsBaseUrl(): string {
   if (process.env.NEXT_PUBLIC_DOCS_URL) {
     return process.env.NEXT_PUBLIC_DOCS_URL;
   }
-  if (process.env.NODE_ENV === 'development') {
-    return 'http://localhost:3005';
-  }
-  return 'https://docs.180core.cloud';
+  return '';
 }
 
-export function getDocsUrl(path = '/docs/products/180-core/overview'): string {
+export function getDocsUrl(path = '/docs'): string {
   const base = getDocsBaseUrl();
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  return `${base}${cleanPath}`;
+  return base ? `${base}${cleanPath}` : cleanPath;
 }
 
 export const DOCS_LINKS = {
-  CORE_OVERVIEW: '/docs/products/180-core/overview',
-  AI_MASTER_PROMPT: '/docs/products/180-core/ai-master-prompt',
-  IDENTITY_QUICKSTART: '/docs/products/180-core/180-identity/getting-started',
-  IDENTITY_UNIVERSAL_LOGIN: '/docs/products/180-core/180-identity/universal-login-flow',
-  IDENTITY_WHATSAPP_ONE_TAP: '/docs/products/180-core/180-identity/whatsapp-one-tap',
-  IDENTITY_TOKEN_LIFECYCLE: '/docs/products/180-core/180-identity/token-lifecycle-and-sessions',
-  IDENTITY_SDK_REFERENCE: '/docs/products/180-core/180-identity/sdk-reference',
-  IDENTITY_BACKEND_VERIFICATION: '/docs/products/180-core/180-identity/backend-token-verification',
-  IDENTITY_WEBHOOKS: '/docs/products/180-core/180-identity/webhook-integration',
-  PAY_QUICKSTART: '/docs/products/180-core/180-pay/getting-started',
-  PAY_CHECKOUT: '/docs/products/180-core/180-pay/checkout-integration',
-  PAY_SUBSCRIPTIONS: '/docs/products/180-core/180-pay/recurring-subscriptions',
-  PAY_COUPONS_GEO: '/docs/products/180-core/180-pay/coupons-and-geo-pricing',
-  PAY_BYOG: '/docs/products/180-core/180-pay/byog-and-custom-domains',
-  PAY_CUSTOMER_PORTAL: '/docs/products/180-core/180-pay/customer-portal',
-  PAY_WEBHOOKS: '/docs/products/180-core/180-pay/webhook-integration',
-  PAY_PAYOUTS: '/docs/products/180-core/180-pay/payouts-and-settlements',
+  CORE_OVERVIEW: '/docs?section=overview',
+  AI_MASTER_PROMPT: '/docs?section=ai-master-prompt',
+  IDENTITY_QUICKSTART: '/docs?section=identity-quickstart',
+  IDENTITY_UNIVERSAL_LOGIN: '/docs?section=identity-sso',
+  IDENTITY_VERIFY: '/docs?section=identity-verify',
+  IDENTITY_WHATSAPP_ONE_TAP: '/docs?section=identity-sso',
+  IDENTITY_TOKEN_LIFECYCLE: '/docs?section=identity-jwks',
+  IDENTITY_SDK_REFERENCE: '/docs?section=identity-sdk',
+  IDENTITY_BACKEND_VERIFICATION: '/docs?section=identity-jwks',
+  IDENTITY_WEBHOOKS: '/docs?section=pay-webhooks',
+  PAY_QUICKSTART: '/docs?section=pay-quickstart',
+  PAY_CHECKOUT: '/docs?section=pay-checkout',
+  PAY_SUBSCRIPTIONS: '/docs?section=pay-subscriptions',
+  PAY_COUPONS_GEO: '/docs?section=pay-ppp',
+  PAY_BYOG: '/docs?section=pay-checkout',
+  PAY_CUSTOMER_PORTAL: '/docs?section=pay-subscriptions',
+  PAY_WEBHOOKS: '/docs?section=pay-webhooks',
+  PAY_PAYOUTS: '/docs?section=pay-checkout',
+  API_REFERENCE: '/docs?section=api-reference',
 } as const;

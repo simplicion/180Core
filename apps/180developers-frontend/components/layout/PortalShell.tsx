@@ -3,19 +3,33 @@
 import React from 'react';
 import { usePathname } from 'next/navigation';
 import Navbar from '../Navbar';
-import { getDocsUrl, DOCS_LINKS } from '@/lib/docs-url';
+import Link from 'next/link';
 
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isDeveloperConsole =
-    pathname.startsWith('/dashboard') || pathname.startsWith('/apps');
 
+  // 1. Full-bleed developer console (no marketing navbar/footer)
+  const isDeveloperConsole = pathname.startsWith('/dashboard') || pathname.startsWith('/apps');
   if (isDeveloperConsole) {
-    // Render full-bleed developer console without marketing navbar/footer
     return <div className="min-h-screen flex flex-col">{children}</div>;
   }
 
-  // Render standard marketing layout for public pages
+  // 2. Main Master Landing Page: Single focused landing page with NO cluttered top navigation
+  if (pathname === '/') {
+    return <div className="min-h-screen flex flex-col">{children}</div>;
+  }
+
+  // 3. Documentation Hub: Dedicated full-bleed container with top Navbar
+  if (pathname.startsWith('/docs')) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Navbar />
+        <main className="flex-1 w-full">{children}</main>
+      </div>
+    );
+  }
+
+  // 4. Standard Product & Marketing Pages (180 Identity, 180 Pay, etc.)
   return (
     <>
       {/* Global Marketing Navigation Bar */}
@@ -34,30 +48,35 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
               180 Developers
             </span>
             <span>•</span>
-            <a
+            <Link
               href="/products/identity"
               className="hover:text-zinc-900 dark:hover:text-white transition-colors"
             >
               180 Identity
-            </a>
+            </Link>
             <span>•</span>
-            <a
+            <Link
               href="/products/pay"
               className="hover:text-zinc-900 dark:hover:text-white transition-colors"
             >
               180 Pay
-            </a>
+            </Link>
             <span>•</span>
-            <a
-              href={getDocsUrl(DOCS_LINKS.CORE_OVERVIEW)}
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              href="/docs"
               className="hover:text-zinc-900 dark:hover:text-white transition-colors"
             >
               Documentation
-            </a>
+            </Link>
+            <span>•</span>
+            <Link
+              href="/dashboard"
+              className="hover:text-zinc-900 dark:hover:text-white transition-colors"
+            >
+              Console
+            </Link>
           </div>
-          <div>© {new Date().getFullYear()} 180 Developers. All rights reserved.</div>
+          <div>© {new Date().getFullYear()} 180 Core Platform. All rights reserved.</div>
         </div>
       </footer>
     </>

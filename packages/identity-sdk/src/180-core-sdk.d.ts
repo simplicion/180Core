@@ -102,6 +102,51 @@ export interface OneEightyPayService {
   generateReferenceCode(domainPrefix?: 'AUTH' | 'PAY' | 'CORE'): string;
 }
 
+export type VerifyDocumentType = 'PAN' | 'DRIVING_LICENSE' | 'VOTER_ID' | 'AADHAAR' | 'BANK_ACCOUNT' | 'FACE_MATCH';
+
+/**
+ * Client-side outcome of 180 Verify. Contains NO personal data.
+ * SECURITY: this is NOT proof of verification (it comes from the browser). Send sessionId to
+ * your server and call fetchVerificationResult() from @workspace/identity-sdk/verify-server.
+ */
+export interface VerifyClientResult {
+  sessionId: string;
+  status: 'APPROVED' | 'MANUAL_REVIEW';
+}
+
+export interface VerifyClientError {
+  code: string;
+  message: string;
+  sessionId?: string;
+}
+
+export interface VerifyLaunchOptions {
+  clientId?: string;
+  documents: VerifyDocumentType[];
+  strictNameMatching?: boolean;
+  /** 180 Core API base URL; defaults to OneEighty.init({ apiServerUrl }) */
+  apiBaseUrl?: string;
+  title?: string;
+  /** APPROVED or MANUAL_REVIEW. NOT proof of verification. */
+  onSuccess?: (result: VerifyClientResult) => void;
+  /** REJECTED is reported as code VERIFICATION_REJECTED. */
+  onError?: (error: VerifyClientError) => void;
+  onClose?: () => void;
+}
+
+export interface VerifyController {
+  promise: Promise<VerifyClientResult | null>;
+  close(options?: { silent?: boolean }): void;
+  getSessionId(): string | undefined;
+}
+
+export interface OneEightyVerifyService {
+  start(options: VerifyLaunchOptions): VerifyController;
+  launch(options: VerifyLaunchOptions): Promise<VerifyClientResult | null>;
+  close(): void;
+  documentTypes: VerifyDocumentType[];
+}
+
 export interface OneEightyUiService {
   openModal(options: AdaptiveModalOptions): Promise<any>;
   openBottomSheet(options: AdaptiveModalOptions): Promise<any>;
@@ -113,6 +158,7 @@ export interface OneEightyCoreInstance {
   init(config?: OneEightyConfig): OneEightyCoreInstance;
   auth: OneEightyAuthService;
   pay: OneEightyPayService;
+  verify: OneEightyVerifyService;
   ui: OneEightyUiService;
   resolveEnvironmentMode(customMode?: EnvironmentMode): 'development' | 'production';
   generateReferenceCode(domainPrefix?: 'AUTH' | 'PAY' | 'CORE'): string;
@@ -131,6 +177,7 @@ declare global {
     OneEightyIdentity: OneEightyAuthService;
     OneEightyAuth: OneEightyAuthService;
     OneEightyPay: OneEightyPayService;
+    OneEightyVerify: OneEightyVerifyService;
   }
 
   interface HTMLElementTagNameMap {
@@ -145,6 +192,7 @@ export const OneEightyCore: OneEightyCoreInstance;
 export const OneEightyIdentity: OneEightyAuthService;
 export const OneEightyAuth: OneEightyAuthService;
 export const OneEightyPay: OneEightyPayService;
+export const OneEightyVerify: OneEightyVerifyService;
 export function resolveEnvironmentMode(customMode?: EnvironmentMode): 'development' | 'production';
 export function generateReferenceCode(domainPrefix?: 'AUTH' | 'PAY' | 'CORE'): string;
 export function init180Sdk(options?: { cdnUrl?: string; timeoutMs?: number }): Promise<OneEightyAuthService>;

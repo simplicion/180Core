@@ -121,6 +121,7 @@ model OAuthApp {
   pricingTableConfig PricingTableConfig?    @relation("AppPricingTableConfig")
   portalSessions   CustomerPortalSession[]  @relation("AppPortalSessions")
   agenticEnvelopes AgenticBudgetEnvelope[]  @relation("AppAgenticEnvelopes")
+  verificationSessions VerificationSession[] @relation("AppVerificationSessions")
 
   @@index([userId])
   @@index([clientId])
@@ -664,3 +665,55 @@ model AdminAuditLog {
 
 
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 180 VERIFY - KYC SESSIONS (PII-minimised; images are NEVER stored in the DB)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model VerificationSession {
+  id                  String    @id // "vsess_<128-bit random hex>"
+  appId               String?   // null only for the built-in sandbox demo client
+  clientId            String
+  status              String    @default("PENDING") // PENDING | IN_PROGRESS | APPROVED | MANUAL_REVIEW | REJECTED | EXPIRED
+  environment         String    // "sandbox" | "live"
+  documents           String[]  @default([]) // PAN | DRIVING_LICENSE | VOTER_ID | AADHAAR | BANK_ACCOUNT | FACE_MATCH
+  strictNameMatching  Boolean   @default(true)
+  parentOrigin        String?
+  redirectUri         String?
+  tokenJti            String    // binds the short-lived session token to this row
+  steps               Json      @default("{}") // per-step results; doc numbers masked, Aadhaar last-4 only, no images
+  docAttempts         Json      @default("{}") // { [docType]: count }
+  bankAttempts        Int       @default(0)
+  completeAttempts    Int       @default(0)
+  challengeId         String?
+  challengeSteps      String[]  @default([])
+  challengeExpiresAt  DateTime?
+  challengeUsedAt     DateTime?
+  challengeCount      Int       @default(0)
+  verdict             Json?     // final summary/checks returned by /complete
+  failureCode         String?
+  signedResult        String?   @db.Text // JWS compact (RS256, platform JWKS key)
+  expiresAt           DateTime
+  completedAt         DateTime?
+  resultFetchedAt     DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  app                 OAuthApp?                @relation("AppVerificationSessions", fields: [appId], references: [id], onDelete: Cascade)
+  events              VerificationAuditEvent[] @relation("VerificationSessionEvents")
+
+  @@index([appId, createdAt])
+  @@index([clientId, createdAt])
+  @@index([status, expiresAt])
+}
+
+model VerificationAuditEvent {
+  id          String              @id @default(uuid())
+  sessionId   String
+  type        String              // SESSION_CREATED | DOCUMENT_SUBMITTED | BANK_SUBMITTED | CHALLENGE_ISSUED | COMPLETE_ATTEMPT | RESULT_FETCHED ...
+  data        Json?               // masked metadata only
+  createdAt   DateTime            @default(now())
+
+  session     VerificationSession @relation("VerificationSessionEvents", fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+}

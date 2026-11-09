@@ -16,6 +16,10 @@
     "./180-core-sdk": {
       "types": "./dist/180-core-sdk.d.ts",
       "default": "./dist/180-core-sdk.js"
+    },
+    "./verify-server": {
+      "types": "./dist/verify-server.d.ts",
+      "default": "./dist/verify-server.js"
     }
   },
   "scripts": {

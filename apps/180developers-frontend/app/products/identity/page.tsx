@@ -20,11 +20,16 @@ import {
   Layers,
   ArrowLeft,
   Users,
+  ScanLine,
+  Eye,
+  Building2,
+  FileText,
+  CreditCard as DLIcon,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Button, PlatformModal, AILogoIcon } from '@workspace/ui';
 import { getDocsUrl, DOCS_LINKS } from '@/lib/docs-url';
-import { use180Identity } from '@workspace/identity-sdk';
+import { use180Identity, OneEightyVerify } from '@workspace/identity-sdk';
 
 export default function IdentityProductPage() {
   const CORE_CLIENT_ID =
@@ -33,7 +38,7 @@ export default function IdentityProductPage() {
     '180_client_2d51a605038c38ffb6fa037688988a83';
 
   const { launch180Identity, isOpeningIdentity } = use180Identity(CORE_CLIENT_ID);
-  const [activeCodeTab, setActiveCodeTab] = useState<'nextauth' | 'react' | 'node' | 'python' | 'flutter'>('nextauth');
+  const [activeCodeTab, setActiveCodeTab] = useState<'nextauth' | 'verify' | 'react' | 'node' | 'python' | 'flutter'>('nextauth');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [showDemoModal, setShowDemoModal] = useState(false);
   const [authPayload, setAuthPayload] = useState<any>(null);
@@ -52,6 +57,18 @@ export default function IdentityProductPage() {
         setAuthPayload(res);
         setShowDemoModal(true);
         toast.success(`Authenticated as ${res.user?.name || res.user?.phone || '180 User'}`);
+      },
+    });
+  };
+
+  const handleLaunchVerify = () => {
+    OneEightyVerify.launch({
+      clientId: CORE_CLIENT_ID,
+      documents: ['PAN', 'DRIVING_LICENSE', 'BANK_ACCOUNT', 'FACE_MATCH'],
+      onSuccess: (res) => {
+        setAuthPayload(res);
+        setShowDemoModal(true);
+        toast.success(`180 Verify Complete! Approved for ${res.profile?.fullName || 'Citizen'}`);
       },
     });
   };
@@ -100,7 +117,7 @@ export default function IdentityProductPage() {
             onClick={handleTestAuth}
             disabled={isOpeningIdentity}
             size="lg"
-            className="w-full sm:w-auto rounded-2xl px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-lg shadow-blue-600/25 flex items-center justify-center gap-2.5 cursor-pointer"
+            className="w-full sm:w-auto rounded-2xl px-6 py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm shadow-lg shadow-blue-600/25 flex items-center justify-center gap-2 cursor-pointer"
           >
             {isOpeningIdentity ? (
               <span>Connecting to 180 Identity...</span>
@@ -113,16 +130,24 @@ export default function IdentityProductPage() {
             )}
           </Button>
 
-          <a
-            href={getDocsUrl(DOCS_LINKS.IDENTITY_QUICKSTART)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full sm:w-auto rounded-2xl px-8 py-4 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-800 dark:text-zinc-200 font-semibold text-sm border border-zinc-200 dark:border-white/10 shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
+          <Button
+            onClick={handleLaunchVerify}
+            size="lg"
+            className="w-full sm:w-auto rounded-2xl px-6 py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <ScanLine className="w-4 h-4" />
+            <span>Launch 180 Verify Bottom Sheet</span>
+            <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+          </Button>
+
+          <Link
+            href="/docs?section=identity-verify"
+            className="w-full sm:w-auto rounded-2xl px-6 py-4 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-800 dark:text-zinc-200 font-semibold text-sm border border-zinc-200 dark:border-white/10 shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
           >
             <Code2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            <span>Read Integration Docs</span>
-            <ExternalLink className="w-3.5 h-3.5 text-zinc-400" />
-          </a>
+            <span>Verification Docs</span>
+            <ArrowRight className="w-3.5 h-3.5 text-zinc-400" />
+          </Link>
         </div>
 
         {/* Feature Pill Highlights Grid */}
@@ -190,6 +215,63 @@ export default function IdentityProductPage() {
         </div>
       </section>
 
+      {/* ── 180 Verify Sovereign Document, Banking & Biometrics Section ─── */}
+      <section className="space-y-6 max-w-5xl mx-auto">
+        <div className="p-8 rounded-3xl bg-gradient-to-br from-emerald-950/20 via-zinc-900/60 to-blue-950/20 border border-emerald-500/20 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">
+                SOVEREIGN DOCUMENT & BIOMETRIC SUITE
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-white">
+                180 Verify: Trustless Citizen KYC
+              </h2>
+              <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400">
+                Official API Setu Government Registries, Razorpay IMPS Penny Drop, ArcFace AI Face Match, and strict DOB/Name multi-attribute consensus.
+              </p>
+            </div>
+
+            <Button
+              onClick={handleLaunchVerify}
+              className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/25 flex items-center gap-2 cursor-pointer shrink-0"
+            >
+              <ScanLine className="w-4 h-4" />
+              <span>Launch 80% Bottom Sheet</span>
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-2">
+            <div className="p-4 rounded-2xl bg-white/70 dark:bg-zinc-950/60 border border-zinc-200 dark:border-white/10 space-y-1">
+              <div className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-emerald-500" /> Income Tax PAN
+              </div>
+              <p className="text-[11px] text-zinc-500">10-Digit PAN validation, registered name, father's name, and Aadhaar seeding status.</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white/70 dark:bg-zinc-950/60 border border-zinc-200 dark:border-white/10 space-y-1">
+              <div className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                <DLIcon className="w-3.5 h-3.5 text-emerald-500" /> MoRTH DL & RC
+              </div>
+              <p className="text-[11px] text-zinc-500">Parivahan registry check: validity dates, vehicle classes (LMV/MCWG), and Vehicle RC fitness.</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white/70 dark:bg-zinc-950/60 border border-zinc-200 dark:border-white/10 space-y-1">
+              <div className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5 text-emerald-500" /> Bank IMPS & UPI
+              </div>
+              <p className="text-[11px] text-zinc-500">Razorpay ₹1 penny drop and NPCI UPI VPA lookup to prove bank account ownership.</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white/70 dark:bg-zinc-950/60 border border-zinc-200 dark:border-white/10 space-y-1">
+              <div className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                <Eye className="w-3.5 h-3.5 text-emerald-500" /> ArcFace Biometrics
+              </div>
+              <p className="text-[11px] text-zinc-500">512-D normalized vector face match with eye-blink liveness anti-spoofing.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── Code Implementation Snippets ───────────────────────────────────── */}
       <section className="space-y-6 max-w-5xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-200 dark:border-white/10 pb-4">
@@ -203,17 +285,17 @@ export default function IdentityProductPage() {
           </div>
 
           <div className="flex items-center gap-1.5 p-1 bg-zinc-100 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-white/10 overflow-x-auto">
-            {(['nextauth', 'react', 'node', 'python', 'flutter'] as const).map((tab) => (
+            {(['nextauth', 'verify', 'react', 'node', 'python', 'flutter'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveCodeTab(tab)}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all cursor-pointer whitespace-nowrap ${
                   activeCodeTab === tab
                     ? 'bg-blue-600 text-white shadow-md'
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white'
                 }`}
               >
-                {tab === 'nextauth' ? 'NextAuth.js' : tab === 'react' ? 'React / Web SDK' : tab === 'node' ? 'Node.js Express' : tab === 'python' ? 'Python FastAPI' : 'Flutter Mobile'}
+                {tab === 'nextauth' ? 'NextAuth.js' : tab === 'verify' ? '180 Verify' : tab === 'react' ? 'React / Web SDK' : tab === 'node' ? 'Node.js Express' : tab === 'python' ? 'Python FastAPI' : 'Flutter Mobile'}
               </button>
             ))}
           </div>
@@ -227,7 +309,7 @@ export default function IdentityProductPage() {
               <span className="w-3 h-3 rounded-full bg-amber-500/80" />
               <span className="w-3 h-3 rounded-full bg-emerald-500/80" />
               <span className="ml-2 text-xs font-mono text-zinc-500">
-                {activeCodeTab === 'nextauth' ? 'pages/api/auth/[...nextauth].ts' : activeCodeTab === 'react' ? 'App.tsx' : activeCodeTab === 'node' ? 'authController.ts' : activeCodeTab === 'python' ? 'auth.py' : 'auth_service.dart'}
+                {activeCodeTab === 'nextauth' ? 'pages/api/auth/[...nextauth].ts' : activeCodeTab === 'verify' ? 'verify.ts (Client SDK)' : activeCodeTab === 'react' ? 'App.tsx' : activeCodeTab === 'node' ? 'authController.ts' : activeCodeTab === 'python' ? 'auth.py' : 'auth_service.dart'}
               </span>
             </div>
             <button
@@ -240,6 +322,23 @@ export default function IdentityProductPage() {
           </div>
 
           <pre className="text-xs sm:text-sm text-zinc-300 overflow-x-auto leading-relaxed font-mono">
+            {activeCodeTab === 'verify' && `// 180 Verify: Sovereign Document, Bank & Face Match Integration
+import { OneEightyVerify } from '@workspace/identity-sdk';
+
+export function runCitizenVerification() {
+  OneEightyVerify.launch({
+    clientId: 'YOUR_CLIENT_ID',
+    documents: ['PAN', 'DRIVING_LICENSE', 'BANK_ACCOUNT', 'FACE_MATCH'],
+    onSuccess: (response) => {
+      console.log('Verification Approved for:', response.profile.fullName);
+      console.log('DOB Verified:', response.profile.dob);
+      console.log('Face Match Confidence:', response.profile.faceMatchConfidence + '%');
+    },
+    onError: (err) => {
+      console.error('Verification failed:', err.message);
+    }
+  });
+}`}
             {activeCodeTab === 'nextauth' && `// NextAuth.js OIDC Configuration (RFC 6749 / OpenID Connect)
 import NextAuth from 'next-auth';
 

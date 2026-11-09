@@ -57,7 +57,7 @@ export function PayBottomNav() {
     },
   ];
 
-  const moreItems = [
+  const moreItems: { label: string; href: string; icon: any; badge?: string }[] = [
     { label: 'Coupons & Promos', href: `/apps/${projectId}/pay/coupons`, icon: Tag },
     { label: 'Payment Links', href: `/apps/${projectId}/pay/links`, icon: Link2 },
   ];

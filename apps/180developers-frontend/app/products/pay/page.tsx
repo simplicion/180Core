@@ -216,16 +216,14 @@ export default function PayProductPage() {
               )}
             </Button>
 
-            <a
-              href={getDocsUrl(DOCS_LINKS.PAY_QUICKSTART)}
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              href="/docs?section=pay-checkout"
               className="w-full sm:w-auto rounded-2xl px-5 py-3.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-semibold text-xs border border-zinc-200 dark:border-white/10 flex items-center justify-center gap-2 transition-all cursor-pointer"
             >
               <Code2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-              <span>API Reference</span>
-              <ExternalLink className="w-3.5 h-3.5 text-zinc-400" />
-            </a>
+              <span>Checkout Docs</span>
+              <ArrowRight className="w-3.5 h-3.5 text-zinc-400" />
+            </Link>
           </div>
         </div>
 
