@@ -84,6 +84,19 @@ export default function LivenessStep({ sessionId, token, onComplete, onFatal, on
     try {
       const res = await verifyApi.complete(sessionId, token, body);
       const status = String(res?.status || '').toUpperCase();
+      // Backend marks liveness/face failures retryable (final:false) until the last attempt.
+      if (status === 'REJECTED' && (res as any)?.final === false) {
+        pendingRef.current = null;
+        const left = (res as any)?.attemptsRemaining;
+        setNotice(
+          `${res?.error_message || 'We could not confirm your live face.'}` +
+            (typeof left === 'number' ? ` ${left} attempt${left === 1 ? '' : 's'} left.` : '') +
+            ' Find even lighting and follow each prompt.'
+        );
+        setChallenge(null);
+        setPhase('intro');
+        return;
+      }
       if (status === 'APPROVED' || status === 'MANUAL_REVIEW' || status === 'REJECTED') {
         pendingRef.current = null;
         onComplete({ ...res, status: status as CompleteResponse['status'] });
@@ -91,7 +104,7 @@ export default function LivenessStep({ sessionId, token, onComplete, onFatal, on
       }
       throw new VerifyApiError(422, res?.error_code || 'BAD_RESPONSE', res?.error_message || 'Unexpected response from the server.');
     } catch (err: any) {
-      if (err instanceof VerifyApiError && err.code === 'CHALLENGE_EXPIRED') {
+      if (err instanceof VerifyApiError && (err.code === 'CHALLENGE_EXPIRED' || err.code === 'CHALLENGE_INVALID')) {
         setNotice(ABORT_TEXT.EXPIRED);
         void fetchChallenge();
         return;

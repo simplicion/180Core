@@ -135,6 +135,17 @@ export default function VerifyClient() {
     void loadSession(sessionId, token);
   }, [loadSession]);
 
+  // Esc inside the iframe → ask the host to close the sheet (the parent page can't see this keypress).
+  useEffect(() => {
+    if (!embedded || !creds || !parentOrigin) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      postToParent(parentOrigin, { type: '180_VERIFY_CLOSE', sessionId: creds.sessionId });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [embedded, creds, parentOrigin]);
+
   // Session expiry while the user is mid-flow.
   useEffect(() => {
     const exp = toEpochMs(session?.expiresAt);

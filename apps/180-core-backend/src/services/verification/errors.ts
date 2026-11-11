@@ -52,6 +52,11 @@ export function isBiometricsUnavailable(err: any): boolean {
   return Boolean(err && (err.code === 'BIOMETRICS_ENGINE_UNAVAILABLE' || err.name === 'BiometricsUnavailableError'));
 }
 
+/** Engine rejected the request itself (bad / oversized image). Maps to 400 INVALID_IMAGE or 413 IMAGE_TOO_LARGE. */
+export function isBiometricsRequestError(err: any): boolean {
+  return Boolean(err && err.name === 'BiometricsRequestError' && typeof err.status === 'number');
+}
+
 export function sendError(res: Response, httpStatus: number, code: string, message: string, extra?: Record<string, unknown>): void {
   if (res.headersSent) return;
   res.status(httpStatus).json({ status: 'FAILED', error_code: code, error_message: message, ...(extra || {}) });
@@ -64,6 +69,17 @@ export function handleError(res: Response, err: any, context: string): void {
       console.warn(`[180Verify] ${context}: ${err.code} - ${err.message}`);
     }
     sendError(res, err.httpStatus, err.code, err.message, err.details);
+    return;
+  }
+  if (isBiometricsRequestError(err)) {
+    const tooLarge = err.status === 413;
+    sendError(
+      res,
+      tooLarge ? 413 : 400,
+      tooLarge ? 'IMAGE_TOO_LARGE' : 'INVALID_IMAGE',
+      tooLarge ? 'An image exceeds the size accepted by the biometrics engine.' : 'An image could not be processed. Please capture a clear JPEG/PNG photo and retry.',
+      { engine_code: err.code }
+    );
     return;
   }
   if (isBiometricsUnavailable(err)) {

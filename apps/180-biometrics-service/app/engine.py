@@ -263,7 +263,9 @@ class Engine:
                 yaw, _pitch, _ = estimate_pose(f.kps)
                 info["yaw"] = round(yaw, 1)
                 emb, aligned = self.recognizer.embed(img, f)
-                aligned_crops.append(cv2.cvtColor(aligned, cv2.COLOR_BGR2GRAY).astype(np.float32))
+                g = cv2.cvtColor(aligned, cv2.COLOR_BGR2GRAY).astype(np.float32)
+                g = cv2.GaussianBlur(g, (0, 0), 1.5)  # suppress JPEG/sensor noise + landmark jitter
+                aligned_crops.append(g - g.mean())  # ignore global exposure offsets
                 if first_emb is None and idx == 0:
                     first_emb = emb
                 if first_emb is not None:
@@ -303,15 +305,19 @@ class Engine:
             frame_ok.append(ok)
 
         # Pixel-level replay check on aligned crops (catches the same photo
-        # re-encoded / resized, which defeats the byte hash).
+        # re-encoded / resized, which defeats the byte hash). This only stops
+        # naive digital replays; an attacker injecting perturbed frames can
+        # defeat it -- that is the anti-spoof model's / capture SDK's job.
         replay = False
         valid = [(i, c) for i, c in enumerate(aligned_crops) if c is not None]
         for (i, a), (j, b) in itertools.combinations(valid, 2):
-            diff = float(np.mean(np.abs(a - b)))
+            # p99 rather than mean: a genuine blink/smile changes a small region
+            # strongly, while a re-encoded still differs only slightly everywhere.
+            diff = float(np.percentile(np.abs(a - b), 99))
             if diff < s.liveness_min_frame_diff:
                 replay = True
                 reasons.append(
-                    f"REPLAY_DETECTED: frames {i} and {j} are pixel-identical (static image)"
+                    f"REPLAY_DETECTED: frames {i} and {j} are near-identical (static image replay)"
                 )
         if replay:
             frame_ok = [False] * len(frame_ok)

@@ -6,8 +6,8 @@
  *
  * Result signature: JWS compact, RS256 with the platform's OIDC signing key (RsaKeysService, published
  * at /.well-known/jwks.json, header `kid`), so relying parties can verify results with the same JWKS
- * they already use for 180 ID tokens. If the RSA key cannot be loaded, falls back to HS256 with
- * VERIFY_SESSION_SECRET (kid 'verify-hs256') and logs a warning.
+ * they already use for 180 ID tokens. Claims: sessionId, clientId, status, error_code?, verifiedProfile,
+ * environment, iss='180-verify', aud=<clientId>, iat, exp (30 days). There is no HMAC fallback.
  */
 
 import jwt from 'jsonwebtoken';
@@ -42,7 +42,6 @@ export function verifySessionToken(token: string): { sid: string; jti: string } 
 }
 
 interface SigningKey {
-  alg: 'RS256' | 'HS256';
   kid: string;
   key: string;
   verifyKey: string;
@@ -50,36 +49,44 @@ interface SigningKey {
 
 let cachedKey: SigningKey | null = null;
 
+/** Platform RSA key (same key published at /.well-known/jwks.json). No HMAC fallback for results. */
 function signingKey(): SigningKey {
   if (cachedKey) return cachedKey;
+  let svc: any;
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const idp = require('@workspace/identity-provider');
-    const svc = idp.RsaKeysService;
-    const priv = svc.getPrivateKey();
-    const pub = svc.getPublicKey();
-    if (priv && pub) {
-      cachedKey = { alg: 'RS256', kid: svc.getKeyId(), key: priv, verifyKey: pub };
-      return cachedKey;
-    }
+    svc = require('@workspace/identity-provider').RsaKeysService;
   } catch (err: any) {
-    console.warn(`[180Verify] RSA signing key unavailable (${err?.message}); falling back to HS256 result signatures.`);
+    console.error(`[180Verify] RSA signing key unavailable: ${err?.message}`);
   }
-  const secret = getSessionSecret();
-  if (!secret) throw new VerifyError(503, 'VERIFY_MODULE_MISCONFIGURED', 'No signing key available for verification results.');
-  cachedKey = { alg: 'HS256', kid: 'verify-hs256', key: secret, verifyKey: secret };
+  const priv = svc?.getPrivateKey?.();
+  const pub = svc?.getPublicKey?.();
+  if (!priv || !pub) {
+    throw new VerifyError(503, 'VERIFY_MODULE_MISCONFIGURED', 'The platform signing key (JWKS) is not available; results cannot be signed.');
+  }
+  cachedKey = { kid: svc.getKeyId(), key: priv, verifyKey: pub };
   return cachedKey;
 }
 
-/** Signs the exact payload object (no added claims) as a JWS compact string. */
-export function signResult(payload: Record<string, unknown>): string {
+export const RESULT_ISSUER = '180-verify';
+export const RESULT_TTL_SECONDS = 30 * 24 * 60 * 60;
+
+/**
+ * Signs a verification result as an RS256 compact JWS (header kid = platform JWKS key id).
+ * The payload is signed exactly as given plus iss / aud (= clientId) / iat / exp, and the full claim
+ * set is returned so callers can expose the identical object next to the signature.
+ */
+export function signResult(payload: Record<string, unknown>, clientId: string): { jws: string; claims: Record<string, unknown> } {
   const k = signingKey();
-  return jwt.sign(payload, k.key, { algorithm: k.alg, keyid: k.kid, noTimestamp: true, header: { alg: k.alg, kid: k.kid, typ: '180-verify-result+jwt' } as any });
+  const iat = Math.floor(Date.now() / 1000);
+  const claims = { ...payload, iss: RESULT_ISSUER, aud: clientId, iat, exp: iat + RESULT_TTL_SECONDS };
+  const jws = jwt.sign(claims, k.key, { algorithm: 'RS256', keyid: k.kid, header: { alg: 'RS256', kid: k.kid, typ: 'JWT' } as any });
+  return { jws, claims };
 }
 
-export function verifyResultSignature(jws: string): Record<string, unknown> {
+export function verifyResultSignature(jws: string, clientId?: string): Record<string, unknown> {
   const k = signingKey();
-  return jwt.verify(jws, k.verifyKey, { algorithms: [k.alg] }) as Record<string, unknown>;
+  return jwt.verify(jws, k.verifyKey, { algorithms: ['RS256'], issuer: RESULT_ISSUER, ...(clientId ? { audience: clientId } : {}) }) as Record<string, unknown>;
 }
 
 /** Test hook. */

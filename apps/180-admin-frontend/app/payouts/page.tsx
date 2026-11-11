@@ -19,6 +19,12 @@ import {
   Check,
   Building2,
   Wallet,
+  Copy,
+  QrCode,
+  CreditCard,
+  User,
+  Zap,
+  ShieldCheck,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { adminApi, exportToCsv } from '@/lib/api';
@@ -37,6 +43,206 @@ export default function PayoutsSettlementDeskPage() {
   const [adminNotes, setAdminNotes] = useState('');
   const [rejectReason, setRejectReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const copyText = (text: string, fieldId: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedField(fieldId);
+    toast.success('Copied to clipboard');
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const getPayoutBeneficiary = (p: any) => {
+    if (!p) {
+      return {
+        isUpi: false,
+        method: 'BANK_TRANSFER',
+        methodLabel: 'Bank Transfer',
+        holderName: '',
+        upiId: '',
+        bankName: '',
+        accountNumber: '',
+        ifscCode: '',
+      };
+    }
+    const isUpi = p.payoutMethod === 'UPI' || Boolean(p.accountDetails?.upiId);
+    const upiId = p.accountDetails?.upiId || p.upiId || p.app?.bankDetails?.upiId || '';
+    const holderName =
+      p.accountDetails?.accountHolderName ||
+      p.accountHolderName ||
+      p.app?.bankDetails?.accountHolderName ||
+      p.app?.user?.name ||
+      p.developerName ||
+      '';
+    const accountNumber =
+      p.accountDetails?.accountNumber ||
+      p.accountNumber ||
+      p.app?.bankDetails?.accountNumber ||
+      '';
+    const ifscCode =
+      p.accountDetails?.ifscCode ||
+      p.ifscCode ||
+      p.app?.bankDetails?.ifscCode ||
+      '';
+    const bankName =
+      p.accountDetails?.bankName ||
+      p.bankName ||
+      p.app?.bankDetails?.bankName ||
+      (accountNumber ? 'Direct Bank' : '');
+
+    return {
+      isUpi,
+      method: isUpi ? 'UPI' : 'BANK_TRANSFER',
+      methodLabel: isUpi ? 'Instant UPI' : 'Bank Transfer (NEFT/IMPS)',
+      holderName,
+      upiId,
+      bankName,
+      accountNumber,
+      ifscCode,
+    };
+  };
+
+  const renderBeneficiaryCard = (p: any, prefix: string = 'modal') => {
+    const b = getPayoutBeneficiary(p);
+    const devName = p.app?.user?.name || p.developer?.name || p.developerName || 'Developer';
+    const appName = p.app?.name || p.appName || '180 Pay App';
+    const devEmail = p.app?.user?.email || p.developer?.email || '';
+
+    return (
+      <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.03] border border-zinc-200/80 dark:border-white/10 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">Withdrawal Amount</span>
+            <div className="text-2xl font-black font-mono text-zinc-900 dark:text-white">
+              {formatMoney(p.amount, p.currency || 'INR')}
+            </div>
+          </div>
+          <div
+            className={`px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 ${
+              b.isUpi
+                ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20'
+                : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
+            }`}
+          >
+            {b.isUpi ? <QrCode className="h-3.5 w-3.5" /> : <Building2 className="h-3.5 w-3.5" />}
+            <span>{b.methodLabel}</span>
+          </div>
+        </div>
+
+        {/* Detailed Beneficiary Information Box */}
+        <div className="p-3.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200/70 dark:border-white/5 space-y-2 text-xs">
+          <div className="flex items-center justify-between pb-2 border-b border-zinc-100 dark:border-white/5">
+            <span className="text-[11px] font-semibold text-zinc-500">Receiver / Account Holder:</span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-zinc-900 dark:text-white">
+                {b.holderName || devName}
+              </span>
+              {(b.holderName || devName) && (
+                <button
+                  type="button"
+                  onClick={() => copyText(b.holderName || devName, `${prefix}-name`)}
+                  className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+                  title="Copy Legal Name"
+                >
+                  {copiedField === `${prefix}-name` ? (
+                    <Check className="w-3 h-3 text-emerald-500" />
+                  ) : (
+                    <Copy className="w-3 h-3" />
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {b.isUpi ? (
+            <div className="flex items-center justify-between py-0.5">
+              <span className="text-[11px] font-semibold text-zinc-500">Settlement UPI ID (VPA):</span>
+              <div className="flex items-center gap-1.5">
+                <span className="font-mono font-bold text-xs text-purple-600 dark:text-purple-400">
+                  {b.upiId || '—'}
+                </span>
+                {b.upiId && (
+                  <button
+                    type="button"
+                    onClick={() => copyText(b.upiId, `${prefix}-upi`)}
+                    className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+                    title="Copy UPI ID"
+                  >
+                    {copiedField === `${prefix}-upi` ? (
+                      <Check className="w-3 h-3 text-emerald-500" />
+                    ) : (
+                      <Copy className="w-3 h-3" />
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between py-0.5">
+                <span className="text-[11px] font-semibold text-zinc-500">Bank Name:</span>
+                <span className="font-medium text-zinc-800 dark:text-zinc-200">
+                  {b.bankName || 'Direct Clearing Bank'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between py-0.5">
+                <span className="text-[11px] font-semibold text-zinc-500">Bank Account Number:</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono font-bold text-xs text-zinc-900 dark:text-white">
+                    {b.accountNumber || '—'}
+                  </span>
+                  {b.accountNumber && (
+                    <button
+                      type="button"
+                      onClick={() => copyText(b.accountNumber, `${prefix}-acc`)}
+                      className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+                      title="Copy Account Number"
+                    >
+                      {copiedField === `${prefix}-acc` ? (
+                        <Check className="w-3 h-3 text-emerald-500" />
+                      ) : (
+                        <Copy className="w-3 h-3" />
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-between py-0.5">
+                <span className="text-[11px] font-semibold text-zinc-500">IFSC Code:</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono font-bold text-xs uppercase text-zinc-900 dark:text-white">
+                    {b.ifscCode || '—'}
+                  </span>
+                  {b.ifscCode && (
+                    <button
+                      type="button"
+                      onClick={() => copyText(b.ifscCode, `${prefix}-ifsc`)}
+                      className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+                      title="Copy IFSC Code"
+                    >
+                      {copiedField === `${prefix}-ifsc` ? (
+                        <Check className="w-3 h-3 text-emerald-500" />
+                      ) : (
+                        <Copy className="w-3 h-3" />
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="pt-2 border-t border-zinc-100 dark:border-white/5 flex items-center justify-between text-[11px] text-zinc-500">
+            <span>Developer / App:</span>
+            <span className="text-zinc-700 dark:text-zinc-300 font-medium truncate max-w-[240px]">
+              {devName} ({appName}) {devEmail ? `• ${devEmail}` : ''}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   useEffect(() => {
     loadPayouts();
@@ -139,19 +345,28 @@ export default function PayoutsSettlementDeskPage() {
   const filteredPayouts = payouts.filter((p) => {
     if (!search) return true;
     const term = search.toLowerCase();
+    const b = getPayoutBeneficiary(p);
     const devName = (p.app?.user?.name || p.developer?.name || p.developerName || '').toLowerCase();
+    const devEmail = (p.app?.user?.email || p.developer?.email || '').toLowerCase();
     const appName = (p.app?.name || p.appName || '').toLowerCase();
     const id = (p.id || '').toLowerCase();
     const utr = (p.transactionRef || p.utrReference || '').toLowerCase();
-    const upi = (p.accountDetails?.upiId || p.upiId || '').toLowerCase();
-    const acc = (p.accountDetails?.accountNumber || p.accountNumber || '').toLowerCase();
+    const upi = (b.upiId || '').toLowerCase();
+    const acc = (b.accountNumber || '').toLowerCase();
+    const holder = (b.holderName || '').toLowerCase();
+    const ifsc = (b.ifscCode || '').toLowerCase();
+    const bank = (b.bankName || '').toLowerCase();
     return (
       devName.includes(term) ||
+      devEmail.includes(term) ||
       appName.includes(term) ||
       id.includes(term) ||
       utr.includes(term) ||
       upi.includes(term) ||
-      acc.includes(term)
+      acc.includes(term) ||
+      holder.includes(term) ||
+      ifsc.includes(term) ||
+      bank.includes(term)
     );
   });
 
@@ -168,30 +383,29 @@ export default function PayoutsSettlementDeskPage() {
       toast.error('No payouts to export');
       return;
     }
-    const rows = filteredPayouts.map((p) => ({
-      PayoutID: p.id,
-      DeveloperName: p.app?.user?.name || p.developer?.name || p.developerName || 'Unknown',
-      DeveloperEmail: p.app?.user?.email || p.developer?.email || '',
-      AppName: p.app?.name || p.appName || '',
-      Currency: p.currency || 'INR',
-      Amount: (p.amount || 0).toFixed(2),
-      Status: p.status,
-      PayoutMethod: p.payoutMethod || 'UPI',
-      BankOrUPI:
-        p.payoutMethod === 'UPI'
-          ? p.accountDetails?.upiId || p.upiId || '—'
-          : p.accountDetails?.bankName || p.bankName || 'Bank Transfer',
-      AccountNumberOrVPA:
-        p.accountDetails?.upiId ||
-        p.upiId ||
-        p.accountDetails?.accountNumber ||
-        p.accountNumber ||
-        '•••• ' + (p.accountLast4 || '8910'),
-      BankReferenceUTR: p.transactionRef || p.utrReference || '',
-      AdminNotes: p.adminNote || p.adminNotes || '',
-      RequestedAt: new Date(p.requestedAt || p.createdAt).toLocaleString(),
-      ProcessedAt: p.processedAt ? new Date(p.processedAt).toLocaleString() : '',
-    }));
+    const rows = filteredPayouts.map((p) => {
+      const b = getPayoutBeneficiary(p);
+      return {
+        PayoutID: p.id,
+        DeveloperName: p.app?.user?.name || p.developer?.name || p.developerName || 'Unknown',
+        DeveloperEmail: p.app?.user?.email || p.developer?.email || '',
+        AppName: p.app?.name || p.appName || '',
+        Currency: p.currency || 'INR',
+        Amount: (p.amount || 0).toFixed(2),
+        Status: p.status,
+        PayoutMethod: b.method,
+        ReceiverLegalName: b.holderName,
+        SettlementDestination: b.isUpi ? `UPI: ${b.upiId}` : `A/C: ${b.accountNumber}`,
+        BankName: b.bankName,
+        AccountNumber: b.accountNumber,
+        IFSCCode: b.ifscCode,
+        UPIId: b.upiId,
+        BankReferenceUTR: p.transactionRef || p.utrReference || '',
+        AdminNotes: p.adminNote || p.adminNotes || '',
+        RequestedAt: new Date(p.requestedAt || p.createdAt).toLocaleString(),
+        ProcessedAt: p.processedAt ? new Date(p.processedAt).toLocaleString() : '',
+      };
+    });
     exportToCsv('180_payout_settlement_ledger', rows);
     toast.success(`Exported ${filteredPayouts.length} payout records to CSV`);
   };
@@ -339,7 +553,7 @@ export default function PayoutsSettlementDeskPage() {
                   <th className="py-3.5 px-6 font-medium">Developer & App</th>
                   <th className="py-3.5 px-4 font-medium">Requested Amount</th>
                   <th className="py-3.5 px-4 font-medium">Wallet Balance</th>
-                  <th className="py-3.5 px-4 font-medium">Beneficiary / Bank</th>
+                  <th className="py-3.5 px-4 font-medium">Beneficiary Settlement Details</th>
                   <th className="py-3.5 px-4 font-medium">Status</th>
                   <th className="py-3.5 px-4 font-medium">Timestamp</th>
                   <th className="py-3.5 px-6 font-medium text-right">Admin Actions</th>
@@ -384,13 +598,81 @@ export default function PayoutsSettlementDeskPage() {
                         {formatMoney(walletBal, payout.app?.wallet?.currency || payout.currency || 'INR')}
                       </td>
                       <td className="py-3.5 px-4 font-sans text-zinc-700 dark:text-zinc-300">
-                        <div className="flex items-center gap-1.5 font-medium">
-                          <Landmark className="h-3.5 w-3.5 text-zinc-400" />
-                          <span>{beneficiaryPrimary}</span>
-                        </div>
-                        <div className="text-[10px] text-zinc-500 font-mono">
-                          {beneficiarySecondary}
-                        </div>
+                        {(() => {
+                          const b = getPayoutBeneficiary(payout);
+                          return (
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                                    b.isUpi
+                                      ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20'
+                                      : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
+                                  }`}
+                                >
+                                  {b.isUpi ? 'UPI' : 'BANK'}
+                                </span>
+                                <span
+                                  className="font-semibold text-xs text-zinc-900 dark:text-white truncate max-w-[170px]"
+                                  title={b.holderName || devName}
+                                >
+                                  {b.holderName || devName}
+                                </span>
+                              </div>
+
+                              <div className="text-[11px] font-mono text-zinc-600 dark:text-zinc-400">
+                                {b.isUpi ? (
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-purple-600 dark:text-purple-400 font-medium">VPA:</span>
+                                    <span className="truncate max-w-[140px] text-zinc-800 dark:text-zinc-200 font-semibold">{b.upiId || '—'}</span>
+                                    {b.upiId && (
+                                      <button
+                                        type="button"
+                                        onClick={() => copyText(b.upiId, `tbl-${payout.id}`)}
+                                        className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+                                        title="Copy UPI ID"
+                                      >
+                                        {copiedField === `tbl-${payout.id}` ? (
+                                          <Check className="w-2.5 h-2.5 text-emerald-500" />
+                                        ) : (
+                                          <Copy className="w-2.5 h-2.5" />
+                                        )}
+                                      </button>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-col text-[11px] text-zinc-500 font-mono">
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-zinc-700 dark:text-zinc-300 font-sans font-medium">{b.bankName || 'Bank'}:</span>
+                                      <span className="text-zinc-900 dark:text-white font-semibold">
+                                        {b.accountNumber ? `•••• ${b.accountNumber.slice(-4)}` : '—'}
+                                      </span>
+                                      {b.accountNumber && (
+                                        <button
+                                          type="button"
+                                          onClick={() => copyText(b.accountNumber, `tbl-${payout.id}`)}
+                                          className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+                                          title="Copy Full Account Number"
+                                        >
+                                          {copiedField === `tbl-${payout.id}` ? (
+                                            <Check className="w-2.5 h-2.5 text-emerald-500" />
+                                          ) : (
+                                            <Copy className="w-2.5 h-2.5" />
+                                          )}
+                                        </button>
+                                      )}
+                                    </div>
+                                    {b.ifscCode && (
+                                      <div className="text-[10px] text-zinc-400 font-mono">
+                                        IFSC: <span className="uppercase text-zinc-600 dark:text-zinc-300 font-semibold">{b.ifscCode}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="py-3.5 px-4 font-sans">
                         <span
@@ -525,23 +807,7 @@ export default function PayoutsSettlementDeskPage() {
             </div>
 
             <div className="space-y-4 text-xs">
-              <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.03] border border-zinc-100 dark:border-white/5 space-y-1">
-                <div className="text-zinc-500">Amount Requested</div>
-                <div className="text-2xl font-black font-mono text-zinc-900 dark:text-white">
-                  {formatMoney(selectedPayout.amount, selectedPayout.currency || 'INR')}
-                </div>
-                <div className="text-[11px] text-zinc-500 flex flex-col gap-0.5 mt-1">
-                  <div>Developer: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{selectedPayout.app?.user?.name || selectedPayout.developerName}</span> ({selectedPayout.app?.name || 'App'})</div>
-                  <div>
-                    Beneficiary:{' '}
-                    <span className="font-mono text-zinc-800 dark:text-zinc-200">
-                      {selectedPayout.payoutMethod === 'UPI' || selectedPayout.accountDetails?.upiId
-                        ? `UPI VPA: ${selectedPayout.accountDetails?.upiId || selectedPayout.upiId || '—'}`
-                        : `A/C: ${selectedPayout.accountDetails?.accountNumber || selectedPayout.accountNumber || '—'} (${selectedPayout.accountDetails?.bankName || 'Bank'})`}
-                    </span>
-                  </div>
-                </div>
-              </div>
+              {renderBeneficiaryCard(selectedPayout, 'approve')}
 
               <div>
                 <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
@@ -598,23 +864,7 @@ export default function PayoutsSettlementDeskPage() {
             </div>
 
             <div className="space-y-4 text-xs">
-              <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.03] border border-zinc-100 dark:border-white/5 space-y-1">
-                <div className="text-zinc-500">Settlement Amount</div>
-                <div className="text-2xl font-black font-mono text-zinc-900 dark:text-white">
-                  {formatMoney(selectedPayout.amount, selectedPayout.currency || 'INR')}
-                </div>
-                <div className="text-[11px] text-zinc-500 flex flex-col gap-0.5 mt-1">
-                  <div>Developer: <span className="font-semibold text-zinc-800 dark:text-zinc-200">{selectedPayout.app?.user?.name || selectedPayout.developerName}</span> ({selectedPayout.app?.name || 'App'})</div>
-                  <div>
-                    Target Beneficiary:{' '}
-                    <span className="font-mono text-zinc-800 dark:text-zinc-200">
-                      {selectedPayout.payoutMethod === 'UPI' || selectedPayout.accountDetails?.upiId
-                        ? `UPI VPA: ${selectedPayout.accountDetails?.upiId || selectedPayout.upiId || '—'}`
-                        : `${selectedPayout.accountDetails?.bankName || 'Bank Transfer'} (A/C: ${selectedPayout.accountDetails?.accountNumber || selectedPayout.accountNumber || '—'})`}
-                    </span>
-                  </div>
-                </div>
-              </div>
+              {renderBeneficiaryCard(selectedPayout, 'settle')}
 
               <div>
                 <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
@@ -696,6 +946,8 @@ export default function PayoutsSettlementDeskPage() {
             </div>
 
             <div className="space-y-4 text-xs">
+              {renderBeneficiaryCard(selectedPayout, 'reject')}
+
               <div>
                 <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
                   Reason for Rejection *

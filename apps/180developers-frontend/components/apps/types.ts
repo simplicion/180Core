@@ -122,11 +122,13 @@ export interface PaymentAnalyticsData {
 }
 
 export interface BankDetailsData {
+  settlementMethod?: 'UPI' | 'BANK_TRANSFER';
   accountHolderName?: string;
   accountNumber?: string;
   ifscCode?: string;
   bankName?: string;
   upiId?: string;
+  updatedAt?: string;
 }
 
 export interface PayoutRecord {

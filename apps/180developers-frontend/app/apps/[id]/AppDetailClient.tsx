@@ -305,9 +305,10 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
       setShowBankModal(true);
       return;
     }
-    if (bankDetails.upiId) {
+    if (bankDetails.settlementMethod === 'UPI' || (bankDetails.upiId && !bankDetails.accountNumber)) {
       setPayoutMethod('UPI');
-      setUpiId(bankDetails.upiId);
+      setUpiId(bankDetails.upiId || '');
+      setBankHolder(bankDetails.accountHolderName || '');
     } else {
       setPayoutMethod('BANK_TRANSFER');
       setBankHolder(bankDetails.accountHolderName || '');

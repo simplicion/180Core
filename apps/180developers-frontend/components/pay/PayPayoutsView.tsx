@@ -60,6 +60,7 @@ export function PayPayoutsView() {
   const [bankAccNumber, setBankAccNumber] = useState('');
   const [bankIfsc, setBankIfsc] = useState('');
   const [bankHolder, setBankHolder] = useState('');
+  const [bankName, setBankName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSimulator, setShowSimulator] = useState(false);
   const [simulatorAmount, setSimulatorAmount] = useState('1000');
@@ -96,7 +97,15 @@ export function PayPayoutsView() {
   // Sync bank details to payout request modal when available
   useEffect(() => {
     if (bankDetails) {
+      if (bankDetails.settlementMethod) {
+        setPayoutMethod(bankDetails.settlementMethod);
+      } else if (bankDetails.upiId && !bankDetails.accountNumber) {
+        setPayoutMethod('UPI');
+      } else if (bankDetails.accountNumber) {
+        setPayoutMethod('BANK_TRANSFER');
+      }
       if (bankDetails.accountHolderName && !bankHolder) setBankHolder(bankDetails.accountHolderName);
+      if (bankDetails.bankName && !bankName) setBankName(bankDetails.bankName);
       if (bankDetails.accountNumber && !bankAccNumber) setBankAccNumber(bankDetails.accountNumber);
       if (bankDetails.ifscCode && !bankIfsc) setBankIfsc(bankDetails.ifscCode);
       if (bankDetails.upiId && !upiId) setUpiId(bankDetails.upiId);
@@ -235,11 +244,17 @@ export function PayPayoutsView() {
           payoutMethod,
           accountDetails:
             payoutMethod === 'UPI'
-              ? { upiId: upiId.trim() }
+              ? {
+                  settlementMethod: 'UPI',
+                  upiId: upiId.trim(),
+                  accountHolderName: (bankHolder || userProfile?.name || '').trim(),
+                }
               : {
+                  settlementMethod: 'BANK_TRANSFER',
                   accountNumber: bankAccNumber.trim(),
                   ifscCode: bankIfsc.trim().toUpperCase(),
                   accountHolderName: bankHolder.trim(),
+                  bankName: bankName.trim(),
                 },
         }),
       });
@@ -572,24 +587,65 @@ export function PayPayoutsView() {
               </div>
 
               {payoutMethod === 'UPI' ? (
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                    VPA / UPI ID
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={upiId}
-                    onChange={(e) => setUpiId(e.target.value)}
-                    placeholder="e.g. merchant@okaxis"
-                    className="w-full px-3.5 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs font-mono text-zinc-900 dark:text-white focus:outline-none focus:border-purple-500"
-                  />
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center justify-between">
+                      <span>Receiver Legal Name</span>
+                      <span className="text-[10px] text-zinc-400 font-normal">Matches Bank ID / KYC</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={bankHolder}
+                      onChange={(e) => setBankHolder(e.target.value)}
+                      placeholder="e.g. Acme Tech Private Limited or Rahul Sharma"
+                      className="w-full px-3.5 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                      Primary Settlement UPI ID (VPA)
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={upiId}
+                      onChange={(e) => setUpiId(e.target.value)}
+                      placeholder="e.g. merchant@okaxis"
+                      className="w-full px-3.5 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs font-mono text-zinc-900 dark:text-white focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-2">
                   <div className="space-y-1">
                     <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                      Account Number
+                      Account Holder Legal Name
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={bankHolder}
+                      onChange={(e) => setBankHolder(e.target.value)}
+                      placeholder="e.g. Acme Technologies Pvt Ltd"
+                      className="w-full px-3.5 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                      Bank Name
+                    </label>
+                    <input
+                      type="text"
+                      value={bankName}
+                      onChange={(e) => setBankName(e.target.value)}
+                      placeholder="e.g. HDFC Bank, ICICI Bank, SBI"
+                      className="w-full px-3.5 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                      Bank Account Number
                     </label>
                     <input
                       type="text"
@@ -608,22 +664,10 @@ export function PayPayoutsView() {
                       type="text"
                       required
                       value={bankIfsc}
-                      onChange={(e) => setBankIfsc(e.target.value)}
+                      maxLength={11}
+                      onChange={(e) => setBankIfsc(e.target.value.toUpperCase())}
                       placeholder="e.g. HDFC0001234"
                       className="w-full px-3.5 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs font-mono text-zinc-900 dark:text-white focus:outline-none focus:border-purple-500 uppercase"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                      Account Holder Name
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={bankHolder}
-                      onChange={(e) => setBankHolder(e.target.value)}
-                      placeholder="e.g. Acme Technologies Pvt Ltd"
-                      className="w-full px-3.5 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-purple-500"
                     />
                   </div>
                 </div>
@@ -1354,12 +1398,16 @@ export function PayPayoutsView() {
                       {filteredPayouts.map((p: any) => {
                         const isPaid = p.status === 'PAID' || p.status === 'COMPLETED';
                         const isRejected = p.status === 'REJECTED';
-                        const method = p.payoutMethod || p.method || 'UPI';
-                        const dest =
-                          p.accountDetails?.upiId ||
-                          (p.accountDetails?.accountNumber
-                            ? `A/C ending ${p.accountDetails.accountNumber.slice(-4)}`
-                            : p.destination || method);
+                        const isUpi = p.payoutMethod === 'UPI' || Boolean(p.accountDetails?.upiId);
+                        const method = isUpi ? 'UPI' : 'Bank Transfer';
+                        const holderName = p.accountDetails?.accountHolderName || '';
+                        const bankTitle = p.accountDetails?.bankName || '';
+                        const ifsc = p.accountDetails?.ifscCode || '';
+                        const dest = isUpi
+                          ? `VPA: ${p.accountDetails?.upiId || p.upiId || '—'}`
+                          : p.accountDetails?.accountNumber
+                          ? `${bankTitle ? `${bankTitle} • ` : ''}A/C: •••• ${p.accountDetails.accountNumber.slice(-4)}${ifsc ? ` (${ifsc})` : ''}`
+                          : p.destination || method;
 
                         return (
                           <tr
@@ -1388,8 +1436,21 @@ export function PayPayoutsView() {
                               })}
                             </td>
                             <td className="px-4 py-3 text-zinc-600 dark:text-zinc-300 font-sans">
-                              <span className="font-semibold">{method}:</span>{' '}
-                              <span className="text-zinc-500 font-mono text-[11px]">{dest}</span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                  isUpi
+                                    ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
+                                    : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                                }`}>
+                                  {isUpi ? 'UPI' : 'BANK'}
+                                </span>
+                                <span className="font-mono text-zinc-800 dark:text-zinc-200 text-xs font-medium">{dest}</span>
+                              </div>
+                              {holderName && (
+                                <div className="text-[10px] text-zinc-500 mt-0.5">
+                                  Beneficiary: <span className="font-semibold text-zinc-700 dark:text-zinc-300">{holderName}</span>
+                                </div>
+                              )}
                             </td>
                             <td className="px-4 py-3">
                               <span

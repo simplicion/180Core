@@ -66,10 +66,13 @@ class Settings:
     liveness_frontal_max_yaw: float = field(
         default_factory=lambda: _f("LIVENESS_FRONTAL_MAX_YAW", 12.0)
     )
-    # Mean absolute difference (0-255 scale) between two aligned 112x112 crops below
-    # which the frames are considered a replay of the same still image.
+    # Replay metric: 99th percentile of |a - b| (0-255 grey levels) between two
+    # aligned 112x112 crops after Gaussian blur (sigma 1.5) and mean-centering.
+    # Measured: the same still re-encoded/rescaled -> 1.4 .. 14; a synthetic blink
+    # -> ~69; an exposure change + sensor noise on one still -> ~8.5. Frames whose
+    # metric is below this value are treated as the same static image.
     liveness_min_frame_diff: float = field(
-        default_factory=lambda: _f("LIVENESS_MIN_FRAME_DIFF", 2.0)
+        default_factory=lambda: _f("LIVENESS_MIN_FRAME_DIFF", 12.0)
     )
     antispoof_threshold: float = field(default_factory=lambda: _f("ANTISPOOF_THRESHOLD", 0.50))
     antispoof_enabled: bool = field(

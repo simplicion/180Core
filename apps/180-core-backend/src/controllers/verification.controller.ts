@@ -1,10 +1,13 @@
 /**
- * 180 Identity - Verification Controller
+ * 180 Identity - Verification Controller ("180 Verify")
  * Location: apps/180-core-backend/src/controllers/verification.controller.ts
  *
- * Exposes turnkey REST APIs for PAN, Driving License, Vehicle RC, GSTIN, Voter ID,
- * Bank Account / UPI Penny Drop, AI Face Match, and Full KYC Orchestration with
- * strict multi-attribute cross-document verification (Name, DOB, Father's Name, Gender).
+ * Two surfaces:
+ *  1. Resident session API (/session/...) used by the 180 Profile /verify page and the identity SDK.
+ *  2. Standalone B2B endpoints (/pan, /dl, /rc, /gstin, /voter, /bank, /upi, /biometrics/*, /full-kyc),
+ *     authenticated with developer client credentials.
+ * Errors use the uniform envelope { status:'FAILED', error_code, error_message }.
+ * Nothing in this file logs request bodies or identifiers.
  */
 
 import { Request, Response } from 'express';
@@ -12,589 +15,469 @@ import apiSetuService from '../services/apisetu.service';
 import razorpayVerificationService from '../services/razorpay-verification.service';
 import NameMatcherService from '../services/name-matcher.service';
 import CrossDocumentValidatorService, { DocumentRecord } from '../services/cross-document-validator.service';
-import BiometricsService from '../services/biometrics.service';
+import { biometrics, LivenessStep } from '../services/verification/biometrics-port';
+import { getEnvironment, MAX_LIVENESS_FRAMES } from '../services/verification/config';
+import { VerifyError, handleError } from '../services/verification/errors';
+import { aadhaarLast4, maskAadhaar, maskName } from '../services/verification/pii';
+import { sessionStore } from '../services/verification/session-store';
+import VerificationSessionService, { assertImage } from '../services/verification/session.service';
+import { validateAadhaar } from '../services/verification/validators';
+import {
+  VerifyApp,
+  authenticateClient,
+  findApp,
+  isOriginRegistered,
+  isRedirectUriRegistered,
+  parseBasicAuth,
+  sandboxDemoApp,
+} from '../middleware/verification-auth.middleware';
 
-// In-memory verification sessions store (survives active bottom sheet life-cycle)
-const verificationSessions = new Map<string, any>();
+const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+
+function nameCmp(declared?: string, registry?: string) {
+  if (!declared || !registry) return null;
+  const c = NameMatcherService.compare(declared, registry);
+  return { score: c.score, passed: c.isMatch, confidence: c.confidence };
+}
+
+function dobCmp(declared?: string, registry?: string): boolean | null {
+  if (!declared || !registry) return null;
+  const a = CrossDocumentValidatorService.normalizeDob(declared);
+  const b = CrossDocumentValidatorService.normalizeDob(registry);
+  return a && b ? CrossDocumentValidatorService.compareDobs(a, b).isMatch : null;
+}
+
+function fatherCmp(declared?: string, registry?: string) {
+  if (!declared || !registry) return null;
+  return nameCmp(
+    CrossDocumentValidatorService.normalizeFatherOrGuardianName(declared),
+    CrossDocumentValidatorService.normalizeFatherOrGuardianName(registry)
+  );
+}
+
+/** Strips raw registry attributes from a record and replaces them with masked values. */
+function publicRecord(rec: any) {
+  const { name, dob, fatherName, ownerName, legalName, registeredName, customerName, validationId, ...rest } = rec;
+  return {
+    ...rest,
+    ...(name !== undefined ? { nameMasked: maskName(name) } : {}),
+    ...(fatherName !== undefined ? { fatherNameMasked: maskName(fatherName) } : {}),
+    ...(ownerName !== undefined ? { ownerNameMasked: maskName(ownerName) } : {}),
+    ...(registeredName !== undefined ? { registeredNameMasked: maskName(registeredName) } : {}),
+    ...(customerName !== undefined ? { customerNameMasked: maskName(customerName) } : {}),
+    ...(legalName !== undefined ? { legalName } : {}), // GSTIN legal names are public business data
+    ...(dob !== undefined ? { dobAvailable: true } : {}),
+  };
+}
+
+function ok(res: Response, data: any): void {
+  res.json({ status: 'SUCCESS', environment: getEnvironment(), data });
+}
 
 export class VerificationController {
-  /**
-   * 1. PAN Card Verification
-   * POST /api/v1/identity/verify/pan
-   */
-  public static async verifyPan(req: Request, res: Response): Promise<void> {
-    try {
-      const { panNumber, name, dob, fatherName } = req.body;
-      if (!panNumber) {
-        res.status(400).json({ error: 'PAN number is required' });
-        return;
-      }
-
-      const result = await apiSetuService.verifyPan(panNumber, name);
-      let nameComparison = null;
-      let dobComparison = null;
-      let fatherComparison = null;
-
-      if (name && result.registeredName) {
-        nameComparison = NameMatcherService.compare(name, result.registeredName);
-      }
-
-      if (dob && result.dob) {
-        const norm1 = CrossDocumentValidatorService.normalizeDob(dob);
-        const norm2 = CrossDocumentValidatorService.normalizeDob(result.dob);
-        if (norm1 && norm2) {
-          dobComparison = CrossDocumentValidatorService.compareDobs(norm1, norm2);
-        }
-      }
-
-      if (fatherName && result.fatherName) {
-        const f1 = CrossDocumentValidatorService.normalizeFatherOrGuardianName(fatherName);
-        const f2 = CrossDocumentValidatorService.normalizeFatherOrGuardianName(result.fatherName);
-        fatherComparison = NameMatcherService.compare(f1, f2);
-      }
-
-      res.json({
-        status: 'SUCCESS',
-        data: {
-          ...result,
-          nameComparison,
-          dobComparison,
-          fatherComparison
-        }
-      });
-    } catch (err: any) {
-      res.status(400).json({ status: 'FAILED', error: err.message });
-    }
-  }
+  // ═══════════════════════════ Resident session API ═══════════════════════════
 
   /**
-   * 2. Driving License Verification
-   * POST /api/v1/identity/verify/dl
-   */
-  public static async verifyDrivingLicense(req: Request, res: Response): Promise<void> {
-    try {
-      const { dlNumber, dob, name, fatherName } = req.body;
-      if (!dlNumber) {
-        res.status(400).json({ error: 'Driving License number is required' });
-        return;
-      }
-
-      const result = await apiSetuService.verifyDrivingLicense(dlNumber, dob);
-      let nameComparison = null;
-      let dobComparison = null;
-      let fatherComparison = null;
-
-      if (name && result.holderName) {
-        nameComparison = NameMatcherService.compare(name, result.holderName);
-      }
-
-      if (dob && result.dob) {
-        const norm1 = CrossDocumentValidatorService.normalizeDob(dob);
-        const norm2 = CrossDocumentValidatorService.normalizeDob(result.dob);
-        if (norm1 && norm2) {
-          dobComparison = CrossDocumentValidatorService.compareDobs(norm1, norm2);
-        }
-      }
-
-      if (fatherName && result.fatherOrHusbandName) {
-        const f1 = CrossDocumentValidatorService.normalizeFatherOrGuardianName(fatherName);
-        const f2 = CrossDocumentValidatorService.normalizeFatherOrGuardianName(result.fatherOrHusbandName);
-        fatherComparison = NameMatcherService.compare(f1, f2);
-      }
-
-      res.json({
-        status: 'SUCCESS',
-        data: {
-          ...result,
-          nameComparison,
-          dobComparison,
-          fatherComparison
-        }
-      });
-    } catch (err: any) {
-      res.status(400).json({ status: 'FAILED', error: err.message });
-    }
-  }
-
-  /**
-   * 3. Vehicle RC Verification
-   * POST /api/v1/identity/verify/rc
-   */
-  public static async verifyVehicleRc(req: Request, res: Response): Promise<void> {
-    try {
-      const { rcNumber } = req.body;
-      if (!rcNumber) {
-        res.status(400).json({ error: 'Vehicle Registration number (RC) is required' });
-        return;
-      }
-
-      const result = await apiSetuService.verifyVehicleRc(rcNumber);
-      res.json({ status: 'SUCCESS', data: result });
-    } catch (err: any) {
-      res.status(400).json({ status: 'FAILED', error: err.message });
-    }
-  }
-
-  /**
-   * 4. GSTIN Verification
-   * POST /api/v1/identity/verify/gstin
-   */
-  public static async verifyGstin(req: Request, res: Response): Promise<void> {
-    try {
-      const { gstin } = req.body;
-      if (!gstin) {
-        res.status(400).json({ error: 'GSTIN is required' });
-        return;
-      }
-
-      const result = await apiSetuService.verifyGstin(gstin);
-      res.json({ status: 'SUCCESS', data: result });
-    } catch (err: any) {
-      res.status(400).json({ status: 'FAILED', error: err.message });
-    }
-  }
-
-  /**
-   * 5. Voter ID (EPIC) Verification
-   * POST /api/v1/identity/verify/voter
-   */
-  public static async verifyVoterId(req: Request, res: Response): Promise<void> {
-    try {
-      const { epicNumber, name, dob, relativeName } = req.body;
-      if (!epicNumber) {
-        res.status(400).json({ error: 'Voter ID (EPIC) number is required' });
-        return;
-      }
-
-      const result = await apiSetuService.verifyVoterId(epicNumber);
-      let nameComparison = null;
-      let dobComparison = null;
-      let relativeComparison = null;
-
-      if (name && result.name) {
-        nameComparison = NameMatcherService.compare(name, result.name);
-      }
-
-      if (dob && result.dob) {
-        const norm1 = CrossDocumentValidatorService.normalizeDob(dob);
-        const norm2 = CrossDocumentValidatorService.normalizeDob(result.dob);
-        if (norm1 && norm2) {
-          dobComparison = CrossDocumentValidatorService.compareDobs(norm1, norm2);
-        }
-      }
-
-      if (relativeName && result.relativeName) {
-        const f1 = CrossDocumentValidatorService.normalizeFatherOrGuardianName(relativeName);
-        const f2 = CrossDocumentValidatorService.normalizeFatherOrGuardianName(result.relativeName);
-        relativeComparison = NameMatcherService.compare(f1, f2);
-      }
-
-      res.json({
-        status: 'SUCCESS',
-        data: {
-          ...result,
-          nameComparison,
-          dobComparison,
-          relativeComparison
-        }
-      });
-    } catch (err: any) {
-      res.status(400).json({ status: 'FAILED', error: err.message });
-    }
-  }
-
-  /**
-   * 6. Bank Account Penny Drop Verification (via Razorpay IMPS)
-   * POST /api/v1/identity/verify/bank
-   */
-  public static async verifyBankAccount(req: Request, res: Response): Promise<void> {
-    try {
-      const { accountNumber, ifsc, expectedName } = req.body;
-      if (!accountNumber || !ifsc) {
-        res.status(400).json({ error: 'Both accountNumber and ifsc code are required' });
-        return;
-      }
-
-      const result = await razorpayVerificationService.verifyBankAccount(accountNumber, ifsc, expectedName);
-      let nameComparison = null;
-
-      if (expectedName && result.registeredName) {
-        nameComparison = NameMatcherService.compare(expectedName, result.registeredName);
-      }
-
-      res.json({
-        status: 'SUCCESS',
-        data: {
-          ...result,
-          nameComparison
-        }
-      });
-    } catch (err: any) {
-      res.status(400).json({ status: 'FAILED', error: err.message });
-    }
-  }
-
-  /**
-   * 7. UPI VPA Verification
-   * POST /api/v1/identity/verify/upi
-   */
-  public static async verifyUpi(req: Request, res: Response): Promise<void> {
-    try {
-      const { vpa, expectedName } = req.body;
-      if (!vpa) {
-        res.status(400).json({ error: 'UPI ID (vpa) is required' });
-        return;
-      }
-
-      const result = await razorpayVerificationService.validateUpi(vpa);
-      let nameComparison = null;
-
-      if (expectedName && result.customerName) {
-        nameComparison = NameMatcherService.compare(expectedName, result.customerName);
-      }
-
-      res.json({
-        status: 'SUCCESS',
-        data: {
-          ...result,
-          nameComparison
-        }
-      });
-    } catch (err: any) {
-      res.status(400).json({ status: 'FAILED', error: err.message });
-    }
-  }
-
-  /**
-   * 8. AI Face Match (Live Selfie vs Document Photos)
-   * POST /api/v1/identity/biometrics/face-match
-   */
-  public static async faceMatch(req: Request, res: Response): Promise<void> {
-    try {
-      const { liveSelfie, documents, eyeBlinkDetected, headTurnDetected } = req.body;
-      if (!liveSelfie) {
-        res.status(400).json({ error: 'liveSelfie base64 image is required' });
-        return;
-      }
-      if (!documents || !Array.isArray(documents) || documents.length === 0) {
-        res.status(400).json({ error: 'At least one document reference photo is required' });
-        return;
-      }
-
-      const result = BiometricsService.matchFaces(
-        liveSelfie,
-        documents.map((d: any) => ({
-          docType: d.docType || 'IDENTITY_CARD',
-          photoBase64: d.photoBase64 || d.photo || d.imageBase64
-        })),
-        { eyeBlinkDetected, headTurnDetected }
-      );
-
-      res.json({ status: 'SUCCESS', data: result });
-    } catch (err: any) {
-      res.status(400).json({ status: 'FAILED', error: err.message });
-    }
-  }
-
-  /**
-   * 9. Extract Face from Document
-   * POST /api/v1/identity/biometrics/extract-face
-   */
-  public static async extractFace(req: Request, res: Response): Promise<void> {
-    try {
-      const { documentImage } = req.body;
-      if (!documentImage) {
-        res.status(400).json({ error: 'documentImage base64 is required' });
-        return;
-      }
-
-      const result = BiometricsService.extractFaceFromDocument(documentImage);
-      res.json({ status: 'SUCCESS', data: result });
-    } catch (err: any) {
-      res.status(400).json({ status: 'FAILED', error: err.message });
-    }
-  }
-
-  /**
-   * 10. Full End-to-End Orchestrated Verification
-   * POST /api/v1/identity/verify/full-kyc
-   *
-   * Validates Name, Date of Birth (DOB), Father's Name, Gender, Bank account and Face Biometrics
-   */
-  public static async fullVerification(req: Request, res: Response): Promise<void> {
-    try {
-      const {
-        pan,
-        dl,
-        aadhaar,
-        voter,
-        bank,
-        upi,
-        liveSelfie,
-        options = {}
-      } = req.body;
-
-      const results: any = {
-        panResult: null,
-        dlResult: null,
-        voterResult: null,
-        bankResult: null,
-        upiResult: null,
-        faceMatchResult: null,
-        crossDocValidation: null
-      };
-
-      const documentRecords: DocumentRecord[] = [];
-      const documentPhotosForFaceMatch: { docType: string; photoBase64: string }[] = [];
-
-      // 1. Process PAN Card
-      if (pan && pan.number) {
-        const panRes = await apiSetuService.verifyPan(pan.number, pan.name);
-        results.panResult = panRes;
-
-        documentRecords.push({
-          docType: 'PAN Card',
-          name: panRes.registeredName || pan.name,
-          dob: panRes.dob || pan.dob,
-          fatherName: panRes.fatherName || pan.fatherName,
-          gender: panRes.gender,
-          docNumber: pan.number
-        });
-
-        if (pan.imageBase64) {
-          const crop = BiometricsService.extractFaceFromDocument(pan.imageBase64);
-          if (crop.hasFace && crop.faceBase64) {
-            documentPhotosForFaceMatch.push({ docType: 'PAN Card', photoBase64: crop.faceBase64 });
-          }
-        }
-      }
-
-      // 2. Process Driving License
-      if (dl && dl.number) {
-        const dlRes = await apiSetuService.verifyDrivingLicense(dl.number, dl.dob);
-        results.dlResult = dlRes;
-
-        documentRecords.push({
-          docType: 'Driving License',
-          name: dlRes.holderName || dl.name,
-          dob: dlRes.dob || dl.dob,
-          fatherName: dlRes.fatherOrHusbandName || dl.fatherName,
-          gender: dlRes.gender,
-          docNumber: dl.number
-        });
-
-        if (dl.imageBase64) {
-          const crop = BiometricsService.extractFaceFromDocument(dl.imageBase64);
-          if (crop.hasFace && crop.faceBase64) {
-            documentPhotosForFaceMatch.push({ docType: 'Driving License', photoBase64: crop.faceBase64 });
-          }
-        }
-      }
-
-      // 3. Process Voter ID
-      if (voter && voter.number) {
-        const voterRes = await apiSetuService.verifyVoterId(voter.number);
-        results.voterResult = voterRes;
-
-        documentRecords.push({
-          docType: 'Voter ID',
-          name: voterRes.name || voter.name,
-          dob: voterRes.dob || voter.dob,
-          fatherName: voterRes.relativeName || voter.fatherName,
-          gender: voterRes.gender || voter.gender,
-          docNumber: voter.number
-        });
-
-        if (voter.imageBase64) {
-          const crop = BiometricsService.extractFaceFromDocument(voter.imageBase64);
-          if (crop.hasFace && crop.faceBase64) {
-            documentPhotosForFaceMatch.push({ docType: 'Voter ID', photoBase64: crop.faceBase64 });
-          }
-        }
-      }
-
-      // 4. Process Aadhaar Card (OCR/Offline XML data)
-      if (aadhaar) {
-        documentRecords.push({
-          docType: 'Aadhaar Card',
-          name: aadhaar.name,
-          dob: aadhaar.dob || aadhaar.yob,
-          fatherName: aadhaar.fatherName || aadhaar.careOf,
-          gender: aadhaar.gender,
-          docNumber: aadhaar.number
-        });
-
-        if (aadhaar.imageBase64) {
-          const crop = BiometricsService.extractFaceFromDocument(aadhaar.imageBase64);
-          if (crop.hasFace && crop.faceBase64) {
-            documentPhotosForFaceMatch.push({ docType: 'Aadhaar Card', photoBase64: crop.faceBase64 });
-          }
-        }
-      }
-
-      // 5. Process Bank Account / UPI
-      const primaryDocName = documentRecords[0]?.name;
-      if (bank && bank.accountNumber && bank.ifsc) {
-        const bankRes = await razorpayVerificationService.verifyBankAccount(
-          bank.accountNumber,
-          bank.ifsc,
-          primaryDocName
-        );
-        results.bankResult = bankRes;
-        documentRecords.push({
-          docType: 'Bank Account',
-          name: bankRes.registeredName
-        });
-      } else if (upi && upi.vpa) {
-        const upiRes = await razorpayVerificationService.validateUpi(upi.vpa);
-        results.upiResult = upiRes;
-        documentRecords.push({
-          docType: 'UPI',
-          name: upiRes.customerName
-        });
-      }
-
-      // 6. Strict Multi-Attribute Cross-Document Validation (Name, DOB, Father's Name, Gender)
-      const crossValidation = CrossDocumentValidatorService.validateDocuments(documentRecords);
-      results.crossDocValidation = crossValidation;
-
-      if (!crossValidation.isValid) {
-        const firstMismatch = crossValidation.criticalMismatches[0];
-        let errorCode = 'DOCUMENT_MISMATCH';
-        if (firstMismatch.field === 'DOB') errorCode = 'DOCUMENT_DOB_MISMATCH';
-        else if (firstMismatch.field === 'NAME') errorCode = 'DOCUMENT_NAME_MISMATCH';
-        else if (firstMismatch.field === 'GENDER') errorCode = 'DOCUMENT_GENDER_MISMATCH';
-
-        res.status(422).json({
-          status: 'REJECTED',
-          error_code: errorCode,
-          error_message: `Cross-document verification failed: ${firstMismatch.reason}`,
-          details: crossValidation
-        });
-        return;
-      }
-
-      // 7. Biometric Face Match (if live selfie was supplied)
-      if (liveSelfie) {
-        if (documentPhotosForFaceMatch.length === 0) {
-          res.status(400).json({
-            status: 'REJECTED',
-            error_code: 'NO_DOCUMENT_PHOTO',
-            error_message: 'Cannot run Face Match: No photograph could be detected on the uploaded documents.'
-          });
-          return;
-        }
-
-        const faceRes = BiometricsService.matchFaces(
-          liveSelfie,
-          documentPhotosForFaceMatch,
-          { eyeBlinkDetected: options.eyeBlinkDetected }
-        );
-        results.faceMatchResult = faceRes;
-
-        if (!faceRes.livenessPassed) {
-          res.status(422).json({
-            status: 'REJECTED',
-            error_code: 'LIVENESS_CHECK_FAILED',
-            error_message: faceRes.mismatchReason || 'Live presence could not be confirmed.',
-            details: faceRes
-          });
-          return;
-        }
-
-        if (faceRes.verdict === 'REJECT') {
-          res.status(422).json({
-            status: 'REJECTED',
-            error_code: 'FACE_MISMATCH_DETECTED',
-            error_message: 'Biometric verification failed: The live camera face does not match the uploaded identity document photo.',
-            details: faceRes
-          });
-          return;
-        }
-      }
-
-      // All validations successfully passed!
-      res.json({
-        status: 'APPROVED',
-        verification_id: 'ver_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6),
-        verifiedProfile: {
-          fullName: crossValidation.primaryIdentity.fullName,
-          dob: crossValidation.primaryIdentity.dob,
-          fatherName: crossValidation.primaryIdentity.fatherName,
-          gender: crossValidation.primaryIdentity.gender,
-          panVerified: Boolean(results.panResult?.valid),
-          dlVerified: Boolean(results.dlResult?.valid),
-          voterVerified: Boolean(results.voterResult?.valid),
-          bankVerified: Boolean(results.bankResult?.valid || results.upiResult?.valid),
-          faceMatchConfidence: results.faceMatchResult?.overallConfidence ?? 100,
-          verifiedAt: new Date().toISOString()
-        },
-        auditDetails: results
-      });
-    } catch (err: any) {
-      res.status(500).json({ status: 'ERROR', error: err.message });
-    }
-  }
-
-  /**
-   * 11. Create Turnkey Verification Session (for Resident Bottom Sheet)
-   * POST /api/v1/identity/verify/session
+   * POST /session
+   *  - server call: Authorization: Basic base64(clientId:clientSecret)
+   *  - browser call: body.clientId + Origin registered for the app (allowedOrigins / redirect URI origins)
    */
   public static async createSession(req: Request, res: Response): Promise<void> {
     try {
-      const {
-        clientId,
-        documents = ['PAN', 'DRIVING_LICENSE', 'BANK_ACCOUNT', 'FACE_MATCH'],
-        strictNameMatching = true,
-        strictDobMatching = true,
-        redirectUri
-      } = req.body;
+      const body = req.body || {};
+      let app: VerifyApp | null;
+      let browserOrigin: string | null = null;
+      if (parseBasicAuth(req)) {
+        app = await authenticateClient(req);
+        if (body.clientId && body.clientId !== app.clientId) throw new VerifyError(400, 'VALIDATION_ERROR', 'clientId does not match the authenticated client.');
+      } else {
+        const clientId = str(body.clientId);
+        if (!clientId) throw new VerifyError(400, 'VALIDATION_ERROR', 'clientId is required.');
+        app = await findApp(clientId);
+        if (!app || !app.isActive || app.id === null) throw new VerifyError(401, 'INVALID_CLIENT', 'Unknown or inactive client.');
+        const origin = str(req.headers.origin as string);
+        if (!origin || !isOriginRegistered(app, origin)) {
+          throw new VerifyError(403, 'ORIGIN_NOT_ALLOWED', 'This origin is not registered for the application. Add it to Allowed Web Origins in the developer portal, or create the session server-side with client credentials.');
+        }
+        browserOrigin = origin.replace(/\/+$/, '');
+      }
 
-      const sessionId = 'ver_sess_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
-      const sessionData = {
-        sessionId,
-        clientId: clientId || 'com.simplicion',
-        documents,
-        strictNameMatching,
-        strictDobMatching,
-        redirectUri,
-        status: 'PENDING',
-        createdAt: new Date().toISOString()
-      };
-
-      verificationSessions.set(sessionId, sessionData);
-
-      const profileFrontendUrl = process.env.PROFILE_FRONTEND_URL || 'http://localhost:3008';
-      const verifyUrl = `${profileFrontendUrl}/verify?session_id=${sessionId}&ux_mode=bottom_sheet`;
-
-      res.json({
-        status: 'SUCCESS',
-        sessionId,
-        verifyUrl,
-        documents
+      let parentOrigin = str(body.parentOrigin)?.replace(/\/+$/, '') || browserOrigin;
+      if (parentOrigin && !isOriginRegistered(app, parentOrigin)) {
+        throw new VerifyError(400, 'ORIGIN_NOT_ALLOWED', 'parentOrigin is not registered for this application.');
+      }
+      const redirectUri = str(body.redirectUri);
+      if (redirectUri && !isRedirectUriRegistered(app, redirectUri)) {
+        throw new VerifyError(400, 'REDIRECT_URI_NOT_ALLOWED', 'redirectUri is not registered for this application.');
+      }
+      const out = await VerificationSessionService.createSession({
+        app,
+        documents: body.documents,
+        strictNameMatching: body.strictNameMatching,
+        parentOrigin: parentOrigin || null,
+        redirectUri: redirectUri || null,
       });
-    } catch (err: any) {
-      res.status(500).json({ status: 'ERROR', error: err.message });
+      res.status(201).json(out);
+    } catch (err) {
+      handleError(res, err, 'createSession');
+    }
+  }
+
+  /** POST /session/demo - sandbox only, no auth, built-in sandbox client, all doc types. */
+  public static async createDemoSession(req: Request, res: Response): Promise<void> {
+    try {
+      const out = await VerificationSessionService.createDemoSession(sandboxDemoApp());
+      res.status(201).json(out);
+    } catch (err) {
+      handleError(res, err, 'createDemoSession');
+    }
+  }
+
+  /** GET /session/:id/public (Bearer sessionToken) */
+  public static async getPublicSession(req: Request, res: Response): Promise<void> {
+    try {
+      const session = (req as any).verifySession;
+      const app = await findApp(session.clientId);
+      res.json(VerificationSessionService.publicView(session, app));
+    } catch (err) {
+      handleError(res, err, 'getPublicSession');
+    }
+  }
+
+  /** POST /session/:id/documents (Bearer) */
+  public static async submitDocument(req: Request, res: Response): Promise<void> {
+    try {
+      res.json(await VerificationSessionService.submitDocument((req as any).verifySession, req.body || {}));
+    } catch (err) {
+      handleError(res, err, 'submitDocument');
+    }
+  }
+
+  /** POST /session/:id/bank (Bearer) */
+  public static async submitBank(req: Request, res: Response): Promise<void> {
+    try {
+      res.json(await VerificationSessionService.submitBank((req as any).verifySession, req.body || {}));
+    } catch (err) {
+      handleError(res, err, 'submitBank');
+    }
+  }
+
+  /** POST /session/:id/liveness/challenge (Bearer) */
+  public static async issueChallenge(req: Request, res: Response): Promise<void> {
+    try {
+      res.json(await VerificationSessionService.issueChallenge((req as any).verifySession));
+    } catch (err) {
+      handleError(res, err, 'issueChallenge');
+    }
+  }
+
+  /** POST /session/:id/complete (Bearer) */
+  public static async completeSession(req: Request, res: Response): Promise<void> {
+    try {
+      res.json(await VerificationSessionService.complete((req as any).verifySession, req.body || {}));
+    } catch (err) {
+      handleError(res, err, 'completeSession');
+    }
+  }
+
+  /** GET /session/:id/result (Basic auth of the owning app) - signed, server-to-server. */
+  public static async getResult(req: Request, res: Response): Promise<void> {
+    try {
+      const client: VerifyApp = (req as any).verifyClient;
+      const session = await sessionStore().get(req.params.id);
+      // 404 for both "missing" and "not yours" (no cross-tenant oracle)
+      if (!session || session.clientId !== client.clientId) throw new VerifyError(404, 'SESSION_NOT_FOUND', 'Verification session not found.');
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(await VerificationSessionService.getResult(session));
+    } catch (err) {
+      handleError(res, err, 'getResult');
+    }
+  }
+
+  // ═══════════════════════════ Standalone B2B endpoints ═══════════════════════════
+
+  /** POST /pan { panNumber|pan, name?, dob?, fatherName?, gender? } */
+  public static async verifyPan(req: Request, res: Response): Promise<void> {
+    try {
+      const b = req.body || {};
+      const pan = str(b.panNumber) || str(b.pan);
+      if (!pan) throw new VerifyError(400, 'VALIDATION_ERROR', 'panNumber is required.');
+      const gender = CrossDocumentValidatorService.normalizeGender(str(b.gender) || '') || undefined;
+      const rec = await apiSetuService.verifyPan(pan, { name: str(b.name), dob: str(b.dob), gender });
+      ok(res, {
+        ...publicRecord(rec),
+        nameComparison: nameCmp(str(b.name), rec.name),
+        dobMatch: dobCmp(str(b.dob), rec.dob),
+        fatherComparison: fatherCmp(str(b.fatherName), rec.fatherName),
+      });
+    } catch (err) {
+      handleError(res, err, 'verifyPan');
+    }
+  }
+
+  /** POST /dl { dlNumber, dob?, name?, fatherName? } */
+  public static async verifyDrivingLicense(req: Request, res: Response): Promise<void> {
+    try {
+      const b = req.body || {};
+      const dl = str(b.dlNumber);
+      if (!dl) throw new VerifyError(400, 'VALIDATION_ERROR', 'dlNumber is required.');
+      const rec = await apiSetuService.verifyDrivingLicense(dl, { dob: str(b.dob), name: str(b.name) });
+      ok(res, {
+        ...publicRecord(rec),
+        nameComparison: nameCmp(str(b.name), rec.name),
+        dobMatch: dobCmp(str(b.dob), rec.dob),
+        fatherComparison: fatherCmp(str(b.fatherName), rec.fatherName),
+      });
+    } catch (err) {
+      handleError(res, err, 'verifyDrivingLicense');
+    }
+  }
+
+  /** POST /rc { rcNumber, chassisNumber?, ownerName? } */
+  public static async verifyVehicleRc(req: Request, res: Response): Promise<void> {
+    try {
+      const b = req.body || {};
+      const rc = str(b.rcNumber);
+      if (!rc) throw new VerifyError(400, 'VALIDATION_ERROR', 'rcNumber is required.');
+      const rec = await apiSetuService.verifyVehicleRc(rc, { chassisNumber: str(b.chassisNumber), ownerName: str(b.ownerName) });
+      ok(res, { ...publicRecord(rec), ownerNameComparison: nameCmp(str(b.ownerName), rec.ownerName) });
+    } catch (err) {
+      handleError(res, err, 'verifyVehicleRc');
+    }
+  }
+
+  /** POST /gstin { gstin } */
+  public static async verifyGstin(req: Request, res: Response): Promise<void> {
+    try {
+      const gstin = str(req.body?.gstin);
+      if (!gstin) throw new VerifyError(400, 'VALIDATION_ERROR', 'gstin is required.');
+      ok(res, publicRecord(await apiSetuService.verifyGstin(gstin)));
+    } catch (err) {
+      handleError(res, err, 'verifyGstin');
+    }
+  }
+
+  /** POST /voter { epicNumber, name?, dob?, relativeName? } */
+  public static async verifyVoterId(req: Request, res: Response): Promise<void> {
+    try {
+      const b = req.body || {};
+      const epic = str(b.epicNumber);
+      if (!epic) throw new VerifyError(400, 'VALIDATION_ERROR', 'epicNumber is required.');
+      const rec = await apiSetuService.verifyVoterId(epic, { name: str(b.name) });
+      ok(res, {
+        ...publicRecord(rec),
+        nameComparison: nameCmp(str(b.name), rec.name),
+        dobMatch: dobCmp(str(b.dob), rec.dob),
+        relativeComparison: fatherCmp(str(b.relativeName), rec.fatherName),
+      });
+    } catch (err) {
+      handleError(res, err, 'verifyVoterId');
+    }
+  }
+
+  /** POST /bank { accountNumber, ifsc, expectedName? } - status ACTIVE | INVALID | PENDING */
+  public static async verifyBankAccount(req: Request, res: Response): Promise<void> {
+    try {
+      const b = req.body || {};
+      if (!str(b.accountNumber) || !str(b.ifsc)) throw new VerifyError(400, 'VALIDATION_ERROR', 'accountNumber and ifsc are required.');
+      const rec = await razorpayVerificationService.verifyBankAccount(String(b.accountNumber), String(b.ifsc));
+      ok(res, { ...publicRecord(rec), validationId: rec.validationId, nameComparison: nameCmp(str(b.expectedName), rec.registeredName) });
+    } catch (err) {
+      handleError(res, err, 'verifyBankAccount');
+    }
+  }
+
+  /** POST /upi { vpa, expectedName? } */
+  public static async verifyUpi(req: Request, res: Response): Promise<void> {
+    try {
+      const b = req.body || {};
+      if (!str(b.vpa)) throw new VerifyError(400, 'VALIDATION_ERROR', 'vpa is required.');
+      const rec = await razorpayVerificationService.validateUpi(String(b.vpa));
+      ok(res, { ...publicRecord(rec), nameComparison: nameCmp(str(b.expectedName), rec.customerName) });
+    } catch (err) {
+      handleError(res, err, 'verifyUpi');
     }
   }
 
   /**
-   * 12. Retrieve Session Status
-   * GET /api/v1/identity/verify/session/:sessionId
+   * POST /biometrics/face-match { liveSelfie, documents:[{docType, photoBase64}] }
+   * 1:N face comparison only; liveness is NOT assessed here (livenessAssessed:false).
    */
-  public static async getSession(req: Request, res: Response): Promise<void> {
+  public static async faceMatch(req: Request, res: Response): Promise<void> {
     try {
-      const { sessionId } = req.params;
-      const session = verificationSessions.get(sessionId);
+      const { liveSelfie, documents } = req.body || {};
+      assertImage(liveSelfie, 'liveSelfie');
+      if (!Array.isArray(documents) || documents.length === 0 || documents.length > 4) {
+        throw new VerifyError(400, 'VALIDATION_ERROR', 'documents must contain 1-4 reference photos.');
+      }
+      const refs = documents.map((d: any, i: number) => ({
+        docType: String(d?.docType || 'IDENTITY_CARD'),
+        photoBase64: assertImage(d?.photoBase64 || d?.photo || d?.imageBase64, `documents[${i}].photoBase64`),
+      }));
+      const result = await biometrics().matchFaces(liveSelfie, refs);
+      ok(res, { ...result, livenessAssessed: false });
+    } catch (err) {
+      handleError(res, err, 'faceMatch');
+    }
+  }
 
-      if (!session) {
-        res.status(404).json({ error: 'Verification session not found' });
-        return;
+  /** POST /biometrics/extract-face { documentImage } */
+  public static async extractFace(req: Request, res: Response): Promise<void> {
+    try {
+      const { documentImage } = req.body || {};
+      assertImage(documentImage, 'documentImage');
+      ok(res, await biometrics().extractFaceFromDocument(documentImage));
+    } catch (err) {
+      handleError(res, err, 'extractFace');
+    }
+  }
+
+  /**
+   * POST /full-kyc - stateless orchestration.
+   * Body: { pan?:{number,name,dob?,fatherName?,gender?,imageBase64?}, dl?:{...}, voter?:{...},
+   *         aadhaar?:{number?,name,dob?|yob?,gender?,imageBase64?}  (SELF_DECLARED),
+   *         bank?:{accountNumber,ifsc} | upi?:{vpa}, liveSelfie?, livenessFrames?:[{step,image}] }
+   * status: APPROVED | MANUAL_REVIEW | REJECTED. Registry attributes only come from registries.
+   * Without liveness frames a selfie match can at best yield MANUAL_REVIEW.
+   */
+  public static async fullVerification(req: Request, res: Response): Promise<void> {
+    try {
+      const { pan, dl, voter, aadhaar, bank, upi, liveSelfie, livenessFrames } = req.body || {};
+      const records: DocumentRecord[] = [];
+      const photos: { docType: string; photoBase64: string }[] = [];
+      const checks: { id: string; passed: boolean; detail?: string }[] = [];
+      const rejectCodes: string[] = [];
+      const review: string[] = [];
+      const docs: Record<string, any> = {};
+
+      const addPhoto = async (docType: string, img: unknown) => {
+        if (!img) return;
+        const crop = await biometrics().extractFaceFromDocument(assertImage(img, `${docType}.imageBase64`));
+        if (crop?.hasFace && crop.faceBase64) photos.push({ docType, photoBase64: crop.faceBase64 });
+      };
+
+      const registryDoc = async (key: 'PAN' | 'DRIVING_LICENSE' | 'VOTER_ID', input: any, label: DocumentRecord['docType']) => {
+        if (!input?.number) return;
+        const declaredName = str(input.name);
+        const rec: any =
+          key === 'PAN'
+            ? await apiSetuService.verifyPan(String(input.number), { name: declaredName, dob: str(input.dob) })
+            : key === 'DRIVING_LICENSE'
+              ? await apiSetuService.verifyDrivingLicense(String(input.number), { name: declaredName, dob: str(input.dob) })
+              : await apiSetuService.verifyVoterId(String(input.number), { name: declaredName });
+        const statusOk = rec.found && (!rec.status || rec.status === 'VALID' || rec.status === 'ACTIVE');
+        const nm = nameCmp(declaredName, rec.name);
+        const dm = dobCmp(str(input.dob), rec.dob);
+        docs[key] = { found: rec.found, docStatus: rec.status, numberMasked: rec.panMasked || rec.dlMasked || rec.epicMasked, nameComparison: nm, dobMatch: dm };
+        checks.push({ id: `DOC_${key}`, passed: Boolean(statusOk && (nm ? nm.passed : rec.issuerAttested?.name) && dm !== false) });
+        if (!rec.found) rejectCodes.push('DOCUMENT_NOT_FOUND');
+        else if (!statusOk) rejectCodes.push(rec.status === 'EXPIRED' ? 'DOCUMENT_EXPIRED' : 'DOCUMENT_INVALID');
+        else {
+          if (nm && !nm.passed) rejectCodes.push('DOCUMENT_NAME_MISMATCH');
+          if (!nm && !rec.issuerAttested?.name) review.push(`${key}: registry name not available`);
+          if (!nm && rec.issuerAttested?.name) review.push(`${key}: name attested by issuer only`);
+          if (dm === false) rejectCodes.push('DOCUMENT_DOB_MISMATCH');
+          records.push({ docType: label, source: 'REGISTRY', name: rec.name, dob: rec.dob, fatherName: rec.fatherName, gender: rec.gender });
+        }
+        await addPhoto(key, input.imageBase64);
+      };
+
+      await registryDoc('PAN', pan, 'PAN Card');
+      await registryDoc('DRIVING_LICENSE', dl, 'Driving License');
+      await registryDoc('VOTER_ID', voter, 'Voter ID');
+
+      if (aadhaar && str(aadhaar.name)) {
+        let numberMasked: string | null = null;
+        if (aadhaar.number) {
+          const chk = validateAadhaar(String(aadhaar.number));
+          if (!chk.valid) throw new VerifyError(400, 'INVALID_DOCUMENT_NUMBER', chk.reason!);
+          numberMasked = maskAadhaar(aadhaarLast4(chk.normalized));
+        }
+        docs.AADHAAR = { source: 'SELF_DECLARED', numberMasked };
+        records.push({ docType: 'Aadhaar Card', source: 'SELF_DECLARED', name: str(aadhaar.name), dob: str(aadhaar.dob) || (aadhaar.yob ? String(aadhaar.yob) : undefined), gender: str(aadhaar.gender), fatherName: str(aadhaar.fatherName) || str(aadhaar.careOf) });
+        await addPhoto('AADHAAR', aadhaar.imageBase64);
       }
 
-      res.json({ status: 'SUCCESS', data: session });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      const cross = CrossDocumentValidatorService.validateDocuments(records);
+      for (const m of cross.criticalMismatches) rejectCodes.push(m.field === 'DOB' ? 'DOCUMENT_DOB_MISMATCH' : m.field === 'GENDER' ? 'DOCUMENT_GENDER_MISMATCH' : 'DOCUMENT_NAME_MISMATCH');
+      if (cross.warnings.some((w) => w.requiresReview)) review.push('Cross-document conflict involving self-declared data');
+      if (!records.some((r) => r.source === 'REGISTRY')) review.push('No registry-verified identity document');
+
+      const registryNames = records.filter((r) => r.source === 'REGISTRY' && r.name).map((r) => r.name!);
+      let bankVerified = false;
+      if (bank?.accountNumber || upi?.vpa) {
+        let holder: string | undefined;
+        let state: string;
+        if (bank?.accountNumber) {
+          const rec = await razorpayVerificationService.verifyBankAccount(String(bank.accountNumber), String(bank.ifsc || ''));
+          holder = rec.registeredName;
+          state = rec.accountStatus;
+          docs.BANK_ACCOUNT = { accountMasked: rec.accountMasked, status: rec.accountStatus, validationId: rec.validationId };
+        } else {
+          const rec = await razorpayVerificationService.validateUpi(String(upi.vpa));
+          holder = rec.customerName;
+          state = rec.found ? 'ACTIVE' : 'INVALID';
+          docs.UPI = { vpaMasked: rec.vpaMasked, found: rec.found };
+        }
+        const best = registryNames.map((n) => NameMatcherService.compare(holder || '', n)).sort((a, b) => b.score - a.score)[0];
+        bankVerified = state === 'ACTIVE' && Boolean(holder) && Boolean(best?.isMatch);
+        checks.push({ id: 'BANK', passed: bankVerified });
+        if (state === 'PENDING') review.push('Bank validation pending');
+        else if (state !== 'ACTIVE') rejectCodes.push('BANK_ACCOUNT_INVALID');
+        else if (!bankVerified) rejectCodes.push('BANK_NAME_MISMATCH');
+      }
+
+      let faceMatchConfidence: number | null = null;
+      let livenessScore: number | null = null;
+      if (liveSelfie) {
+        assertImage(liveSelfie, 'liveSelfie');
+        if (!photos.length) {
+          rejectCodes.push('NO_DOCUMENT_FACE');
+        } else {
+          if (Array.isArray(livenessFrames) && livenessFrames.length) {
+            if (livenessFrames.length > MAX_LIVENESS_FRAMES) throw new VerifyError(400, 'VALIDATION_ERROR', `At most ${MAX_LIVENESS_FRAMES} liveness frames are accepted.`);
+            const frames = livenessFrames.map((f: any, i: number) => ({ step: String(f?.step || 'NEUTRAL').toUpperCase() as LivenessStep, image: assertImage(f?.image, `livenessFrames[${i}].image`) }));
+            const live = await biometrics().evaluateLiveness(frames);
+            livenessScore = live.score ?? null;
+            checks.push({ id: 'LIVENESS', passed: live.passed });
+            if (!live.passed) rejectCodes.push('LIVENESS_CHECK_FAILED');
+          } else {
+            review.push('Liveness not assessed (no livenessFrames supplied)');
+          }
+          const fm = await biometrics().matchFaces(liveSelfie, photos);
+          faceMatchConfidence = fm.overallConfidence ?? null;
+          checks.push({ id: 'FACE_MATCH', passed: fm.verdict === 'APPROVE' });
+          if (fm.verdict === 'REJECT') rejectCodes.push('FACE_MISMATCH_DETECTED');
+          else if (fm.verdict !== 'APPROVE') review.push('Face match requires manual review');
+        }
+      }
+
+      const status = rejectCodes.length ? 'REJECTED' : review.length ? 'MANUAL_REVIEW' : 'APPROVED';
+      res.json({
+        status,
+        ...(rejectCodes.length ? { error_code: rejectCodes[0], error_message: 'Verification failed: ' + rejectCodes[0].toLowerCase().replace(/_/g, ' ') } : {}),
+        environment: getEnvironment(),
+        verification_id: 'ver_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        verifiedProfile:
+          status === 'REJECTED'
+            ? null
+            : {
+                fullName: cross.primaryIdentity.fullName,
+                nameSource: cross.primaryIdentity.source || null,
+                dob: cross.primaryIdentity.dob || null,
+                fatherName: cross.primaryIdentity.fatherName || null,
+                gender: cross.primaryIdentity.gender || null,
+                bankVerified,
+                faceMatchConfidence,
+                livenessScore,
+                verifiedAt: new Date().toISOString(),
+              },
+        checks,
+        reviewReasons: review,
+        documents: docs,
+      });
+    } catch (err) {
+      handleError(res, err, 'fullVerification');
     }
   }
 }

@@ -1185,13 +1185,24 @@ export class DeveloperApiController {
     try {
       const userId = (req as any).user?.id;
       const appId = String(req.params.id);
-      const { accountHolderName, accountNumber, ifscCode, bankName, upiId } = req.body;
+      const { settlementMethod, accountHolderName, accountNumber, ifscCode, bankName, upiId } = req.body;
 
-      if (!accountHolderName || (!accountNumber && !upiId)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Account holder name and either Account Number or UPI ID are required',
-        });
+      const method = settlementMethod || (upiId && !accountNumber ? 'UPI' : 'BANK_TRANSFER');
+
+      if (method === 'UPI') {
+        if (!accountHolderName || !upiId) {
+          return res.status(400).json({
+            success: false,
+            error: 'Receiver legal name and UPI ID are required for UPI settlement',
+          });
+        }
+      } else {
+        if (!accountHolderName || (!accountNumber && !upiId)) {
+          return res.status(400).json({
+            success: false,
+            error: 'Account holder legal name and Bank Account Number are required',
+          });
+        }
       }
 
       const app = await resolveApp(appId, userId);
@@ -1200,7 +1211,8 @@ export class DeveloperApiController {
       }
 
       const bankDetails = {
-        accountHolderName: String(accountHolderName).trim(),
+        settlementMethod: method,
+        accountHolderName: accountHolderName ? String(accountHolderName).trim() : '',
         accountNumber: accountNumber ? String(accountNumber).trim() : '',
         ifscCode: ifscCode ? String(ifscCode).trim().toUpperCase() : '',
         bankName: bankName ? String(bankName).trim() : '',
@@ -1323,6 +1335,7 @@ export class DeveloperApiController {
               id: true,
               name: true,
               clientId: true,
+              bankDetails: true,
               user: {
                 select: { id: true, name: true, email: true, phone: true },
               },

@@ -1508,6 +1508,7 @@ router.get('/payouts', async (req: Request, res: Response) => {
               id: true,
               name: true,
               clientId: true,
+              bankDetails: true,
               user: { select: { id: true, name: true, email: true, phone: true } },
               wallet: { select: { balance: true, currency: true } },
             },

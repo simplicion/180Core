@@ -31,7 +31,7 @@ import { aadhaarLast4, maskAadhaar, maskAccount, maskDocNumber, maskName, maskVp
 import { BankStep, DocStep, FINAL_STATUSES, SessionRecord, SessionStatus, StepError, sessionStore } from './session-store';
 import { signResult, signSessionToken } from './tokens';
 import { DOC_TYPES, DocType, Gender, IDENTITY_DOC_TYPES, IdentityDocType, REGISTRY_DOC_TYPES } from './types';
-import { validateAadhaar } from './validators';
+import { validateAadhaar, validateAccountNumber, validateIfsc, validateVpa } from './validators';
 import type { VerifyApp } from '../../middleware/verification-auth.middleware';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -86,20 +86,15 @@ function newSessionId(): string {
   return 'vsess_' + crypto.randomBytes(16).toString('hex');
 }
 
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = crypto.randomInt(0, i + 1);
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-/** ['NEUTRAL', two of TURN_LEFT/TURN_RIGHT/BLINK in random order]; any 2 of these 3 include a TURN_*. */
+/**
+ * ['NEUTRAL', TURN_LEFT|TURN_RIGHT, <the other TURN or BLINK>]. The engine can only verify head-turn
+ * direction (BLINK is checked for single face / same identity / frontal), so step 2 is always a TURN_*.
+ */
 export function generateChallengeSteps(): LivenessStep[] {
-  const picked = shuffle<LivenessStep>(['TURN_LEFT', 'TURN_RIGHT', 'BLINK']).slice(0, 2);
-  if (!picked.some((s) => s.startsWith('TURN_'))) picked[0] = 'TURN_LEFT'; // defensive; unreachable
-  return ['NEUTRAL', ...picked];
+  const turn: LivenessStep = crypto.randomInt(0, 2) === 0 ? 'TURN_LEFT' : 'TURN_RIGHT';
+  const other: LivenessStep = turn === 'TURN_LEFT' ? 'TURN_RIGHT' : 'TURN_LEFT';
+  const third: LivenessStep = crypto.randomInt(0, 2) === 0 ? other : 'BLINK';
+  return ['NEUTRAL', turn, third];
 }
 
 function assertActive(session: SessionRecord): void {
@@ -465,7 +460,6 @@ export class VerificationSessionService {
     let step: BankStep;
     if (mode === 'UPI') {
       const vpa = String(body.vpa || '');
-      const { validateVpa } = await import('./validators');
       const chk = validateVpa(vpa);
       if (!chk.valid) throw new VerifyError(400, 'INVALID_VPA', chk.reason!);
       await sessionStore().update(session.id, { bankAttempts: session.bankAttempts + 1 });
@@ -473,7 +467,6 @@ export class VerificationSessionService {
       step = this.evaluateBank('UPI', maskVpa(chk.normalized), undefined, rec.found ? 'ACTIVE' : 'INVALID', rec.customerName, refs, undefined);
       if (!rec.found) step.errors = [{ code: 'UPI_NOT_FOUND', message: 'This UPI ID could not be found.' }];
     } else {
-      const { validateAccountNumber, validateIfsc } = await import('./validators');
       const acc = validateAccountNumber(String(body.accountNumber || ''));
       if (!acc.valid) throw new VerifyError(400, 'INVALID_ACCOUNT_NUMBER', acc.reason!);
       const ifsc = validateIfsc(String(body.ifsc || ''));
@@ -574,7 +567,10 @@ export class VerificationSessionService {
       frames = body.frames.map((f: any, i: number) => ({
         step: String(f?.step || '').toUpperCase() as LivenessStep,
         image: assertImage(f?.image, `frames[${i}].image`),
-        capturedAt: Number(f?.capturedAt),
+        // Accept epoch ms (number) or an ISO-8601 string (what the hosted page sends).
+        capturedAt: typeof f?.capturedAt === 'string' && !/^\d+$/.test(f.capturedAt)
+          ? Date.parse(f.capturedAt)
+          : Number(f?.capturedAt),
       }));
       docFaces = FaceCache.list(session.id);
       if (!docFaces.length) {
@@ -598,7 +594,7 @@ export class VerificationSessionService {
       return await this.evaluateAndFinalize(session, { faceRequested, frames, selfie, docFaces, attempt, attemptsRemaining });
     } catch (err: any) {
       // Infrastructure failures do not burn the resident's attempt.
-      if (isBiometricsUnavailable(err) || err instanceof ProviderUnavailableError) {
+      if (isBiometricsUnavailable(err) || err instanceof ProviderUnavailableError || (err instanceof VerifyError && err.httpStatus >= 500)) {
         await sessionStore().releaseCompleteAttempt(session.id);
       }
       throw err;
@@ -718,7 +714,21 @@ export class VerificationSessionService {
           }
           const fm = await biometrics().matchFaces(ctx.selfie, ctx.docFaces);
           faceMatchConfidence = typeof fm.overallConfidence === 'number' ? fm.overallConfidence : null;
-          checks.push({ id: 'FACE_MATCH', label: 'Selfie matches document photo', passed: fm.verdict === 'APPROVE', detail: fm.verdict === 'APPROVE' ? undefined : fm.mismatchReason });
+          const crossInconsistent = fm.mismatchReason === 'CROSS_DOCUMENT_INCONSISTENT';
+          checks.push({
+            id: 'FACE_MATCH',
+            label: 'Selfie matches document photo',
+            passed: fm.verdict === 'APPROVE' || (crossInconsistent && fm.overallMatch),
+            detail: fm.verdict === 'APPROVE' || crossInconsistent ? undefined : fm.mismatchReason,
+          });
+          if (crossInconsistent) {
+            checks.push({
+              id: 'FACE_CROSS_DOCUMENT',
+              label: 'Document photos show the same person',
+              passed: false,
+              detail: 'Each document photo matches the selfie, but two documents do not match each other (CROSS_DOCUMENT_INCONSISTENT).',
+            });
+          }
           if (fm.verdict === 'REJECT') retryableCode = 'FACE_MISMATCH_DETECTED';
           else if (fm.verdict === 'MANUAL_REVIEW') reviewReasons.push('Face match requires manual review');
           else if (fm.verdict !== 'APPROVE') reviewReasons.push('Unknown face match verdict');
@@ -796,7 +806,7 @@ export class VerificationSessionService {
         verifiedProfile,
         environment: session.environment,
       };
-      const signature = signResult(payload);
+      const { jws: signature } = signResult(payload, session.clientId);
       Object.assign(patch, {
         status: status as SessionStatus,
         failureCode: errorCode || null,
