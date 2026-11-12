@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -74,7 +74,7 @@ const DOCS_NAV: DocItem[] = [
   { id: 'api-reference', title: 'REST Endpoints & Schemas', category: 'API Reference' },
 ];
 
-export default function DocsPage() {
+function DocsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const initialSection = (searchParams.get('section') as DocSection) || 'overview';
@@ -584,6 +584,23 @@ app.post('/api/webhooks/180', express.raw({ type: 'application/json' }), (req, r
         )}
       </main>
     </div>
+  );
+}
+
+export default function DocsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-zinc-50 dark:bg-black flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">Loading Documentation...</p>
+          </div>
+        </div>
+      }
+    >
+      <DocsContent />
+    </Suspense>
   );
 }
 
