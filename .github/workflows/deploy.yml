@@ -365,6 +365,9 @@ jobs:
       - name: Install Monorepo Dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build Sovereign SDK Mirror
+        run: pnpm build:sdk
+
       - name: Build Main Website (Static Export)
         env:
           NODE_ENV: production
