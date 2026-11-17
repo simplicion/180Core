@@ -19,6 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
+      website: ${{ steps.filter.outputs.website }}
       developers: ${{ steps.filter.outputs.developers }}
       profile: ${{ steps.filter.outputs.profile }}
       admin: ${{ steps.filter.outputs.admin }}
@@ -45,6 +46,10 @@ jobs:
               - 'docker-compose.yml'
             developers:
               - 'apps/180developers-frontend/**'
+              - 'packages/identity-sdk/**'
+              - 'packages/ui/**'
+            website:
+              - 'apps/180-core-website/**'
               - 'packages/identity-sdk/**'
               - 'packages/ui/**'
             profile:
@@ -220,6 +225,7 @@ jobs:
           NEXT_PUBLIC_CORE_BACKEND_URL: 'https://api.180core.cloud'
           NEXT_PUBLIC_API_URL: 'https://api.180core.cloud'
           NEXT_PUBLIC_PROFILE_URL: 'https://profile.180core.cloud'
+          NEXT_PUBLIC_WEBSITE_URL: 'https://180core.cloud'
         run: pnpm --filter 180developers-frontend build
 
       - name: Deploy to Cloudflare Pages (180workspace-developer)
@@ -333,4 +339,78 @@ jobs:
             exit 0
           fi
           npx --yes wrangler pages deploy apps/180-admin-frontend/out --project-name=180core-admin --commit-dirty=true
+
+  deploy-website-frontend:
+    name: Deploy Main Website — 180core.cloud (Cloudflare Pages)
+    needs: detect-changes
+    if: needs.detect-changes.outputs.website == 'true' || needs.detect-changes.outputs.global == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9.0.0
+
+      - name: Setup Node.js (v20)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install Monorepo Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Main Website (Static Export)
+        env:
+          NODE_ENV: production
+          CF_PAGES: 'true'
+          NEXT_PUBLIC_SITE_URL: 'https://180core.cloud'
+          NEXT_PUBLIC_DEVELOPERS_URL: 'https://developer.180core.cloud'
+          NEXT_PUBLIC_PROFILE_URL: 'https://profile.180core.cloud'
+          NEXT_PUBLIC_DOCS_URL: 'https://developer.180core.cloud/docs'
+          NEXT_PUBLIC_API_URL: 'https://api.180core.cloud'
+        run: pnpm --filter 180-core-website build
+
+      - name: Deploy to Cloudflare Pages (180core-website) & Bind Main Domain
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_API_KEY: ${{ secrets.CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.CLOUDFLARE_EMAIL }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] && [ -z "$CLOUDFLARE_API_KEY" ]; then
+            echo "ℹ️ Neither CLOUDFLARE_API_TOKEN nor CLOUDFLARE_API_KEY configured. Skipping Cloudflare Pages upload."
+            exit 0
+          fi
+
+          # Ensure Cloudflare Pages project exists (idempotent)
+          npx --yes wrangler pages project create 180core-website --production-branch=main || true
+
+          # Deploy static export to Cloudflare Pages
+          npx --yes wrangler pages deploy apps/180-core-website/out --project-name=180core-website --branch=main --commit-dirty=true
+
+          # Attach 180core.cloud & www.180core.cloud custom domains to the 180core-website Pages project (idempotent)
+          if [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            for DOMAIN in "180core.cloud" "www.180core.cloud"; do
+              echo "Binding custom domain $DOMAIN to Cloudflare Pages project 180core-website..."
+              if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+                curl -sS -X POST "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/180core-website/domains" \
+                  -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                  -H "Content-Type: application/json" \
+                  --data "{\"name\":\"${DOMAIN}\"}" || true
+              else
+                curl -sS -X POST "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/180core-website/domains" \
+                  -H "X-Auth-Email: ${CLOUDFLARE_EMAIL}" \
+                  -H "X-Auth-Key: ${CLOUDFLARE_API_KEY}" \
+                  -H "Content-Type: application/json" \
+                  --data "{\"name\":\"${DOMAIN}\"}" || true
+              fi
+              echo ""
+            done
+          fi
 

@@ -75,6 +75,7 @@ This repository is managed as an enterprise monorepo using Turborepo and pnpm wo
 180 core/
 ├── apps/
 │   ├── 180-core-backend/          # Core Express API (Port 4003): OIDC, Wallets, 180 Pay, Webhooks
+│   ├── 180-core-website/          # Next.js 15 App (Port 3000): Main Marketing Website (180core.cloud)
 │   ├── 180-profile-frontend/      # Next.js 15 App (Port 3009): Identity, Consent, Settings, QR
 │   ├── 180developers-frontend/    # Next.js 15 App (Port 3008): Developer Portal, API Keys, Docs
 │   └── 180-admin-frontend/        # Next.js App (Port 3010): Operations, Treasury, Settlements
@@ -100,6 +101,7 @@ This repository is managed as an enterprise monorepo using Turborepo and pnpm wo
 | Service                  | Technology                     | Runtime Port | Default Production Host           | Purpose                                      |
 | :----------------------- | :----------------------------- | :----------- | :-------------------------------- | :------------------------------------------- |
 | `180-core-backend`       | Node.js / Express / TypeScript | `4003`       | `https://api.180core.cloud`       | OIDC Authorization, Payment Engine, APIs     |
+| `180-core-website`       | Next.js 15 (App Router)        | `3000`       | `https://180core.cloud`           | Main Marketing & Product Website             |
 | `180-profile-frontend`   | Next.js 15 (App Router)        | `3009`       | `https://profile.180core.cloud`   | Sovereign Identity, OAuth Consent, QR        |
 | `180developers-frontend` | Next.js 15 (App Router)        | `3008`       | `https://developer.180core.cloud` | App Management, API Keys, Webhooks, Sandbox  |
 | `180-admin-frontend`     | Next.js (App Router)           | `3010`       | `https://admin.180core.cloud`     | Treasury, Reconciliation, Dispute Management |
@@ -275,6 +277,7 @@ Alternatively, services can be launched individually:
 
 ```bash
 pnpm dev:backend      # Port 4003 (Core API)
+pnpm dev:website      # Port 3000 (Main Website - 180core.cloud)
 pnpm dev:profile      # Port 3009 (Identity & Auth Frontend)
 pnpm dev:developers   # Port 3008 (Developer Portal)
 pnpm dev:admin        # Port 3010 (Operations & Admin Panel)

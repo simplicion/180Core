@@ -1751,6 +1751,183 @@ router.patch('/payouts/:id/reject', async (req: Request, res: Response) => {
 });
 
 /**
+ * PATCH /api/v1/admin/payouts/:id
+ * Edit payout request details (amount, currency, status, UTR, beneficiary details, proof, admin notes)
+ */
+router.patch('/payouts/:id', async (req: Request, res: Response) => {
+  try {
+    const payout = await corePrisma.payoutRequest.findUnique({
+      where: { id: req.params.id },
+      include: {
+        app: {
+          select: {
+            id: true,
+            name: true,
+            clientId: true,
+            bankDetails: true,
+            user: { select: { id: true, name: true, email: true, phone: true } },
+            wallet: { select: { balance: true, currency: true } },
+          },
+        },
+      },
+    });
+
+    if (!payout) {
+      return res.status(404).json({ success: false, error: 'Payout request not found' });
+    }
+
+    const {
+      amount,
+      currency,
+      status,
+      payoutMethod,
+      transactionRef,
+      adminNote,
+      proofUrl,
+      accountDetails,
+      receivedConfirmed,
+    } = req.body || {};
+
+    const allowedStatuses = ['PENDING_REVIEW', 'APPROVED', 'PROCESSING', 'PAID', 'REJECTED'];
+    const allowedMethods = ['UPI', 'BANK_TRANSFER'];
+
+    const updateData: any = {};
+
+    if (amount !== undefined && amount !== null && amount !== '') {
+      const parsedAmount = Number(amount);
+      if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+        return res.status(400).json({ success: false, error: 'Amount must be a valid non-negative number' });
+      }
+      updateData.amount = Math.round(parsedAmount * 100) / 100;
+    }
+
+    if (currency !== undefined && String(currency).trim()) {
+      updateData.currency = String(currency).trim().toUpperCase();
+    }
+
+    if (status !== undefined) {
+      const normalizedStatus = String(status).trim().toUpperCase();
+      if (!allowedStatuses.includes(normalizedStatus)) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid status. Allowed values: ${allowedStatuses.join(', ')}`,
+        });
+      }
+      updateData.status = normalizedStatus;
+      if ((normalizedStatus === 'PAID' || normalizedStatus === 'REJECTED') && !payout.processedAt) {
+        updateData.processedAt = new Date();
+      } else if (normalizedStatus === 'PENDING_REVIEW') {
+        updateData.processedAt = null;
+      }
+    }
+
+    if (payoutMethod !== undefined) {
+      const normalizedMethod = String(payoutMethod).trim().toUpperCase();
+      if (!allowedMethods.includes(normalizedMethod)) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid payoutMethod. Allowed values: ${allowedMethods.join(', ')}`,
+        });
+      }
+      updateData.payoutMethod = normalizedMethod;
+    }
+
+    if (transactionRef !== undefined) {
+      updateData.transactionRef = String(transactionRef).trim();
+    }
+
+    if (adminNote !== undefined) {
+      updateData.adminNote = String(adminNote).trim();
+    }
+
+    const existingDetails =
+      payout.accountDetails && typeof payout.accountDetails === 'object'
+        ? { ...(payout.accountDetails as Record<string, any>) }
+        : {};
+
+    if (accountDetails && typeof accountDetails === 'object') {
+      const editableKeys = [
+        'accountHolderName',
+        'upiId',
+        'bankName',
+        'accountNumber',
+        'ifscCode',
+        'proofUrl',
+      ];
+      for (const key of editableKeys) {
+        if (accountDetails[key] !== undefined) {
+          const val = String(accountDetails[key]).trim();
+          existingDetails[key] = key === 'ifscCode' ? val.toUpperCase() : val;
+        }
+      }
+    }
+
+    if (proofUrl !== undefined) {
+      existingDetails.proofUrl = String(proofUrl).trim();
+    }
+
+    if (typeof receivedConfirmed === 'boolean') {
+      existingDetails.receivedConfirmed = receivedConfirmed;
+    }
+
+    existingDetails.lastEditedAt = new Date().toISOString();
+    updateData.accountDetails = existingDetails;
+
+    const updated = await corePrisma.payoutRequest.update({
+      where: { id: payout.id },
+      data: updateData,
+      include: {
+        app: {
+          select: {
+            id: true,
+            name: true,
+            clientId: true,
+            bankDetails: true,
+            user: { select: { id: true, name: true, email: true, phone: true } },
+            wallet: { select: { balance: true, currency: true } },
+          },
+        },
+      },
+    });
+
+    await recordAuditLog(
+      'admin@180core.cloud',
+      'EDIT_PAYOUT',
+      'PAYOUT',
+      payout.id,
+      {
+        before: {
+          amount: payout.amount,
+          currency: payout.currency,
+          status: payout.status,
+          payoutMethod: payout.payoutMethod,
+          transactionRef: payout.transactionRef,
+          adminNote: payout.adminNote,
+        },
+        after: {
+          amount: updated.amount,
+          currency: updated.currency,
+          status: updated.status,
+          payoutMethod: updated.payoutMethod,
+          transactionRef: updated.transactionRef,
+          adminNote: updated.adminNote,
+        },
+      },
+      req.ip
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: `Payout #${payout.id.slice(0, 8)} updated successfully`,
+      payout: updated,
+    });
+  } catch (err: any) {
+    console.error('[AdminRoutes:editPayout] Error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * GET /api/v1/admin/transactions
  * Global master ledger of all checkout sessions
  */

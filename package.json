@@ -10,6 +10,7 @@
     "dev": "node scripts/dev-runner.js",
     "dev:all": "node scripts/dev-runner.js all",
     "dev:backend": "pnpm --filter 180-core-backend dev",
+    "dev:website": "pnpm --filter 180-core-website dev",
     "dev:profile": "pnpm --filter 180-profile-frontend dev",
     "dev:developers": "pnpm --filter 180developers-frontend dev",
     "dev:admin": "pnpm --filter 180-admin-frontend dev",

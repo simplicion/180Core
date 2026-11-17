@@ -1,2 +1,10 @@
+# Cloudflare Pages SPA Rewrites for 180 Admin Console dynamic routes
 /dashboard / 302
-/* /index.html 200
+
+# 1. Dynamic Developer Project Detail RSC (.txt) & HTML pages
+/developers/*/projects/*.txt   /developers/overview/projects/overview.txt   200
+/developers/*/projects/*       /developers/overview/projects/overview       200
+
+# 2. Dynamic Developer Profile Detail RSC (.txt) & HTML pages
+/developers/*.txt              /developers/overview.txt                     200
+/developers/*                  /developers/overview                         200

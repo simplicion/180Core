@@ -11,6 +11,7 @@ const nextConfig = {
     NEXT_PUBLIC_CORE_BACKEND_URL: process.env.NEXT_PUBLIC_CORE_BACKEND_URL || '',
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || '',
     NEXT_PUBLIC_PROFILE_URL: process.env.NEXT_PUBLIC_PROFILE_URL || '',
+    NEXT_PUBLIC_WEBSITE_URL: process.env.NEXT_PUBLIC_WEBSITE_URL || 'https://180core.cloud',
   },
   ...(isExport ? { output: 'export', images: { unoptimized: true } } : {}),
   async redirects() {

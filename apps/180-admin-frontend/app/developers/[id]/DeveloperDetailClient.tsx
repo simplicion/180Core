@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Users,
@@ -40,8 +40,49 @@ import {
 import toast from 'react-hot-toast';
 import { adminApi, exportToCsv } from '@/lib/api';
 
-export default function DeveloperDetailClient({ developerId }: { developerId: string }) {
+function extractDeveloperIdFromPath(path: string | null): string {
+  if (!path) return '';
+  const match = path.match(/^\/developers\/([^/?#]+)/);
+  if (match && match[1] && match[1] !== 'overview') {
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return match[1];
+    }
+  }
+  return '';
+}
+
+export default function DeveloperDetailClient({
+  developerId: propDeveloperId,
+}: {
+  developerId?: string;
+} = {}) {
   const router = useRouter();
+  const pathname = usePathname();
+  const params = useParams();
+
+  const resolveDeveloperId = useCallback(() => {
+    const fromPath = extractDeveloperIdFromPath(pathname);
+    if (fromPath) return fromPath;
+    if (typeof window !== 'undefined') {
+      const fromWindow = extractDeveloperIdFromPath(window.location.pathname);
+      if (fromWindow) return fromWindow;
+    }
+    const paramId = typeof params?.id === 'string' ? params.id : '';
+    if (paramId && paramId !== 'overview') return paramId;
+    if (propDeveloperId && propDeveloperId !== 'overview') return propDeveloperId;
+    return '';
+  }, [pathname, params?.id, propDeveloperId]);
+
+  const [developerId, setDeveloperId] = useState<string>(resolveDeveloperId);
+
+  useEffect(() => {
+    const resolved = resolveDeveloperId();
+    if (resolved && resolved !== developerId) {
+      setDeveloperId(resolved);
+    }
+  }, [resolveDeveloperId, developerId]);
 
   const [developer, setDeveloper] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);

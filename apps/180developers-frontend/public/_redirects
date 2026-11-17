@@ -1,3 +1,9 @@
+# Redirect legacy marketing/product URLs to the main 180 Core website (180core.cloud)
+/products/identity   https://180core.cloud/products/identity   301
+/products/pay        https://180core.cloud/products/pay        301
+/identity            https://180core.cloud/identity            301
+/pay                 https://180core.cloud/pay                 301
+
 # Cloudflare Pages SPA Rewrites for 180 Developers dynamic routes
 
 # 1. Identity RSC payloads (.txt)

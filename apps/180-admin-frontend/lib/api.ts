@@ -128,6 +128,32 @@ export const adminApi = {
     });
   },
 
+  updatePayout: async (
+    payoutId: string,
+    data: {
+      amount?: number;
+      currency?: string;
+      status?: string;
+      payoutMethod?: 'UPI' | 'BANK_TRANSFER';
+      transactionRef?: string;
+      adminNote?: string;
+      proofUrl?: string;
+      receivedConfirmed?: boolean;
+      accountDetails?: {
+        accountHolderName?: string;
+        upiId?: string;
+        bankName?: string;
+        accountNumber?: string;
+        ifscCode?: string;
+      };
+    }
+  ) => {
+    return fetchJson<any>(`${ADMIN_API_URL}/payouts/${payoutId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
   // Ledger Transactions
   getTransactions: async (params?: { search?: string; status?: string; currency?: string; page?: number; limit?: number }) => {
     const query = new URLSearchParams();

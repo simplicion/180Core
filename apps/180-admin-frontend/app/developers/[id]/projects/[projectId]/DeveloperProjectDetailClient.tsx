@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Layers,
@@ -39,6 +39,23 @@ import {
 import toast from 'react-hot-toast';
 import { adminApi, exportToCsv } from '@/lib/api';
 
+function extractProjectParamsFromPath(path: string | null): { devId: string; projId: string } {
+  if (!path) return { devId: '', projId: '' };
+  const match = path.match(/^\/developers\/([^/?#]+)\/projects\/([^/?#]+)/);
+  if (!match) return { devId: '', projId: '' };
+  const safeDecode = (val: string) => {
+    try {
+      return decodeURIComponent(val);
+    } catch {
+      return val;
+    }
+  };
+  return {
+    devId: match[1] && match[1] !== 'overview' ? safeDecode(match[1]) : '',
+    projId: match[2] && match[2] !== 'overview' ? safeDecode(match[2]) : '',
+  };
+}
+
 export default function DeveloperProjectDetailClient({
   developerId: propDevId,
   projectId: propProjectId,
@@ -47,9 +64,43 @@ export default function DeveloperProjectDetailClient({
   projectId?: string;
 } = {}) {
   const params = useParams();
+  const pathname = usePathname();
   const router = useRouter();
-  const developerId = propDevId || (params?.id as string);
-  const projectId = propProjectId || (params?.projectId as string);
+
+  const resolveIds = useCallback(() => {
+    const fromPath = extractProjectParamsFromPath(pathname);
+    const fromWindow =
+      typeof window !== 'undefined'
+        ? extractProjectParamsFromPath(window.location.pathname)
+        : { devId: '', projId: '' };
+    const paramDevId = typeof params?.id === 'string' && params.id !== 'overview' ? params.id : '';
+    const paramProjId =
+      typeof params?.projectId === 'string' && params.projectId !== 'overview' ? params.projectId : '';
+
+    return {
+      devId:
+        fromPath.devId ||
+        fromWindow.devId ||
+        paramDevId ||
+        (propDevId && propDevId !== 'overview' ? propDevId : ''),
+      projId:
+        fromPath.projId ||
+        fromWindow.projId ||
+        paramProjId ||
+        (propProjectId && propProjectId !== 'overview' ? propProjectId : ''),
+    };
+  }, [pathname, params?.id, params?.projectId, propDevId, propProjectId]);
+
+  const [resolvedIds, setResolvedIds] = useState(resolveIds);
+  const developerId = resolvedIds.devId;
+  const projectId = resolvedIds.projId;
+
+  useEffect(() => {
+    const next = resolveIds();
+    if (next.devId !== resolvedIds.devId || next.projId !== resolvedIds.projId) {
+      setResolvedIds(next);
+    }
+  }, [resolveIds, resolvedIds.devId, resolvedIds.projId]);
 
   const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);

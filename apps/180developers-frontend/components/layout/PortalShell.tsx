@@ -5,21 +5,19 @@ import { usePathname } from 'next/navigation';
 import Navbar from '../Navbar';
 import Link from 'next/link';
 
+const WEBSITE_URL = (process.env.NEXT_PUBLIC_WEBSITE_URL || 'https://180core.cloud').replace(/\/+$/, '');
+
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
-  // 1. Full-bleed developer console (no marketing navbar/footer)
-  const isDeveloperConsole = pathname.startsWith('/dashboard') || pathname.startsWith('/apps');
+  // 1. Full-bleed developer console & root redirect (no marketing navbar/footer)
+  const isDeveloperConsole =
+    pathname === '/' || pathname.startsWith('/dashboard') || pathname.startsWith('/apps');
   if (isDeveloperConsole) {
     return <div className="min-h-screen flex flex-col">{children}</div>;
   }
 
-  // 2. Main Master Landing Page: Single focused landing page with NO cluttered top navigation
-  if (pathname === '/') {
-    return <div className="min-h-screen flex flex-col">{children}</div>;
-  }
-
-  // 3. Documentation Hub: Dedicated full-bleed container with top Navbar
+  // 2. Documentation Hub: Dedicated full-bleed container with top Navbar
   if (pathname.startsWith('/docs')) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -29,38 +27,44 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // 4. Standard Product & Marketing Pages (180 Identity, 180 Pay, etc.)
+  // 3. Developer Portal Secondary Pages (Billing, Callbacks, etc.)
   return (
     <>
-      {/* Global Marketing Navigation Bar */}
       <Navbar />
 
-      {/* Page Content Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
         {children}
       </main>
 
-      {/* Public Footer */}
       <footer className="border-t border-zinc-200 dark:border-white/10 bg-white dark:bg-black py-8 text-xs text-zinc-600 dark:text-zinc-500 transition-colors duration-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="font-semibold text-zinc-900 dark:text-zinc-300">
-              180 Developers
-            </span>
+            <a
+              href={WEBSITE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-zinc-900 dark:text-zinc-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+            >
+              180 Core
+            </a>
             <span>•</span>
-            <Link
-              href="/products/identity"
+            <a
+              href={`${WEBSITE_URL}/products/identity`}
+              target="_blank"
+              rel="noopener noreferrer"
               className="hover:text-zinc-900 dark:hover:text-white transition-colors"
             >
               180 Identity
-            </Link>
+            </a>
             <span>•</span>
-            <Link
-              href="/products/pay"
+            <a
+              href={`${WEBSITE_URL}/products/pay`}
+              target="_blank"
+              rel="noopener noreferrer"
               className="hover:text-zinc-900 dark:hover:text-white transition-colors"
             >
               180 Pay
-            </Link>
+            </a>
             <span>•</span>
             <Link
               href="/docs"

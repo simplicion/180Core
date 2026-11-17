@@ -16,6 +16,14 @@ const APPS = {
     port: 4003,
     color: '\x1b[38;5;141m', // Purple
   },
+  website: {
+    name: '180 Core Website (Main Marketing Site - 180core.cloud)',
+    filter: '180-core-website',
+    cmd: 'pnpm',
+    args: ['--filter', '180-core-website', 'dev'],
+    port: 3000,
+    color: '\x1b[38;5;39m', // Blue
+  },
   profile: {
     name: '180 Profile Frontend (Universal Identity & Popups)',
     filter: '180-profile-frontend',
@@ -113,14 +121,16 @@ console.log('\n' + BOLD + GREEN + '=============================================
 console.log(BOLD + GREEN + ' 🚀 180 CORE PLATFORM DEV RUNNER' + RESET);
 console.log(BOLD + GREEN + '==================================================' + RESET);
 console.log('  [backend]    -> http://localhost:4003 (Sovereign API, OIDC, Pay)');
+console.log('  [website]    -> http://localhost:3000 (Main Website - 180core.cloud)');
 console.log('  [profile]    -> http://localhost:3009 (Universal Profile & SSO)');
 console.log('  [developers] -> http://localhost:3008 (Developer Portal)');
 console.log('  [admin]      -> http://localhost:3010 (Super Admin Platform)');
 console.log('--------------------------------------------------');
-console.log('Controls: [b] Restart backend | [p] Restart profile | [d] Restart devs | [a] Restart admin | [q] Quit\n');
+console.log('Controls: [b] Restart backend | [w] Restart website | [p] Restart profile | [d] Restart devs | [a] Restart admin | [q] Quit\n');
 
-// Start all four by default on pnpm dev
+// Start all five by default on pnpm dev
 startProcess('backend');
+startProcess('website');
 startProcess('profile');
 startProcess('developers');
 startProcess('admin');
@@ -132,6 +142,7 @@ if (process.stdin.isTTY) {
     if (key.ctrl && key.name === 'c') shutdown();
     if (key.name === 'q') shutdown();
     if (key.name === 'b') { stopProcess('backend'); setTimeout(() => startProcess('backend'), 500); }
+    if (key.name === 'w') { stopProcess('website'); setTimeout(() => startProcess('website'), 500); }
     if (key.name === 'p') { stopProcess('profile'); setTimeout(() => startProcess('profile'), 500); }
     if (key.name === 'd') { stopProcess('developers'); setTimeout(() => startProcess('developers'), 500); }
     if (key.name === 'a') { stopProcess('admin'); setTimeout(() => startProcess('admin'), 500); }

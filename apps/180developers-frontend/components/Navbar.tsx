@@ -44,6 +44,17 @@ export default function Navbar() {
 
   const { launch180Identity, isOpeningIdentity } = use180Identity(CORE_CLIENT_ID);
 
+  const getWebsiteUrl = () => {
+    if (process.env.NEXT_PUBLIC_WEBSITE_URL) {
+      return process.env.NEXT_PUBLIC_WEBSITE_URL.replace(/\/+$/, '');
+    }
+    if (typeof window !== 'undefined') {
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      return isLocal ? 'http://localhost:3000' : 'https://180core.cloud';
+    }
+    return 'https://180core.cloud';
+  };
+
   const getProfileUrl = () => {
     if (typeof window === 'undefined') return 'http://localhost:3009';
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -168,7 +179,7 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
         {/* Left: Clean Brand Logo */}
         <div className="flex items-center gap-6 shrink-0">
-          <Link href="/" className="flex items-center gap-2.5 group min-h-[44px] shrink-0">
+          <Link href="/dashboard" className="flex items-center gap-2.5 group min-h-[44px] shrink-0">
             <OneEightyCoreLogo
               variant="compact"
               height={32}
@@ -182,7 +193,7 @@ export default function Navbar() {
 
         {/* Center: Clean, Modern Tech Navigation Links */}
         <nav className="hidden md:flex items-center gap-6 text-sm font-semibold">
-          {/* 1. Products Hover / Click Dropdown */}
+          {/* 1. Products Hover / Click Dropdown (Links to 180core.cloud main website) */}
           <div
             className="relative"
             ref={dropdownRef}
@@ -193,7 +204,7 @@ export default function Navbar() {
               type="button"
               onClick={() => setProductsDropdownOpen(!productsDropdownOpen)}
               className={`flex items-center gap-1.5 py-2 transition-colors cursor-pointer ${
-                isProductsActive || productsDropdownOpen
+                productsDropdownOpen
                   ? 'text-blue-600 dark:text-blue-400 font-bold'
                   : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white'
               }`}
@@ -210,8 +221,10 @@ export default function Navbar() {
             {productsDropdownOpen && (
               <div className="absolute top-full left-1/2 -translate-x-1/2 pt-2 w-80 z-50 animate-in fade-in zoom-in-95 duration-150">
                 <div className="rounded-2xl bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-white/10 shadow-2xl p-2.5 space-y-1.5 backdrop-blur-xl">
-                  <Link
-                    href="/products/identity"
+                  <a
+                    href={`${getWebsiteUrl()}/products/identity`}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     onClick={() => setProductsDropdownOpen(false)}
                     className="flex items-start gap-3 p-3 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-900/80 transition-colors group"
                   >
@@ -222,17 +235,19 @@ export default function Navbar() {
                       <div className="font-bold text-xs text-zinc-950 dark:text-white flex items-center gap-1.5">
                         <span>180 Identity</span>
                         <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/30">
-                          Auth & SSO
+                          Auth &amp; SSO
                         </span>
                       </div>
                       <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 leading-snug">
                         Universal Single Sign-On, 1-tap WhatsApp OTP, and RS256 JWKS tokens.
                       </p>
                     </div>
-                  </Link>
+                  </a>
 
-                  <Link
-                    href="/products/pay"
+                  <a
+                    href={`${getWebsiteUrl()}/products/pay`}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     onClick={() => setProductsDropdownOpen(false)}
                     className="flex items-start gap-3 p-3 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-900/80 transition-colors group"
                   >
@@ -250,7 +265,7 @@ export default function Navbar() {
                         Instant popup checkouts, 180 wallet balances, and 2-way signed webhooks.
                       </p>
                     </div>
-                  </Link>
+                  </a>
                 </div>
               </div>
             )}
@@ -384,22 +399,26 @@ export default function Navbar() {
         <div className="md:hidden border-t border-zinc-200 dark:border-white/10 bg-white/95 dark:bg-black/95 px-4 pt-3 pb-6 space-y-3 backdrop-blur-2xl shadow-xl animate-in slide-in-from-top-2 duration-200">
           <div className="space-y-1">
             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-4">
-              Products
+              Products (180core.cloud)
             </span>
-            <Link
-              href="/products/identity"
+            <a
+              href={`${getWebsiteUrl()}/products/identity`}
+              target="_blank"
+              rel="noopener noreferrer"
               onClick={() => setMobileMenuOpen(false)}
               className="flex items-center justify-between px-4 py-3 min-h-[44px] rounded-xl text-sm font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-white/5"
             >
               <div className="flex items-center gap-2.5">
                 <Shield className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                <span>180 Identity (Auth & SSO)</span>
+                <span>180 Identity (Auth &amp; SSO)</span>
               </div>
               <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold">OIDC 1.0</span>
-            </Link>
+            </a>
 
-            <Link
-              href="/products/pay"
+            <a
+              href={`${getWebsiteUrl()}/products/pay`}
+              target="_blank"
+              rel="noopener noreferrer"
               onClick={() => setMobileMenuOpen(false)}
               className="flex items-center justify-between px-4 py-3 min-h-[44px] rounded-xl text-sm font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-white/5"
             >
@@ -408,7 +427,7 @@ export default function Navbar() {
                 <span>180 Pay (Payments)</span>
               </div>
               <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold">1-Click</span>
-            </Link>
+            </a>
           </div>
 
           <a

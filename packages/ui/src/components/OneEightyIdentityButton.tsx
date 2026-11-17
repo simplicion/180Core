@@ -152,7 +152,7 @@ export const OneEightyIdentityButton: React.FC<OneEightyIdentityButtonProps> = (
     if (isBusy || disabled) return;
 
     // If href is set and not invoking SDK modal, let default link navigation occur
-    if (href && !window.OneEighty?.auth && !(window as any).OneEightyIdentity?.openAuth) {
+    if (href && !(window as any).OneEighty?.auth && !(window as any).OneEightyIdentity?.openAuth) {
       return;
     }
 

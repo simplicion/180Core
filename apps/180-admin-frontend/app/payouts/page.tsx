@@ -25,6 +25,7 @@ import {
   User,
   Zap,
   ShieldCheck,
+  Pencil,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { adminApi, exportToCsv } from '@/lib/api';
@@ -35,13 +36,23 @@ export default function PayoutsSettlementDeskPage() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedPayout, setSelectedPayout] = useState<any | null>(null);
-  const [actionType, setActionType] = useState<'APPROVE' | 'SETTLE' | 'REJECT' | null>(null);
+  const [actionType, setActionType] = useState<'APPROVE' | 'SETTLE' | 'REJECT' | 'EDIT' | null>(null);
 
   // Form states
   const [utrReference, setUtrReference] = useState('');
   const [proofUrl, setProofUrl] = useState('');
   const [adminNotes, setAdminNotes] = useState('');
   const [rejectReason, setRejectReason] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editCurrency, setEditCurrency] = useState('INR');
+  const [editStatus, setEditStatus] = useState('PAID');
+  const [editMethod, setEditMethod] = useState<'UPI' | 'BANK_TRANSFER'>('UPI');
+  const [editHolderName, setEditHolderName] = useState('');
+  const [editUpiId, setEditUpiId] = useState('');
+  const [editBankName, setEditBankName] = useState('');
+  const [editAccountNumber, setEditAccountNumber] = useState('');
+  const [editIfscCode, setEditIfscCode] = useState('');
+  const [editReceivedConfirmed, setEditReceivedConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -66,7 +77,9 @@ export default function PayoutsSettlementDeskPage() {
         ifscCode: '',
       };
     }
-    const isUpi = p.payoutMethod === 'UPI' || Boolean(p.accountDetails?.upiId);
+    const isUpi = p.payoutMethod
+      ? p.payoutMethod === 'UPI'
+      : Boolean(p.accountDetails?.upiId);
     const upiId = p.accountDetails?.upiId || p.upiId || p.app?.bankDetails?.upiId || '';
     const holderName =
       p.accountDetails?.accountHolderName ||
@@ -333,6 +346,65 @@ export default function PayoutsSettlementDeskPage() {
     }
   };
 
+  const openEditModal = (payout: any) => {
+    const b = getPayoutBeneficiary(payout);
+    setSelectedPayout(payout);
+    setEditAmount(String(payout.amount ?? ''));
+    setEditCurrency((payout.currency || 'INR').toUpperCase());
+    setEditStatus(payout.status || 'PENDING_REVIEW');
+    setEditMethod(b.isUpi ? 'UPI' : 'BANK_TRANSFER');
+    setEditHolderName(b.holderName || '');
+    setEditUpiId(b.upiId || '');
+    setEditBankName(b.bankName || '');
+    setEditAccountNumber(b.accountNumber || '');
+    setEditIfscCode(b.ifscCode || '');
+    setUtrReference(payout.transactionRef || payout.utrReference || '');
+    setProofUrl(payout.accountDetails?.proofUrl || payout.proofUrl || '');
+    setAdminNotes(payout.adminNote || payout.adminNotes || '');
+    setEditReceivedConfirmed(Boolean(payout.accountDetails?.receivedConfirmed));
+    setActionType('EDIT');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selectedPayout) return;
+    const parsedAmount = parseFloat(editAmount);
+    if (Number.isNaN(parsedAmount) || parsedAmount < 0) {
+      toast.error('Please enter a valid non-negative amount');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      const res = await adminApi.updatePayout(selectedPayout.id, {
+        amount: parsedAmount,
+        currency: editCurrency.trim().toUpperCase() || 'INR',
+        status: editStatus,
+        payoutMethod: editMethod,
+        transactionRef: utrReference.trim(),
+        adminNote: adminNotes.trim(),
+        proofUrl: proofUrl.trim(),
+        receivedConfirmed: editReceivedConfirmed,
+        accountDetails: {
+          accountHolderName: editHolderName.trim(),
+          upiId: editMethod === 'UPI' ? editUpiId.trim() : '',
+          bankName: editMethod === 'BANK_TRANSFER' ? editBankName.trim() : '',
+          accountNumber: editMethod === 'BANK_TRANSFER' ? editAccountNumber.trim() : '',
+          ifscCode: editMethod === 'BANK_TRANSFER' ? editIfscCode.trim().toUpperCase() : '',
+        },
+      });
+      if (res.success) {
+        toast.success(`Payout #${selectedPayout.id.slice(0, 8)} updated successfully`);
+        closeModal();
+        loadPayouts();
+      } else {
+        toast.error(res.error || 'Failed to update payout');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save payout changes');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const closeModal = () => {
     setSelectedPayout(null);
     setActionType(null);
@@ -340,6 +412,16 @@ export default function PayoutsSettlementDeskPage() {
     setProofUrl('');
     setAdminNotes('');
     setRejectReason('');
+    setEditAmount('');
+    setEditCurrency('INR');
+    setEditStatus('PAID');
+    setEditMethod('UPI');
+    setEditHolderName('');
+    setEditUpiId('');
+    setEditBankName('');
+    setEditAccountNumber('');
+    setEditIfscCode('');
+    setEditReceivedConfirmed(false);
   };
 
   const filteredPayouts = payouts.filter((p) => {
@@ -693,88 +775,100 @@ export default function PayoutsSettlementDeskPage() {
                         {new Date(payout.requestedAt || payout.createdAt).toLocaleString()}
                       </td>
                       <td className="py-3.5 px-6 font-sans text-right">
-                        {isPending ? (
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => {
-                                setSelectedPayout(payout);
-                                setActionType('APPROVE');
-                              }}
-                              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-sm transition-colors"
-                              title="Compliance Approve"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSelectedPayout(payout);
-                                setActionType('SETTLE');
-                              }}
-                              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-colors"
-                              title="Enter UTR and Settle"
-                            >
-                              Settle
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSelectedPayout(payout);
-                                setActionType('REJECT');
-                              }}
-                              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 transition-colors"
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        ) : isProcessing ? (
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => {
-                                setSelectedPayout(payout);
-                                setActionType('SETTLE');
-                              }}
-                              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-colors"
-                            >
-                              Mark Settled (UTR)
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSelectedPayout(payout);
-                                setActionType('REJECT');
-                              }}
-                              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 transition-colors"
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        ) : isPaid ? (
-                          <div className="text-[11px] text-zinc-500 font-mono text-right space-y-0.5">
-                            <div>
-                              UTR: <span className="text-emerald-500 font-bold">{payout.transactionRef || payout.utrReference || 'CONFIRMED'}</span>
-                            </div>
-                            {(payout.accountDetails?.proofUrl || payout.proofUrl) && (
+                        <div className="flex items-center justify-end gap-2">
+                          {isPending ? (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setSelectedPayout(payout);
+                                  setActionType('APPROVE');
+                                }}
+                                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-sm transition-colors"
+                                title="Compliance Approve"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedPayout(payout);
+                                  setActionType('SETTLE');
+                                }}
+                                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-colors"
+                                title="Enter UTR and Settle"
+                              >
+                                Settle
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedPayout(payout);
+                                  setActionType('REJECT');
+                                }}
+                                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 transition-colors"
+                              >
+                                Reject
+                              </button>
+                            </>
+                          ) : isProcessing ? (
+                            <>
+                              <button
+                                onClick={() => {
+                                  setSelectedPayout(payout);
+                                  setActionType('SETTLE');
+                                }}
+                                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-colors"
+                              >
+                                Mark Settled (UTR)
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedPayout(payout);
+                                  setActionType('REJECT');
+                                }}
+                                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 transition-colors"
+                              >
+                                Reject
+                              </button>
+                            </>
+                          ) : isPaid ? (
+                            <div className="text-[11px] text-zinc-500 font-mono text-right space-y-0.5">
                               <div>
-                                <a
-                                  href={payout.accountDetails?.proofUrl || payout.proofUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-[10px] text-blue-500 hover:underline font-sans"
-                                >
-                                  <ExternalLink className="h-2.5 w-2.5" />
-                                  <span>View Proof</span>
-                                </a>
+                                UTR: <span className="text-emerald-500 font-bold">{payout.transactionRef || payout.utrReference || 'CONFIRMED'}</span>
                               </div>
-                            )}
-                            {payout.accountDetails?.receivedConfirmed && (
-                              <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-sans font-semibold">
-                                ✓ Confirmed by Merchant
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="text-[11px] text-rose-500 text-right truncate max-w-[140px]">
-                            {payout.adminNote || 'Rejected'}
-                          </div>
-                        )}
+                              {(payout.accountDetails?.proofUrl || payout.proofUrl) && (
+                                <div>
+                                  <a
+                                    href={payout.accountDetails?.proofUrl || payout.proofUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-[10px] text-blue-500 hover:underline font-sans"
+                                  >
+                                    <ExternalLink className="h-2.5 w-2.5" />
+                                    <span>View Proof</span>
+                                  </a>
+                                </div>
+                              )}
+                              {payout.accountDetails?.receivedConfirmed && (
+                                <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-sans font-semibold">
+                                  ✓ Confirmed by Merchant
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-[11px] text-rose-500 text-right truncate max-w-[140px]">
+                              {payout.adminNote || 'Rejected'}
+                            </div>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(payout)}
+                            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 text-zinc-700 dark:text-zinc-200 border border-zinc-200/80 dark:border-white/10 transition-colors inline-flex items-center gap-1.5 shrink-0"
+                            title="Edit payout details"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            <span>Edit</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -976,6 +1070,261 @@ export default function PayoutsSettlementDeskPage() {
                 className="px-5 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-md shadow-rose-500/25 transition-all"
               >
                 {submitting ? 'Rejecting...' : 'Reject Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Payout Modal */}
+      {actionType === 'EDIT' && selectedPayout && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="w-full max-w-2xl bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-white/10 rounded-3xl p-6 shadow-2xl space-y-5 my-8">
+            <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center">
+                  <Pencil className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
+                    Edit Payout Record
+                  </h3>
+                  <p className="text-xs text-zinc-500 font-mono">
+                    #{selectedPayout.id.slice(0, 12)} · {selectedPayout.app?.user?.name || 'Developer'} ({selectedPayout.app?.name || 'App'})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeModal}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors"
+                aria-label="Close edit modal"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs max-h-[68vh] overflow-y-auto pr-1">
+              {/* Amount, Currency, Status */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Requested Amount
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={editAmount}
+                    onChange={(e) => setEditAmount(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl font-mono text-xs bg-zinc-50 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Currency
+                  </label>
+                  <select
+                    value={editCurrency}
+                    onChange={(e) => setEditCurrency(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl font-mono text-xs bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  >
+                    <option value="INR">INR (₹)</option>
+                    <option value="USD">USD ($)</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="GBP">GBP (£)</option>
+                    <option value="NPR">NPR</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  >
+                    <option value="PENDING_REVIEW">PENDING_REVIEW</option>
+                    <option value="APPROVED">APPROVED</option>
+                    <option value="PROCESSING">PROCESSING</option>
+                    <option value="PAID">PAID</option>
+                    <option value="REJECTED">REJECTED</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* UTR & Proof URL */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Bank UTR / Transaction Reference
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 397297240545"
+                    value={utrReference}
+                    onChange={(e) => setUtrReference(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl font-mono text-xs bg-zinc-50 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Transfer Proof URL / Receipt Ref
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="https://..."
+                    value={proofUrl}
+                    onChange={(e) => setProofUrl(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl text-xs bg-zinc-50 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  />
+                </div>
+              </div>
+
+              {/* Beneficiary Details Box */}
+              <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.02] border border-zinc-200/80 dark:border-white/10 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+                    Beneficiary Settlement Details
+                  </span>
+                  <div className="inline-flex rounded-xl p-1 bg-zinc-200/70 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10">
+                    <button
+                      type="button"
+                      onClick={() => setEditMethod('UPI')}
+                      className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-colors ${
+                        editMethod === 'UPI'
+                          ? 'bg-purple-600 text-white'
+                          : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                      }`}
+                    >
+                      UPI
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditMethod('BANK_TRANSFER')}
+                      className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-colors ${
+                        editMethod === 'BANK_TRANSFER'
+                          ? 'bg-blue-600 text-white'
+                          : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                      }`}
+                    >
+                      BANK
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                    Account Holder / Receiver Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editHolderName}
+                    onChange={(e) => setEditHolderName(e.target.value)}
+                    placeholder="Legal beneficiary name"
+                    className="w-full px-3.5 py-2.5 rounded-xl text-xs bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  />
+                </div>
+
+                {editMethod === 'UPI' ? (
+                  <div>
+                    <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                      UPI ID (VPA)
+                    </label>
+                    <input
+                      type="text"
+                      value={editUpiId}
+                      onChange={(e) => setEditUpiId(e.target.value)}
+                      placeholder="name@bank"
+                      className="w-full px-3.5 py-2.5 rounded-xl font-mono text-xs bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                    />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                        Bank Name
+                      </label>
+                      <input
+                        type="text"
+                        value={editBankName}
+                        onChange={(e) => setEditBankName(e.target.value)}
+                        placeholder="e.g. Direct Bank / SBI"
+                        className="w-full px-3.5 py-2.5 rounded-xl text-xs bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                        Account Number
+                      </label>
+                      <input
+                        type="text"
+                        value={editAccountNumber}
+                        onChange={(e) => setEditAccountNumber(e.target.value)}
+                        placeholder="Account number"
+                        className="w-full px-3.5 py-2.5 rounded-xl font-mono text-xs bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                        IFSC Code
+                      </label>
+                      <input
+                        type="text"
+                        value={editIfscCode}
+                        onChange={(e) => setEditIfscCode(e.target.value.toUpperCase())}
+                        placeholder="e.g. SBIN0000731"
+                        className="w-full px-3.5 py-2.5 rounded-xl font-mono uppercase text-xs bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Admin Notes */}
+              <div>
+                <label className="block font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                  Admin Notes / Remarks
+                </label>
+                <textarea
+                  rows={2}
+                  value={adminNotes}
+                  onChange={(e) => setAdminNotes(e.target.value)}
+                  placeholder="Internal settlement note or developer remark..."
+                  className="w-full px-3.5 py-2.5 rounded-xl text-xs bg-zinc-50 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                />
+              </div>
+
+              {/* Merchant Received Toggle */}
+              <label className="flex items-center gap-2.5 cursor-pointer select-none pt-1">
+                <input
+                  type="checkbox"
+                  checked={editReceivedConfirmed}
+                  onChange={(e) => setEditReceivedConfirmed(e.target.checked)}
+                  className="h-4 w-4 rounded border-zinc-300 dark:border-white/20 text-emerald-600 focus:ring-emerald-500"
+                />
+                <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Mark as confirmed received by merchant
+                </span>
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-100 dark:border-white/10">
+              <button
+                type="button"
+                onClick={closeModal}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 text-zinc-700 dark:text-zinc-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={handleSaveEdit}
+                className="px-5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white shadow-md shadow-blue-500/25 transition-all"
+              >
+                {submitting ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
           </div>
