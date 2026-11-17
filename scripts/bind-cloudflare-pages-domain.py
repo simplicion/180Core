@@ -11,6 +11,7 @@ Reads credentials strictly from environment variables:
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -110,6 +111,12 @@ def list_pages_projects(account_id):
     return projects
 
 
+def get_project_domains(account_id, proj_name):
+    _, body = cf_request("GET", f"/accounts/{account_id}/pages/projects/{proj_name}/domains")
+    items = body.get("result") or []
+    return [d.get("name") for d in items if isinstance(d, dict) and d.get("name")]
+
+
 def main():
     if len(sys.argv) < 3:
         print("Usage: bind-cloudflare-pages-domain.py <project-name> <domain1> [domain2 ...]")
@@ -124,37 +131,59 @@ def main():
     domains = sys.argv[2:]
     target_host = f"{target_project}.pages.dev"
 
-    # 1. List all Pages projects (using valid pagination)
-    projects = list_pages_projects(account_id)
-    print(f"Found {len(projects)} Cloudflare Pages projects in account.")
+    # 1. Inspect target project's current domains first
+    target_domains = set(get_project_domains(account_id, target_project))
+    pending_domains = [d for d in domains if d not in target_domains]
+    for d in domains:
+        if d in target_domains:
+            print(f"{d} is already bound to '{target_project}'.")
 
-    # 2. For each requested domain, detach from any old project and attach to target_project
-    for domain in domains:
-        already_on_target = False
-        for proj in projects:
-            proj_name = proj.get("name")
-            proj_domains = proj.get("domains") or []
-            if domain in proj_domains:
-                if proj_name == target_project:
-                    already_on_target = True
-                else:
+    # 2. If any domains still need binding, locate which project currently owns them & detach
+    if pending_domains:
+        projects = list_pages_projects(account_id)
+        project_names = [p.get("name") for p in projects if p.get("name") and p.get("name") != target_project]
+        # Prioritize likely legacy marketing project first
+        project_names.sort(key=lambda n: (0 if "marketing" in n or "website" in n else 1, n))
+        print(f"Found {len(projects)} Cloudflare Pages projects; checking custom domain ownership...")
+
+        for proj_name in project_names:
+            if not pending_domains:
+                break
+            proj_custom_domains = get_project_domains(account_id, proj_name)
+            for domain in list(pending_domains):
+                if domain in proj_custom_domains:
                     print(f"Detaching {domain} from previous Pages project '{proj_name}'...")
                     d_status, d_res = cf_request(
                         "DELETE",
                         f"/accounts/{account_id}/pages/projects/{proj_name}/domains/{urllib.parse.quote(domain)}",
                     )
                     print(f"Detach ({domain} from {proj_name}): HTTP {d_status}, success={d_res.get('success')}")
+                    time.sleep(2)
+                    print(f"Attaching {domain} to Pages project '{target_project}'...")
+                    a_status, a_res = cf_request(
+                        "POST",
+                        f"/accounts/{account_id}/pages/projects/{target_project}/domains",
+                        {"name": domain},
+                    )
+                    print(
+                        f"Attach ({domain} -> {target_project}): HTTP {a_status}, "
+                        f"success={a_res.get('success')}, errors={a_res.get('errors')}"
+                    )
+                    if a_res.get("success"):
+                        pending_domains.remove(domain)
 
-        if already_on_target:
-            print(f"{domain} is already bound to '{target_project}'.")
-        else:
+        # Try direct attach for any remaining unbound domains
+        for domain in pending_domains:
             print(f"Attaching {domain} to Pages project '{target_project}'...")
             a_status, a_res = cf_request(
                 "POST",
                 f"/accounts/{account_id}/pages/projects/{target_project}/domains",
                 {"name": domain},
             )
-            print(f"Attach ({domain} -> {target_project}): HTTP {a_status}, success={a_res.get('success')}, errors={a_res.get('errors')}")
+            print(
+                f"Attach ({domain} -> {target_project}): HTTP {a_status}, "
+                f"success={a_res.get('success')}, errors={a_res.get('errors')}"
+            )
 
     # 3. Sync DNS CNAME records in the root Cloudflare zone
     root_domain = domains[0].lstrip("www.") if domains[0].startswith("www.") else domains[0]
