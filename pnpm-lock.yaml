@@ -214,6 +214,9 @@ importers:
       '@mediapipe/tasks-vision':
         specifier: 0.10.35
         version: 0.10.35
+      '@workspace/identity-sdk':
+        specifier: workspace:*
+        version: link:../../packages/identity-sdk
       '@workspace/ui':
         specifier: workspace:*
         version: link:../../packages/ui

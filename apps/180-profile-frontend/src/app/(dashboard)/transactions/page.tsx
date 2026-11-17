@@ -9,18 +9,18 @@ import {
   Receipt,
 } from 'lucide-react';
 import { Button, AdaptiveSkeleton, OneEightyIdentityButton } from '@workspace/ui';
+import { use180Pay } from '@workspace/identity-sdk';
 import toast from 'react-hot-toast';
 import { LedgerEntry } from '@/types';
 import { InvoiceModal } from '@/components/InvoiceModal';
-import { OneEightyPayBottomSheet } from '@/components/OneEightyPayBottomSheet';
 import { getCoreApiUrl } from '@/lib/api';
 import { getStoredAuthToken } from '@/lib/auth';
 import { useAuth } from '@/context/AuthContext';
 
 export default function TransactionsPage() {
   const { user, balance, loading: authLoading, refreshWallet } = useAuth();
+  const { launch180Pay } = use180Pay();
   const [ledgerLoading, setLedgerLoading] = useState<boolean>(true);
-  const [isTopUpOpen, setIsTopUpOpen] = useState<boolean>(false);
   const [selectedAmount, setSelectedAmount] = useState<number>(1000);
   const [customAmount, setCustomAmount] = useState<string>('');
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
@@ -77,7 +77,25 @@ export default function TransactionsPage() {
       return;
     }
 
-    setIsTopUpOpen(true);
+    const uid = user?.id || 'usr';
+    launch180Pay({
+      sessionId: `sess_topup_${uid}_${Date.now()}`,
+      amount: finalAmount,
+      currency: 'INR',
+      title: '180 Wallet Top-Up',
+      description: 'Add funds to your Universal 180 Prepaid Wallet',
+      payServerUrl: typeof window !== 'undefined' ? window.location.origin : undefined,
+      metadata: {
+        isTopUp: true,
+        purpose: 'wallet_topup',
+        type: 'topup',
+        allowCustomAmount: true,
+      },
+      onSuccess: () => {
+        refreshWallet();
+        fetchLedgerData();
+      },
+    });
   };
 
   if (authLoading) {
@@ -427,19 +445,6 @@ export default function TransactionsPage() {
           onClose={() => setSelectedInvoice(null)}
         />
       )}
-
-      <OneEightyPayBottomSheet
-        isOpen={isTopUpOpen}
-        onClose={() => setIsTopUpOpen(false)}
-        initialAmount={customAmount ? (parseFloat(customAmount) || 1000) : selectedAmount}
-        currentBalance={balance}
-        user={user}
-        onSuccess={() => {
-          refreshWallet();
-          fetchLedgerData();
-          setIsTopUpOpen(false);
-        }}
-      />
     </div>
   );
 }

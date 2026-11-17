@@ -23,22 +23,21 @@ import {
   Lock,
 } from 'lucide-react';
 import { Button, UniversalSkeleton, AdaptiveSkeleton, OneEightyIdentityButton } from '@workspace/ui';
+import { use180Pay } from '@workspace/identity-sdk';
 import toast from 'react-hot-toast';
 import { UserProfile, ConnectedApp, LedgerEntry } from '@/types';
 import { getCoreApiUrl } from '@/lib/api';
 import { purgeAuthSession, getStoredAuthToken } from '@/lib/auth';
 import { EditProfileModal } from '@/components/EditProfileModal';
-import { OneEightyPayBottomSheet } from '@/components/OneEightyPayBottomSheet';
 import { InvoiceModal } from '@/components/InvoiceModal';
 import { useAuth } from '@/context/AuthContext';
 
 export default function HomePage() {
   const { user, balance, loading, refreshWallet, refreshUser } = useAuth();
+  const { launch180Pay, isOpeningPay } = use180Pay();
 
-  // Modals & Bottom Sheets
+  // Modals
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isTopUpSheetOpen, setIsTopUpSheetOpen] = useState(false);
-  const [topUpAmount, setTopUpAmount] = useState<number>(1000);
   const [selectedInvoice, setSelectedInvoice] = useState<LedgerEntry | null>(null);
 
   // Connected apps & ledger entries
@@ -178,14 +177,32 @@ export default function HomePage() {
           <div className="pt-3 sm:pt-4">
             <Button
               variant="default"
+              disabled={isOpeningPay}
               onClick={() => {
-                setTopUpAmount(1000);
-                setIsTopUpSheetOpen(true);
+                const uid = user?.id || 'usr';
+                launch180Pay({
+                  sessionId: `sess_topup_${uid}_${Date.now()}`,
+                  amount: 1000,
+                  currency: 'INR',
+                  title: '180 Wallet Top-Up',
+                  description: 'Add funds to your Universal 180 Prepaid Wallet',
+                  payServerUrl: typeof window !== 'undefined' ? window.location.origin : undefined,
+                  metadata: {
+                    isTopUp: true,
+                    purpose: 'wallet_topup',
+                    type: 'topup',
+                    allowCustomAmount: true,
+                  },
+                  onSuccess: () => {
+                    refreshWallet();
+                    loadDashboardData();
+                  },
+                });
               }}
               className="w-full px-3 sm:px-5 py-2 sm:py-2.5 min-h-[36px] sm:min-h-[42px] rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm shadow-xs active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer transition-all"
             >
               <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span>Top-Up</span>
+              <span>{isOpeningPay ? 'Opening 180 Pay...' : 'Top-Up'}</span>
             </Button>
           </div>
         </div>
@@ -429,21 +446,6 @@ export default function HomePage() {
           onSave={() => {
             refreshUser();
             setIsEditModalOpen(false);
-          }}
-        />
-      )}
-
-      {isTopUpSheetOpen && (
-        <OneEightyPayBottomSheet
-          isOpen={isTopUpSheetOpen}
-          initialAmount={topUpAmount}
-          currentBalance={balance}
-          user={user}
-          onClose={() => setIsTopUpSheetOpen(false)}
-          onSuccess={() => {
-            refreshWallet();
-            loadDashboardData();
-            setIsTopUpSheetOpen(false);
           }}
         />
       )}

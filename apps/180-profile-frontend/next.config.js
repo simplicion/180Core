@@ -4,7 +4,7 @@ const isExport = process.env.NEXT_EXPORT === 'true' || process.env.CF_PAGES === 
 
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ['@workspace/ui'],
+  transpilePackages: ['@workspace/ui', '@workspace/identity-sdk'],
   env: {
     NEXT_PUBLIC_GOOGLE_CLIENT_ID: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '',
     NEXT_PUBLIC_LINKEDIN_CLIENT_ID: process.env.NEXT_PUBLIC_LINKEDIN_CLIENT_ID || '',
@@ -24,6 +24,7 @@ const nextConfig = {
       'lucide-react',
       'react-hot-toast',
       '@workspace/ui',
+      '@workspace/identity-sdk',
     ],
   },
   onDemandEntries: {

@@ -54,6 +54,7 @@ jobs:
               - 'packages/ui/**'
             profile:
               - 'apps/180-profile-frontend/**'
+              - 'packages/identity-sdk/**'
               - 'packages/ui/**'
             admin:
               - 'apps/180-admin-frontend/**'
@@ -265,6 +266,9 @@ jobs:
 
       - name: Install Monorepo Dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Build Sovereign SDK Mirror
+        run: pnpm build:sdk
 
       - name: Build Profile Frontend (Static Export)
         env:
