@@ -92,6 +92,24 @@ def sync_dns_cname(zone_id, domain, target_host):
         print(f"DNS create ({domain}): HTTP {status}, success={res.get('success')}")
 
 
+def list_pages_projects(account_id):
+    projects = []
+    page = 1
+    while page <= 20:
+        status, body = cf_request("GET", f"/accounts/{account_id}/pages/projects?page={page}")
+        if not body.get("success"):
+            print(f"Warning: could not list Pages projects page {page} (HTTP {status}): {body.get('errors')}")
+            break
+        batch = body.get("result") or []
+        projects.extend(batch)
+        result_info = body.get("result_info") or {}
+        total_pages = result_info.get("total_pages") or 1
+        if page >= total_pages or not batch:
+            break
+        page += 1
+    return projects
+
+
 def main():
     if len(sys.argv) < 3:
         print("Usage: bind-cloudflare-pages-domain.py <project-name> <domain1> [domain2 ...]")
@@ -106,13 +124,9 @@ def main():
     domains = sys.argv[2:]
     target_host = f"{target_project}.pages.dev"
 
-    # 1. List all Pages projects to detect if any domain is held by another project
-    status, proj_body = cf_request("GET", f"/accounts/{account_id}/pages/projects?per_page=100")
-    if not proj_body.get("success"):
-        print(f"Warning: could not list Pages projects (HTTP {status}): {proj_body.get('errors')}")
-        projects = []
-    else:
-        projects = proj_body.get("result") or []
+    # 1. List all Pages projects (using valid pagination)
+    projects = list_pages_projects(account_id)
+    print(f"Found {len(projects)} Cloudflare Pages projects in account.")
 
     # 2. For each requested domain, detach from any old project and attach to target_project
     for domain in domains:

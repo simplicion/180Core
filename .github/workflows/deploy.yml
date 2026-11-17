@@ -52,6 +52,7 @@ jobs:
               - 'apps/180-core-website/**'
               - 'packages/identity-sdk/**'
               - 'packages/ui/**'
+              - 'scripts/bind-cloudflare-pages-domain.py'
             profile:
               - 'apps/180-profile-frontend/**'
               - 'packages/identity-sdk/**'
