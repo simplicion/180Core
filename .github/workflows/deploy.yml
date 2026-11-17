@@ -401,23 +401,6 @@ jobs:
           # Deploy static export to Cloudflare Pages
           npx --yes wrangler pages deploy apps/180-core-website/out --project-name=180core-website --branch=main --commit-dirty=true
 
-          # Attach 180core.cloud & www.180core.cloud custom domains to the 180core-website Pages project (idempotent)
-          if [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            for DOMAIN in "180core.cloud" "www.180core.cloud"; do
-              echo "Binding custom domain $DOMAIN to Cloudflare Pages project 180core-website..."
-              if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
-                curl -sS -X POST "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/180core-website/domains" \
-                  -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-                  -H "Content-Type: application/json" \
-                  --data "{\"name\":\"${DOMAIN}\"}" || true
-              else
-                curl -sS -X POST "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/180core-website/domains" \
-                  -H "X-Auth-Email: ${CLOUDFLARE_EMAIL}" \
-                  -H "X-Auth-Key: ${CLOUDFLARE_API_KEY}" \
-                  -H "Content-Type: application/json" \
-                  --data "{\"name\":\"${DOMAIN}\"}" || true
-              fi
-              echo ""
-            done
-          fi
+          # Attach 180core.cloud & www.180core.cloud to 180core-website (detaching from any legacy project & updating DNS CNAMEs)
+          python3 scripts/bind-cloudflare-pages-domain.py 180core-website 180core.cloud www.180core.cloud
 
