@@ -65,8 +65,8 @@ export interface DeveloperBillingStatus {
   ratePerProject: number;
   currentMonthlyTotal: number;
   monthlyAmount: number;
-  status: 'TRIAL_ACTIVE' | 'TRIAL_EXPIRED' | 'ACTIVE' | 'WARNING_7_DAYS' | 'GRACE_PERIOD' | 'LOCKED';
-  planTier: 'TRIAL' | 'STARTER' | 'PRO' | 'ENTERPRISE';
+  status: 'ACTIVE' | 'WARNING_7_DAYS' | 'GRACE_PERIOD' | 'LOCKED' | 'TRIAL_ACTIVE' | 'TRIAL_EXPIRED';
+  planTier: 'FREE' | 'TRIAL' | 'STARTER' | 'PRO' | 'ENTERPRISE';
   planName: string;
   isTrial: boolean;
   contactFormUrl: string;

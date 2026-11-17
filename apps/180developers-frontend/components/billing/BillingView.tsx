@@ -27,8 +27,8 @@ export interface DeveloperBillingStatus {
   ratePerProject: number;
   currentMonthlyTotal: number;
   monthlyAmount: number;
-  status: 'TRIAL_ACTIVE' | 'TRIAL_EXPIRED' | 'ACTIVE' | 'WARNING_7_DAYS' | 'GRACE_PERIOD' | 'LOCKED';
-  planTier: 'TRIAL' | 'STARTER' | 'PRO' | 'ENTERPRISE';
+  status: 'ACTIVE' | 'WARNING_7_DAYS' | 'GRACE_PERIOD' | 'LOCKED' | 'TRIAL_ACTIVE' | 'TRIAL_EXPIRED';
+  planTier: 'FREE' | 'TRIAL' | 'STARTER' | 'PRO' | 'ENTERPRISE';
   planName: string;
   isTrial: boolean;
   contactFormUrl: string;
@@ -290,7 +290,7 @@ export function BillingView() {
                     ? 'bg-blue-600'
                     : 'bg-emerald-500'
                 }`}
-                style={{ width: `${Math.max(5, usagePercentage)}%` }}
+                style={{ width: `${usagePercentage === 0 ? 0 : Math.max(5, usagePercentage)}%` }}
               />
             </div>
 
@@ -317,7 +317,7 @@ export function BillingView() {
         {/* Card 1: Free Tier */}
         <div
           className={`rounded-3xl border p-6 sm:p-7 flex flex-col justify-between space-y-6 ${
-            billingStatus?.planTier === 'TRIAL' || !billingStatus?.planTier
+            billingStatus?.planTier === 'FREE' || billingStatus?.planTier === 'TRIAL' || !billingStatus?.planTier
               ? 'border-zinc-400 dark:border-white/20 bg-zinc-50/50 dark:bg-[#121214] shadow-xs'
               : 'border-zinc-200 dark:border-white/10 bg-white dark:bg-[#101012]'
           }`}
@@ -325,7 +325,7 @@ export function BillingView() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-xs font-mono uppercase tracking-wider text-zinc-400 font-bold">Free Plan</span>
-              {(billingStatus?.planTier === 'TRIAL' || !billingStatus?.subscriptionId) && (
+              {(billingStatus?.planTier === 'FREE' || billingStatus?.planTier === 'TRIAL' || !billingStatus?.subscriptionId) && (
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold">
                   Current
                 </span>
@@ -364,7 +364,7 @@ export function BillingView() {
 
           <div className="pt-4">
             <div className="w-full py-2.5 rounded-xl text-xs font-semibold text-center border border-zinc-200 dark:border-zinc-800 text-zinc-500">
-              {billingStatus?.planTier === 'TRIAL' || !billingStatus?.subscriptionId ? 'Current Tier (1 Project)' : 'Included Tier'}
+              {billingStatus?.planTier === 'FREE' || billingStatus?.planTier === 'TRIAL' || !billingStatus?.subscriptionId ? 'Current Tier (1 Project)' : 'Included Tier'}
             </div>
           </div>
         </div>

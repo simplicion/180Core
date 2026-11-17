@@ -28,12 +28,12 @@ export interface DeveloperBillingStatus {
   ratePerProject: number;
   currentMonthlyTotal: number;
   monthlyAmount: number;
-  status: 'TRIAL_ACTIVE' | 'TRIAL_EXPIRED' | 'ACTIVE' | 'WARNING_7_DAYS' | 'GRACE_PERIOD' | 'LOCKED';
-  planTier: 'TRIAL' | 'STARTER' | 'PRO' | 'ENTERPRISE';
+  status: 'ACTIVE' | 'WARNING_7_DAYS' | 'GRACE_PERIOD' | 'LOCKED' | 'TRIAL_ACTIVE' | 'TRIAL_EXPIRED';
+  planTier: 'FREE' | 'TRIAL' | 'STARTER' | 'PRO' | 'ENTERPRISE';
   planName: string;
   isTrial: boolean;
   trialDaysLeft: number;
-  trialEndsAt: string;
+  trialEndsAt: string | null;
   subscriptionId?: string | null;
   nextBillingDate?: string | null;
   daysUntilRenewal?: number | null;
@@ -191,20 +191,14 @@ export class DeveloperBillingService {
   }
 
   /**
-   * Get the developer's live billing status, 30-day trial status, warning flags, and lock status
+   * Get the developer's live billing status, Free Forever tier allocation, warning flags, and lock status
    */
   static async getBillingStatus(userIds: string[]): Promise<DeveloperBillingStatus> {
-    const [user, apps] = await Promise.all([
-      prisma.user.findFirst({
-        where: { id: { in: userIds } },
-        select: { id: true, createdAt: true, name: true, email: true },
-      }),
-      prisma.oAuthApp.findMany({
-        where: { userId: { in: userIds } },
-        orderBy: { createdAt: 'asc' },
-        select: { id: true, name: true, isActive: true, enableAuth: true, enablePay: true, createdAt: true, clientId: true },
-      }),
-    ]);
+    const apps = await prisma.oAuthApp.findMany({
+      where: { userId: { in: userIds } },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, name: true, isActive: true, enableAuth: true, enablePay: true, createdAt: true, clientId: true },
+    });
 
     const legacyAliases = new Set(Object.keys(LEGACY_FIRST_PARTY_ALIASES));
     const activeApps = apps.filter((app: any) => !legacyAliases.has(app.clientId));
@@ -223,11 +217,6 @@ export class DeveloperBillingService {
     });
 
     const now = new Date();
-    const userCreatedAt = user?.createdAt ? new Date(user.createdAt) : now;
-    const trialEndsAt = new Date(userCreatedAt.getTime() + DEV_TRIAL_DAYS * 24 * 60 * 60 * 1000);
-    const msUntilTrialEnds = trialEndsAt.getTime() - now.getTime();
-    const trialDaysLeft = Math.max(0, Math.ceil(msUntilTrialEnds / (1000 * 60 * 60 * 24)));
-    const isTrial = msUntilTrialEnds > 0;
 
     // ─── CASE 1: ACTIVE PAID SUBSCRIPTION ─────────────────────────────────────
     if (sub && (sub.status === 'ACTIVE' || sub.status === 'WARNING_7_DAYS' || sub.status === 'GRACE_PERIOD' || sub.status === 'LOCKED')) {
@@ -283,7 +272,7 @@ export class DeveloperBillingService {
         planName,
         isTrial: false,
         trialDaysLeft: 0,
-        trialEndsAt: trialEndsAt.toISOString(),
+        trialEndsAt: null,
         subscriptionId: sub.id,
         nextBillingDate: nextBillingDate.toISOString(),
         daysUntilRenewal,
@@ -299,57 +288,24 @@ export class DeveloperBillingService {
       };
     }
 
-    // ─── CASE 2: 30-DAY FREE TRIAL ACTIVE ────────────────────────────────────
-    if (isTrial) {
-      const maxProjectsAllowed = FREE_PROJECTS_LIMIT; // Strictly 1 project allowed in Free Tier
-      const canCreateMore = totalProjects < maxProjectsAllowed;
+    // ─── CASE 2: FREE FOREVER TIER (1 ACTIVE PROJECT INCLUDED FOREVER) ────────
+    const maxProjectsAllowed = FREE_PROJECTS_LIMIT; // Strictly 1 project allowed forever in Free Tier
+    const canCreateMore = totalProjects < maxProjectsAllowed;
 
-      return {
-        totalProjects,
-        maxProjectsAllowed,
-        freeProjects: Math.min(totalProjects, FREE_PROJECTS_LIMIT),
-        billableProjects: Math.max(0, totalProjects - FREE_PROJECTS_LIMIT),
-        ratePerProject: 0,
-        currentMonthlyTotal: 0.0,
-        monthlyAmount: 0.0,
-        status: 'TRIAL_ACTIVE',
-        planTier: 'TRIAL',
-        planName: 'Free Tier (1 Project)',
-        isTrial: true,
-        trialDaysLeft,
-        trialEndsAt: trialEndsAt.toISOString(),
-        subscriptionId: null,
-        nextBillingDate: trialEndsAt.toISOString(),
-        daysUntilRenewal: trialDaysLeft,
-        warningActive: trialDaysLeft <= 7,
-        warningDaysLeft: trialDaysLeft <= 7 ? trialDaysLeft : null,
-        gracePeriodActive: false,
-        gracePeriodHoursLeft: null,
-        gracePeriodEndsAt: null,
-        isLocked: false,
-        canCreateMore,
-        message: canCreateMore
-          ? `Free Tier Active: 1 project included (${trialDaysLeft} days trial). Upgrade to Starter ($2/mo for 5 projects) or Pro ($5/mo for 10 projects) for more projects.`
-          : `Free tier project limit reached (1/1 project used). Upgrade to Starter ($2/mo for 5 projects) or Pro ($5/mo for 10 projects) with 180 Pay to create more projects.`,
-        contactFormUrl: ENTERPRISE_FORM_URL,
-      };
-    }
-
-    // ─── CASE 3: TRIAL EXPIRED (NO ACTIVE SUBSCRIPTION) ───────────────────────
     return {
       totalProjects,
-      maxProjectsAllowed: Math.min(totalProjects, FREE_PROJECTS_LIMIT),
+      maxProjectsAllowed,
       freeProjects: Math.min(totalProjects, FREE_PROJECTS_LIMIT),
       billableProjects: Math.max(0, totalProjects - FREE_PROJECTS_LIMIT),
       ratePerProject: 0,
       currentMonthlyTotal: 0.0,
       monthlyAmount: 0.0,
-      status: 'TRIAL_EXPIRED',
-      planTier: 'TRIAL',
-      planName: 'Free Tier (Expired)',
+      status: 'ACTIVE',
+      planTier: 'FREE',
+      planName: 'Free Tier (1 Project)',
       isTrial: false,
       trialDaysLeft: 0,
-      trialEndsAt: trialEndsAt.toISOString(),
+      trialEndsAt: null,
       subscriptionId: null,
       nextBillingDate: null,
       daysUntilRenewal: null,
@@ -359,8 +315,10 @@ export class DeveloperBillingService {
       gracePeriodHoursLeft: null,
       gracePeriodEndsAt: null,
       isLocked: false,
-      canCreateMore: false,
-      message: 'Your 30-day free trial has expired. Subscribe to Starter ($2/mo for 5 projects) or Pro ($5/mo for 10 projects) with 180 Pay to continue creating and managing projects.',
+      canCreateMore,
+      message: canCreateMore
+        ? `Free Forever Tier Active: 1 active project included at $0/forever. Upgrade to Starter ($2/mo for 5 projects) or Pro ($5/mo for 10 projects) when you need more projects.`
+        : `Free tier project limit reached (1/1 project used). Upgrade to Starter ($2/mo for 5 projects) or Pro ($5/mo for 10 projects) with 180 Pay to create more projects.`,
       contactFormUrl: ENTERPRISE_FORM_URL,
     };
   }
@@ -381,16 +339,6 @@ export class DeveloperBillingService {
       err.statusCode = 402;
       err.code = 'PAYMENT_REQUIRED';
       err.data = { reason: 'SERVICES_LOCKED', billing };
-      throw err;
-    }
-
-    if (billing.status === 'TRIAL_EXPIRED') {
-      const err: any = new Error(
-        `Your 30-day free trial has expired. Please subscribe to Starter ($2/mo for 5 projects) or Pro ($5/mo for 10 projects) with 180 Pay to create new projects.`
-      );
-      err.statusCode = 402;
-      err.code = 'PAYMENT_REQUIRED';
-      err.data = { reason: 'TRIAL_EXPIRED', billing, contactFormUrl: ENTERPRISE_FORM_URL };
       throw err;
     }
 
