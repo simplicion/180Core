@@ -48,6 +48,14 @@ const APPS = {
     port: 3010,
     color: '\x1b[38;5;45m', // Cyan
   },
+  biometrics: {
+    name: '180 Biometrics Service (ArcFace / SCRFD KYC Engine)',
+    filter: '180-biometrics-service',
+    cmd: 'pnpm',
+    args: ['--filter', '180-biometrics-service', 'dev'],
+    port: 8090,
+    color: '\x1b[38;5;82m', // Green
+  },
 };
 
 const RESET = '\x1b[0m';
@@ -125,15 +133,17 @@ console.log('  [website]    -> http://localhost:3000 (Main Website - 180core.clo
 console.log('  [profile]    -> http://localhost:3009 (Universal Profile & SSO)');
 console.log('  [developers] -> http://localhost:3008 (Developer Portal)');
 console.log('  [admin]      -> http://localhost:3010 (Super Admin Platform)');
+console.log('  [biometrics] -> http://localhost:8090 (Face Biometrics KYC Engine)');
 console.log('--------------------------------------------------');
-console.log('Controls: [b] Restart backend | [w] Restart website | [p] Restart profile | [d] Restart devs | [a] Restart admin | [q] Quit\n');
+console.log('Controls: [b] Backend | [w] Website | [p] Profile | [d] Devs | [a] Admin | [f] Biometrics | [q] Quit\n');
 
-// Start all five by default on pnpm dev
+// Start all six apps by default on pnpm dev
 startProcess('backend');
 startProcess('website');
 startProcess('profile');
 startProcess('developers');
 startProcess('admin');
+startProcess('biometrics');
 
 if (process.stdin.isTTY) {
   readline.emitKeypressEvents(process.stdin);
@@ -146,5 +156,6 @@ if (process.stdin.isTTY) {
     if (key.name === 'p') { stopProcess('profile'); setTimeout(() => startProcess('profile'), 500); }
     if (key.name === 'd') { stopProcess('developers'); setTimeout(() => startProcess('developers'), 500); }
     if (key.name === 'a') { stopProcess('admin'); setTimeout(() => startProcess('admin'), 500); }
+    if (key.name === 'f') { stopProcess('biometrics'); setTimeout(() => startProcess('biometrics'), 500); }
   });
 }
