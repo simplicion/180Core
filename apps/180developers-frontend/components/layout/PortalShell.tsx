@@ -10,15 +10,15 @@ const WEBSITE_URL = (process.env.NEXT_PUBLIC_WEBSITE_URL || 'https://180core.clo
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
-  // 1. Full-bleed developer console & root redirect (no marketing navbar/footer)
+  // 1. Full-bleed developer console, billing & auth callback (no outer marketing navbar/footer)
   const isDeveloperConsole =
-    pathname === '/' || pathname.startsWith('/dashboard') || pathname.startsWith('/apps');
+    pathname === '/' ||
+    pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/apps') ||
+    pathname.startsWith('/billing') ||
+    pathname.startsWith('/callback');
   if (isDeveloperConsole) {
-    return (
-      <div key={pathname} className="min-h-screen flex flex-col animate-page-enter">
-        {children}
-      </div>
-    );
+    return <>{children}</>;
   }
 
   // 2. Documentation Hub: Dedicated full-bleed container with top Navbar

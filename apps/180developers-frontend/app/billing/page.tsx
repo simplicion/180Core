@@ -21,6 +21,25 @@ export default function BillingPage() {
         const token = getStoredAuthToken();
         if (!token) return;
 
+        // Optimistically hydrate user profile from localStorage / JWT so header renders immediately
+        try {
+          const cachedUser = localStorage.getItem('user');
+          if (cachedUser) {
+            setUserProfile(JSON.parse(cachedUser));
+          } else {
+            const parts = token.split('.');
+            if (parts.length === 3) {
+              const payload = JSON.parse(atob(parts[1]));
+              setUserProfile({
+                id: payload.sub || payload.id,
+                name: payload.name || payload.email || 'Developer',
+                email: payload.email,
+                username: payload.username,
+              });
+            }
+          }
+        } catch (_) {}
+
         const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
         const apiBase = isLocal ? 'http://localhost:4003' : (process.env.NEXT_PUBLIC_CORE_BACKEND_URL || 'https://api.180core.cloud');
 
@@ -96,7 +115,7 @@ export default function BillingPage() {
           ]}
           onSignOut={handleSignOut}
         />
-        <main className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full flex-1">
+        <main className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full flex-1 animate-page-enter">
           <BillingView />
         </main>
       </div>

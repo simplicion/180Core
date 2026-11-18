@@ -783,7 +783,7 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
             router.push('/dashboard');
           }}
         />
-        <main className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full space-y-8 flex-1">
+        <main className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto w-full space-y-8 flex-1 animate-page-enter">
           {/* Dynamic Header */}
           <div className="space-y-3 pb-6 border-b border-zinc-200 dark:border-white/10">
             {activeView === 'overview' ? (

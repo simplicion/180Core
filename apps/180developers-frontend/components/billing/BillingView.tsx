@@ -316,7 +316,7 @@ export function BillingView() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Card 1: Free Tier */}
         <div
-          className={`rounded-3xl border p-6 sm:p-7 flex flex-col justify-between space-y-6 ${
+          className={`rounded-3xl border p-6 sm:p-7 flex flex-col justify-between space-y-6 interactive-lift ${
             billingStatus?.planTier === 'FREE' || billingStatus?.planTier === 'TRIAL' || !billingStatus?.planTier
               ? 'border-zinc-400 dark:border-white/20 bg-zinc-50/50 dark:bg-[#121214] shadow-xs'
               : 'border-zinc-200 dark:border-white/10 bg-white dark:bg-[#101012]'
@@ -371,7 +371,7 @@ export function BillingView() {
 
         {/* Card 2: Starter ($2/mo) */}
         <div
-          className={`rounded-3xl border p-6 sm:p-7 flex flex-col justify-between space-y-6 relative ${
+          className={`rounded-3xl border p-6 sm:p-7 flex flex-col justify-between space-y-6 relative interactive-lift ${
             billingStatus?.planTier === 'STARTER'
               ? 'border-blue-500 dark:border-blue-500 bg-blue-500/5 dark:bg-blue-500/10 ring-2 ring-blue-500 shadow-md'
               : 'border-zinc-200 dark:border-white/10 bg-white dark:bg-[#101012] hover:border-zinc-300 dark:hover:border-white/20 transition-all'
@@ -440,7 +440,7 @@ export function BillingView() {
 
         {/* Card 3: Pro ($5/mo) */}
         <div
-          className={`rounded-3xl border p-6 sm:p-7 flex flex-col justify-between space-y-6 ${
+          className={`rounded-3xl border p-6 sm:p-7 flex flex-col justify-between space-y-6 interactive-lift ${
             billingStatus?.planTier === 'PRO'
               ? 'border-purple-500 dark:border-purple-500 bg-purple-500/5 dark:bg-purple-500/10 ring-2 ring-purple-500 shadow-md'
               : 'border-zinc-200 dark:border-white/10 bg-white dark:bg-[#101012] hover:border-zinc-300 dark:hover:border-white/20 transition-all'

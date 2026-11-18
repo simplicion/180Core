@@ -1072,7 +1072,7 @@ function DeveloperDashboardContent() {
         />
 
         {/* Dynamic Dashboard Page Content */}
-        <main className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto w-full space-y-8 flex-1 relative z-10">
+        <main className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto w-full space-y-8 flex-1 relative z-10 animate-page-enter">
           {/* ─────────────────────────────────────────────────────────────────────────
               TAB 1: PROJECTS (Default Console List)
               ───────────────────────────────────────────────────────────────────────── */}
