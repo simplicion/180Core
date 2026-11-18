@@ -4,7 +4,7 @@ export interface CountryItem {
   code: string; // ISO 3166-1 alpha-2 (e.g., "NP", "US", "IN")
   name: string; // Full English name (e.g., "Nepal", "United States")
   dialCode: string; // E.164 dial prefix (e.g., "+977", "+1", "+91")
-  flag: string; // Emoji flag (e.g., "🇳🇵", "🇺🇸")
+  flag: string; // ISO region badge code (e.g., "NP", "US")
 }
 
 export interface DetectedLocation {
@@ -19,13 +19,10 @@ export interface DetectedLocation {
 function getFlagEmoji(countryCode: string): string {
   try {
     const clean = countryCode.trim().toUpperCase();
-    if (clean.length !== 2) return '🌐';
-    const codePoints = clean
-      .split('')
-      .map((char) => 127397 + char.charCodeAt(0));
-    return String.fromCodePoint(...codePoints);
+    if (clean.length !== 2) return 'INTL';
+    return clean;
   } catch (_) {
-    return '🌐';
+    return 'INTL';
   }
 }
 
@@ -210,13 +207,13 @@ export class LocationService {
           code: 'NP',
           name: 'Nepal',
           dialCode: '+977',
-          flag: '🇳🇵',
+          flag: 'NP',
         };
         const detected: DetectedLocation = {
           countryCode: 'NP',
           countryName: 'Nepal',
           dialCode: '+977',
-          flag: np.flag || '🇳🇵',
+          flag: np.code || 'NP',
           source: 'timezone',
         };
         this.persist(detected);
@@ -287,7 +284,7 @@ export class LocationService {
       code: 'IN',
       name: 'India',
       dialCode: '+91',
-      flag: '🇮🇳',
+      flag: 'IN',
     };
 
     const fallback: DetectedLocation = {

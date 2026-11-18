@@ -301,7 +301,7 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
 
   const handleOpenPayoutModal = () => {
     if (!bankDetails || (!bankDetails.accountNumber && !bankDetails.upiId)) {
-      toast('Please set up your settlement bank details first', { icon: '🏦' });
+      toast('Please set up your settlement bank details first');
       setShowBankModal(true);
       return;
     }
@@ -375,7 +375,7 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
       clientId: app.clientId,
       uxMode: 'popup',
       onSuccess: (res) => toast.success(`Auth modal test passed! Code: ${res.code.slice(0, 10)}...`),
-      onCancel: () => toast('Auth modal closed', { icon: 'ℹ️' }),
+      onCancel: () => toast('Auth modal closed'),
     });
   };
 
@@ -385,7 +385,7 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
       clientId: app.clientId,
       uxMode: 'bottom_sheet',
       onSuccess: (res) => toast.success(`Auth bottom sheet test passed! User: ${res.user?.name || res.code.slice(0, 8)}`),
-      onCancel: () => toast('Auth bottom sheet closed', { icon: 'ℹ️' }),
+      onCancel: () => toast('Auth bottom sheet closed'),
     });
   };
 
@@ -396,7 +396,7 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
       title: `${app?.name || 'Developer App'} Premium Checkout`,
       description: 'Sandbox verification session',
       onSuccess: (res) => toast.success(`Payment test passed! TxID: ${res.transactionId || res.sessionId}`),
-      onCancel: () => toast('Pay checkout closed', { icon: 'ℹ️' }),
+      onCancel: () => toast('Pay checkout closed'),
     });
   };
 

@@ -211,7 +211,7 @@ export function IdentityUsersView() {
         uxMode: 'bottom_sheet',
         onSuccess: (res: any) =>
           toast.success(`Auth sheet preview passed! User: ${res?.user?.name || res?.code?.slice(0, 8) || 'OK'}`),
-        onCancel: () => toast('Auth sheet closed', { icon: 'ℹ️' }),
+        onCancel: () => toast('Auth sheet closed'),
       });
     } catch (e: any) {
       toast.error(e.message || 'Auth sheet preview failed');

@@ -185,7 +185,7 @@ export default function DevelopersDirectoryPage() {
     setBgDeletingUsers((prev) => [targetItem, ...prev.filter((u) => u.id !== target.id)]);
 
     // 4. Instantly notify the admin
-    toast.loading(`⚡ Deleting "${targetItem.name}" in background queue... Purging database records.`, {
+    toast.loading(`Deleting "${targetItem.name}" in background queue... Purging database records.`, {
       id: `del-${target.id}`,
     });
 

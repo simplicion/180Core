@@ -81,8 +81,13 @@ export default function TimeProgressBar({
                         style={{ width: `${isDone ? 100 : pct}%` }}
                     />
                 </div>
-                <span className={clsx('text-[10px] font-bold whitespace-nowrap', isOverdue ? 'text-rose-500' : isDone ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-zinc-500')}>
-                    {isDone ? (completedOnTime ? '✓ On time' : '✓ Done') : remainingLabel}
+                <span className={clsx('text-[10px] font-bold whitespace-nowrap inline-flex items-center gap-1', isOverdue ? 'text-rose-500' : isDone ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-zinc-500')}>
+                    {isDone ? (
+                        <>
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>{completedOnTime ? 'On time' : 'Done'}</span>
+                        </>
+                    ) : remainingLabel}
                 </span>
             </div>
         );
@@ -100,7 +105,7 @@ export default function TimeProgressBar({
                         <Clock className="w-3.5 h-3.5 text-gray-400 dark:text-zinc-500" />
                     )}
                     <span className={clsx('font-semibold', isOverdue ? 'text-rose-600' : isDone ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-600 dark:text-zinc-300')}>
-                        {isDone ? (completedOnTime ? '✅ Completed on time (+1 pt)' : '✅ Completed') : remainingLabel}
+                        {isDone ? (completedOnTime ? 'Completed on time (+1 pt)' : 'Completed') : remainingLabel}
                     </span>
                 </div>
                 <span className="text-gray-400 dark:text-zinc-500">Due {format(due, 'MMM d, hh:mm a')}</span>

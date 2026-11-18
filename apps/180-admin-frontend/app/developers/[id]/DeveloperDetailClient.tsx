@@ -282,7 +282,7 @@ export default function DeveloperDetailClient({
 
     // 1. Instantly close modal and navigate back to /developers (0ms delay)
     setShowDeleteModal(false);
-    toast.loading(`⚡ Deleting "${target.name || target.email}" in background queue...`, {
+    toast.loading(`Deleting "${target.name || target.email}" in background queue...`, {
       id: `del-${target.id}`,
     });
     router.push('/developers');

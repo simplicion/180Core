@@ -571,7 +571,7 @@ export default function PayoutsSettlementDeskPage() {
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-5 rounded-2xl bg-white dark:bg-zinc-950 border border-zinc-200/80 dark:border-white/10 shadow-sm flex items-center justify-between">
+        <div className="interactive-lift p-5 rounded-2xl bg-white dark:bg-zinc-950 border border-zinc-200/80 dark:border-white/10 shadow-sm hover:shadow-md flex items-center justify-between">
           <div>
             <div className="text-xs text-zinc-500">Pending Review Queue</div>
             <div className="text-2xl font-black font-mono text-amber-500 mt-1">
@@ -586,7 +586,7 @@ export default function PayoutsSettlementDeskPage() {
           </div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-white dark:bg-zinc-950 border border-zinc-200/80 dark:border-white/10 shadow-sm flex items-center justify-between">
+        <div className="interactive-lift p-5 rounded-2xl bg-white dark:bg-zinc-950 border border-zinc-200/80 dark:border-white/10 shadow-sm hover:shadow-md flex items-center justify-between">
           <div>
             <div className="text-xs text-zinc-500">In Banking Dispatch (Processing)</div>
             <div className="text-2xl font-black font-mono text-blue-500 mt-1">
@@ -599,7 +599,7 @@ export default function PayoutsSettlementDeskPage() {
           </div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-white dark:bg-zinc-950 border border-zinc-200/80 dark:border-white/10 shadow-sm flex items-center justify-between">
+        <div className="interactive-lift p-5 rounded-2xl bg-white dark:bg-zinc-950 border border-zinc-200/80 dark:border-white/10 shadow-sm hover:shadow-md flex items-center justify-between">
           <div>
             <div className="text-xs text-zinc-500">Settled to Bank Accounts</div>
             <div className="text-2xl font-black font-mono text-emerald-500 mt-1">
@@ -848,8 +848,9 @@ export default function PayoutsSettlementDeskPage() {
                                 </div>
                               )}
                               {payout.accountDetails?.receivedConfirmed && (
-                                <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-sans font-semibold">
-                                  ✓ Confirmed by Merchant
+                                <div className="inline-flex items-center justify-end gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-sans font-semibold">
+                                  <CheckCircle2 className="h-3 w-3" />
+                                  <span>Confirmed by Merchant</span>
                                 </div>
                               )}
                             </div>

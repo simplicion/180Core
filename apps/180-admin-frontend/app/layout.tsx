@@ -16,7 +16,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://api.fontshare.com" />
         <link
@@ -33,11 +33,16 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               try {
+                var userSet = localStorage.getItem('180_theme_user_set');
                 var theme = localStorage.getItem('180_theme');
-                if (theme === 'light') {
-                  document.documentElement.classList.remove('dark');
-                } else {
+                if (!userSet) {
+                  theme = 'light';
+                  localStorage.setItem('180_theme', 'light');
+                }
+                if (theme === 'dark') {
                   document.documentElement.classList.add('dark');
+                } else {
+                  document.documentElement.classList.remove('dark');
                 }
               } catch (e) {}
             `,

@@ -70,11 +70,11 @@ export function EcosystemStrip() {
               rel="noopener noreferrer"
               className="group block focus:outline-none"
             >
-              <Card className="h-full bg-white dark:bg-zinc-950 border-zinc-200/80 dark:border-white/10 group-hover:border-blue-500/40 transition-all duration-300 shadow-sm">
+              <Card className="h-full interactive-lift bg-white dark:bg-zinc-950 border-zinc-200/80 dark:border-white/10 group-hover:border-blue-500/40 group-hover:shadow-md shadow-sm">
                 <CardContent className="p-5 flex flex-col justify-between h-full space-y-4">
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <div className="h-10 w-10 rounded-xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 flex items-center justify-center text-zinc-800 dark:text-zinc-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                      <div className="h-10 w-10 rounded-xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 flex items-center justify-center text-zinc-800 dark:text-zinc-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:scale-105 transition-all duration-200">
                         <Icon className="h-5 w-5" />
                       </div>
                       <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-white/5 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-white/10">
@@ -84,7 +84,7 @@ export function EcosystemStrip() {
                     <div>
                       <h3 className="text-sm font-bold text-zinc-950 dark:text-white flex items-center gap-1">
                         <span>{portal.name}</span>
-                        <ArrowUpRight className="h-3.5 w-3.5 text-zinc-400 group-hover:text-blue-500 transition-colors" />
+                        <ArrowUpRight className="h-3.5 w-3.5 text-zinc-400 group-hover:text-blue-500 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all duration-200" />
                       </h3>
                       <p className="text-[11px] font-mono text-blue-600 dark:text-blue-400 mt-0.5 truncate">
                         {portal.host}

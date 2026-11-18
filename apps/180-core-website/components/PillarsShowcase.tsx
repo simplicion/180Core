@@ -105,7 +105,7 @@ export function PillarsShowcase() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Pillar 01: 180 Identity */}
         <Card
-          className={`flex flex-col justify-between transition-all duration-300 bg-white dark:bg-zinc-950 ${
+          className={`group interactive-lift flex flex-col justify-between bg-white dark:bg-zinc-950 ${
             focus === 'IDENTITY'
               ? 'border-blue-500/40 ring-2 ring-blue-500/15'
               : 'border-zinc-200/80 dark:border-white/10 hover:border-zinc-300 dark:hover:border-white/20'
@@ -113,7 +113,7 @@ export function PillarsShowcase() {
         >
           <CardHeader className="space-y-4">
             <div className="flex items-center justify-between">
-              <div className="h-12 w-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+              <div className="h-12 w-12 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center transition-transform duration-300 group-hover:scale-105">
                 <Shield className="h-6 w-6" />
               </div>
               <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
@@ -156,7 +156,7 @@ export function PillarsShowcase() {
 
         {/* Pillar 02: 180 Pay */}
         <Card
-          className={`flex flex-col justify-between transition-all duration-300 bg-white dark:bg-zinc-950 ${
+          className={`group interactive-lift flex flex-col justify-between bg-white dark:bg-zinc-950 ${
             focus === 'PAY'
               ? 'border-purple-500/40 ring-2 ring-purple-500/15'
               : 'border-zinc-200/80 dark:border-white/10 hover:border-zinc-300 dark:hover:border-white/20'
@@ -164,7 +164,7 @@ export function PillarsShowcase() {
         >
           <CardHeader className="space-y-4">
             <div className="flex items-center justify-between">
-              <div className="h-12 w-12 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+              <div className="h-12 w-12 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center transition-transform duration-300 group-hover:scale-105">
                 <CreditCard className="h-6 w-6" />
               </div>
               <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">

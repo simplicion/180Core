@@ -559,7 +559,7 @@ export function CheckoutClient({
       code: activeCountryCode,
       name: detectedLocation?.countryName || (activeCountryCode === 'IN' ? 'India' : activeCountryCode),
       dialCode: detectedLocation?.dialCode || '+91',
-      flag: detectedLocation?.flag || '🌐',
+      flag: detectedLocation?.countryCode || activeCountryCode || 'IN',
     };
   }, [activeCountryCode, detectedLocation]);
 

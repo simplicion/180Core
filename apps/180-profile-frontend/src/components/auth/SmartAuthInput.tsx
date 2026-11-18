@@ -53,7 +53,7 @@ export const SmartAuthInput: React.FC<SmartAuthInputProps> = ({
         code: 'NP',
         name: 'Nepal',
         dialCode: '+977',
-        flag: '🇳🇵',
+        flag: 'NP',
       }
     );
   });

@@ -9,46 +9,43 @@ export interface CurrencyMeta {
   decimals: number;
 }
 
-function getFlagEmoji(countryCode: string): string {
+function getFlagCode(countryCode: string): string {
   try {
     const clean = countryCode.trim().toUpperCase();
-    if (clean.length !== 2) return '🌐';
-    const codePoints = clean
-      .split('')
-      .map((char) => 127397 + char.charCodeAt(0));
-    return String.fromCodePoint(...codePoints);
+    if (clean.length !== 2) return 'INTL';
+    return clean;
   } catch (_) {
-    return '🌐';
+    return 'INTL';
   }
 }
 
 export const CURRENCY_CATALOG: Record<string, CurrencyMeta> = {
-  INR: { code: 'INR', symbol: '₹', name: 'Indian Rupee', flag: '🇮🇳', fxRateToUsd: 83.50, decimals: 2 },
-  USD: { code: 'USD', symbol: '$', name: 'US Dollar', flag: '🇺🇸', fxRateToUsd: 1.0, decimals: 2 },
-  EUR: { code: 'EUR', symbol: '€', name: 'Euro', flag: '🇪🇺', fxRateToUsd: 0.92, decimals: 2 },
-  GBP: { code: 'GBP', symbol: '£', name: 'British Pound', flag: '🇬🇧', fxRateToUsd: 0.79, decimals: 2 },
-  CNY: { code: 'CNY', symbol: '¥', name: 'Chinese Yuan', flag: '🇨🇳', fxRateToUsd: 7.24, decimals: 2 },
-  JPY: { code: 'JPY', symbol: '¥', name: 'Japanese Yen', flag: '🇯🇵', fxRateToUsd: 155.0, decimals: 0 },
-  CAD: { code: 'CAD', symbol: 'CA$', name: 'Canadian Dollar', flag: '🇨🇦', fxRateToUsd: 1.36, decimals: 2 },
-  AUD: { code: 'AUD', symbol: 'A$', name: 'Australian Dollar', flag: '🇦🇺', fxRateToUsd: 1.52, decimals: 2 },
-  SGD: { code: 'SGD', symbol: 'S$', name: 'Singapore Dollar', flag: '🇸🇬', fxRateToUsd: 1.34, decimals: 2 },
-  AED: { code: 'AED', symbol: 'AED', name: 'UAE Dirham', flag: '🇦🇪', fxRateToUsd: 3.67, decimals: 2 },
-  NPR: { code: 'NPR', symbol: 'Rs', name: 'Nepalese Rupee', flag: '🇳🇵', fxRateToUsd: 133.6, decimals: 2 },
-  BRL: { code: 'BRL', symbol: 'R$', name: 'Brazilian Real', flag: '🇧🇷', fxRateToUsd: 5.80, decimals: 2 },
-  MXN: { code: 'MXN', symbol: 'Mex$', name: 'Mexican Peso', flag: '🇲🇽', fxRateToUsd: 19.80, decimals: 2 },
-  THB: { code: 'THB', symbol: '฿', name: 'Thai Baht', flag: '🇹🇭', fxRateToUsd: 34.0, decimals: 2 },
-  MYR: { code: 'MYR', symbol: 'RM', name: 'Malaysian Ringgit', flag: '🇲🇾', fxRateToUsd: 4.40, decimals: 2 },
-  IDR: { code: 'IDR', symbol: 'Rp', name: 'Indonesian Rupiah', flag: '🇮🇩', fxRateToUsd: 15800.0, decimals: 0 },
-  PHP: { code: 'PHP', symbol: '₱', name: 'Philippine Peso', flag: '🇵🇭', fxRateToUsd: 58.5, decimals: 2 },
-  VND: { code: 'VND', symbol: '₫', name: 'Vietnamese Dong', flag: '🇻🇳', fxRateToUsd: 25300.0, decimals: 0 },
-  PKR: { code: 'PKR', symbol: '₨', name: 'Pakistani Rupee', flag: '🇵🇰', fxRateToUsd: 278.0, decimals: 2 },
-  BDT: { code: 'BDT', symbol: '৳', name: 'Bangladeshi Taka', flag: '🇧🇩', fxRateToUsd: 120.0, decimals: 2 },
-  ZAR: { code: 'ZAR', symbol: 'R', name: 'South African Rand', flag: '🇿🇦', fxRateToUsd: 18.2, decimals: 2 },
-  NGN: { code: 'NGN', symbol: '₦', name: 'Nigerian Naira', flag: '🇳🇬', fxRateToUsd: 1550.0, decimals: 2 },
-  KES: { code: 'KES', symbol: 'KSh', name: 'Kenyan Shilling', flag: '🇰🇪', fxRateToUsd: 129.0, decimals: 2 },
-  EGP: { code: 'EGP', symbol: 'E£', name: 'Egyptian Pound', flag: '🇪🇬', fxRateToUsd: 49.0, decimals: 2 },
-  TRY: { code: 'TRY', symbol: '₺', name: 'Turkish Lira', flag: '🇹🇷', fxRateToUsd: 34.5, decimals: 2 },
-  PLN: { code: 'PLN', symbol: 'zł', name: 'Polish Zloty', flag: '🇵🇱', fxRateToUsd: 4.0, decimals: 2 },
+  INR: { code: 'INR', symbol: '₹', name: 'Indian Rupee', flag: 'IN', fxRateToUsd: 83.50, decimals: 2 },
+  USD: { code: 'USD', symbol: '$', name: 'US Dollar', flag: 'US', fxRateToUsd: 1.0, decimals: 2 },
+  EUR: { code: 'EUR', symbol: '€', name: 'Euro', flag: 'EU', fxRateToUsd: 0.92, decimals: 2 },
+  GBP: { code: 'GBP', symbol: '£', name: 'British Pound', flag: 'GB', fxRateToUsd: 0.79, decimals: 2 },
+  CNY: { code: 'CNY', symbol: '¥', name: 'Chinese Yuan', flag: 'CN', fxRateToUsd: 7.24, decimals: 2 },
+  JPY: { code: 'JPY', symbol: '¥', name: 'Japanese Yen', flag: 'JP', fxRateToUsd: 155.0, decimals: 0 },
+  CAD: { code: 'CAD', symbol: 'CA$', name: 'Canadian Dollar', flag: 'CA', fxRateToUsd: 1.36, decimals: 2 },
+  AUD: { code: 'AUD', symbol: 'A$', name: 'Australian Dollar', flag: 'AU', fxRateToUsd: 1.52, decimals: 2 },
+  SGD: { code: 'SGD', symbol: 'S$', name: 'Singapore Dollar', flag: 'SG', fxRateToUsd: 1.34, decimals: 2 },
+  AED: { code: 'AED', symbol: 'AED', name: 'UAE Dirham', flag: 'AE', fxRateToUsd: 3.67, decimals: 2 },
+  NPR: { code: 'NPR', symbol: 'Rs', name: 'Nepalese Rupee', flag: 'NP', fxRateToUsd: 133.6, decimals: 2 },
+  BRL: { code: 'BRL', symbol: 'R$', name: 'Brazilian Real', flag: 'BR', fxRateToUsd: 5.80, decimals: 2 },
+  MXN: { code: 'MXN', symbol: 'Mex$', name: 'Mexican Peso', flag: 'MX', fxRateToUsd: 19.80, decimals: 2 },
+  THB: { code: 'THB', symbol: '฿', name: 'Thai Baht', flag: 'TH', fxRateToUsd: 34.0, decimals: 2 },
+  MYR: { code: 'MYR', symbol: 'RM', name: 'Malaysian Ringgit', flag: 'MY', fxRateToUsd: 4.40, decimals: 2 },
+  IDR: { code: 'IDR', symbol: 'Rp', name: 'Indonesian Rupiah', flag: 'ID', fxRateToUsd: 15800.0, decimals: 0 },
+  PHP: { code: 'PHP', symbol: '₱', name: 'Philippine Peso', flag: 'PH', fxRateToUsd: 58.5, decimals: 2 },
+  VND: { code: 'VND', symbol: '₫', name: 'Vietnamese Dong', flag: 'VN', fxRateToUsd: 25300.0, decimals: 0 },
+  PKR: { code: 'PKR', symbol: '₨', name: 'Pakistani Rupee', flag: 'PK', fxRateToUsd: 278.0, decimals: 2 },
+  BDT: { code: 'BDT', symbol: '৳', name: 'Bangladeshi Taka', flag: 'BD', fxRateToUsd: 120.0, decimals: 2 },
+  ZAR: { code: 'ZAR', symbol: 'R', name: 'South African Rand', flag: 'ZA', fxRateToUsd: 18.2, decimals: 2 },
+  NGN: { code: 'NGN', symbol: '₦', name: 'Nigerian Naira', flag: 'NG', fxRateToUsd: 1550.0, decimals: 2 },
+  KES: { code: 'KES', symbol: 'KSh', name: 'Kenyan Shilling', flag: 'KE', fxRateToUsd: 129.0, decimals: 2 },
+  EGP: { code: 'EGP', symbol: 'E£', name: 'Egyptian Pound', flag: 'EG', fxRateToUsd: 49.0, decimals: 2 },
+  TRY: { code: 'TRY', symbol: '₺', name: 'Turkish Lira', flag: 'TR', fxRateToUsd: 34.5, decimals: 2 },
+  PLN: { code: 'PLN', symbol: 'zł', name: 'Polish Zloty', flag: 'PL', fxRateToUsd: 4.0, decimals: 2 },
 };
 
 export const GATEWAY_SUPPORTED_CURRENCIES = new Set([
@@ -128,12 +125,12 @@ export class CurrencyService {
       symbol = clean;
     }
 
-    let flag = '🌐';
+    let flag = 'INTL';
     try {
       const all = Country.getAllCountries();
       const matched = all.find((c) => c.currency?.toUpperCase() === clean);
       if (matched) {
-        flag = matched.flag || getFlagEmoji(matched.isoCode);
+        flag = getFlagCode(matched.isoCode);
       }
     } catch (_) {}
 

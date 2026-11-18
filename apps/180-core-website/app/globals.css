@@ -88,3 +88,74 @@ pre, code, kbd {
     linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
 }
+
+/* Industry-grade micro-interactions & micro-animations */
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ambientFloat {
+  0%, 100% {
+    transform: translate(-50%, 0) scale(1);
+    opacity: 0.75;
+  }
+  50% {
+    transform: translate(-50%, -10px) scale(1.04);
+    opacity: 1;
+  }
+}
+
+.animate-page-enter {
+  animation: pageEnter 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-stagger-1 {
+  animation: pageEnter 0.48s cubic-bezier(0.16, 1, 0.3, 1) 60ms both;
+}
+
+.animate-stagger-2 {
+  animation: pageEnter 0.48s cubic-bezier(0.16, 1, 0.3, 1) 120ms both;
+}
+
+.animate-stagger-3 {
+  animation: pageEnter 0.48s cubic-bezier(0.16, 1, 0.3, 1) 180ms both;
+}
+
+.animate-stagger-4 {
+  animation: pageEnter 0.48s cubic-bezier(0.16, 1, 0.3, 1) 240ms both;
+}
+
+.animate-ambient {
+  animation: ambientFloat 9s ease-in-out infinite;
+}
+
+.interactive-lift {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.25s ease;
+}
+
+.interactive-lift:hover {
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-page-enter,
+  .animate-stagger-1,
+  .animate-stagger-2,
+  .animate-stagger-3,
+  .animate-stagger-4,
+  .animate-ambient {
+    animation: none !important;
+  }
+  .interactive-lift:hover {
+    transform: none !important;
+  }
+}

@@ -450,7 +450,7 @@ function LoginFormContent() {
       if (data.devOtp) {
         setDevOtpHint(data.devOtp);
         setOtp(data.devOtp);
-        toast(`Dev Code: ${data.devOtp}`, { icon: '🔑', duration: 8000 });
+        toast(`Dev Code: ${data.devOtp}`, { duration: 8000 });
       }
 
       setMode('otp');
@@ -676,7 +676,6 @@ function LoginFormContent() {
       customNotice || 'Could not auto-detect location. You can enter your City and Country manually.',
       {
         id: toastId,
-        icon: '📍',
         duration: 4000,
       }
     );
@@ -1490,8 +1489,9 @@ function LoginFormContent() {
               </div>
 
               {onboardLatitude && onboardLongitude && (
-                <div className="text-[10px] text-blue-700 font-mono bg-white/70 px-2 py-1 rounded-md border border-blue-100">
-                  📍 Coordinates: {onboardLatitude.toFixed(4)}, {onboardLongitude.toFixed(4)}
+                <div className="text-[10px] text-blue-700 font-mono bg-white/70 px-2 py-1 rounded-md border border-blue-100 inline-flex items-center gap-1.5">
+                  <Compass className="w-3 h-3 text-blue-600 shrink-0" />
+                  <span>Coordinates: {onboardLatitude.toFixed(4)}, {onboardLongitude.toFixed(4)}</span>
                 </div>
               )}
 

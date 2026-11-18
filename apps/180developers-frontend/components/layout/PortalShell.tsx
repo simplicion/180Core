@@ -14,7 +14,11 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
   const isDeveloperConsole =
     pathname === '/' || pathname.startsWith('/dashboard') || pathname.startsWith('/apps');
   if (isDeveloperConsole) {
-    return <div className="min-h-screen flex flex-col">{children}</div>;
+    return (
+      <div key={pathname} className="min-h-screen flex flex-col animate-page-enter">
+        {children}
+      </div>
+    );
   }
 
   // 2. Documentation Hub: Dedicated full-bleed container with top Navbar
@@ -22,7 +26,9 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen flex flex-col">
         <Navbar />
-        <main className="flex-1 w-full">{children}</main>
+        <main key={pathname} className="flex-1 w-full animate-page-enter">
+          {children}
+        </main>
       </div>
     );
   }
@@ -32,7 +38,10 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
     <>
       <Navbar />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
+      <main
+        key={pathname}
+        className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12 animate-page-enter"
+      >
         {children}
       </main>
 

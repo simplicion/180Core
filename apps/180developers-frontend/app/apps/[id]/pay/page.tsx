@@ -29,7 +29,7 @@ export default function PayOverviewPage() {
         description: 'Sandbox verification session (Adaptive Sheet)',
         environment: 'development',
         onSuccess: (res: any) => toast.success(`Payment test passed! TxID: ${res?.transactionId || res?.sessionId || 'SUCCESS'}`),
-        onCancel: () => toast('Pay checkout closed', { icon: 'ℹ️' }),
+        onCancel: () => toast('Pay checkout closed'),
       });
     } catch (e: any) {
       toast.error(e.message || 'Checkout test failed');

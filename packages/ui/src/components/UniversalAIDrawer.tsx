@@ -57,14 +57,14 @@ const MODE_CONFIG: Record<AIDrawerMode, {
         subtitle: 'Live Dynamic Question & Theme Engine',
         icon: <Layers className="w-4 h-4 text-violet-300" />,
         themeGradient: 'from-violet-600 via-indigo-600 to-purple-600',
-        welcomeText: (name) => `👋 Hello! I am your **180 Core AI Form Architect**.\n\nI have full live awareness of your form${name ? ` **"${name}"**` : ''}. Instruct me to generate new questions, change color themes, add 5-star ratings or resume uploads, or split your form into multi-step pages.`,
+        welcomeText: (name) => `Hello! I am your **180 Core AI Form Architect**.\n\nI have full live awareness of your form${name ? ` **"${name}"**` : ''}. Instruct me to generate new questions, change color themes, add 5-star ratings or resume uploads, or split your form into multi-step pages.`,
         quickPrompts: [
-            { label: '📋 Client Onboarding', prompt: 'Build a comprehensive Client Onboarding form with contact info, company size, budget range, timeline, and requirements' },
-            { label: '💼 Job Application with Resume', prompt: 'Create a job application form with role selection, experience years, portfolio link, and resume file upload' },
-            { label: '⭐ NPS & Customer Feedback', prompt: 'Generate a customer satisfaction & Net Promoter Score survey with 5-star rating questions' },
-            { label: '🪔 Festive Diwali Contest', prompt: 'Create a Diwali festive promotional contest form with discount claims and WhatsApp number' },
-            { label: '🟢 Emerald Green Theme', prompt: 'Switch the form accent color to emerald green (#059669) and change button text to "Submit Application"' },
-            { label: '➕ Add Rating & File Upload', prompt: 'Add a 5-star experience rating question and supporting document file upload field' }
+            { label: 'Client Onboarding', prompt: 'Build a comprehensive Client Onboarding form with contact info, company size, budget range, timeline, and requirements' },
+            { label: 'Job Application with Resume', prompt: 'Create a job application form with role selection, experience years, portfolio link, and resume file upload' },
+            { label: 'NPS & Customer Feedback', prompt: 'Generate a customer satisfaction & Net Promoter Score survey with 5-star rating questions' },
+            { label: 'Festive Diwali Contest', prompt: 'Create a Diwali festive promotional contest form with discount claims and WhatsApp number' },
+            { label: 'Emerald Green Theme', prompt: 'Switch the form accent color to emerald green (#059669) and change button text to "Submit Application"' },
+            { label: 'Add Rating & File Upload', prompt: 'Add a 5-star experience rating question and supporting document file upload field' }
         ],
         endpoint: '/api/v1/ai/forms/patch'
     },
@@ -73,14 +73,14 @@ const MODE_CONFIG: Record<AIDrawerMode, {
         subtitle: 'Live Landing Page & AST Synthesizer',
         icon: <Globe className="w-4 h-4 text-indigo-300" />,
         themeGradient: 'from-indigo-600 via-blue-600 to-purple-600',
-        welcomeText: (name) => `👋 Hello! I am your **180 Core AI Website Architect**.\n\nI have full live awareness of your website canvas${name ? ` **"${name}"**` : ''}. Instruct me to generate complete landing pages, change visual themes, add pricing matrices, or insert customer testimonials.`,
+        welcomeText: (name) => `Hello! I am your **180 Core AI Website Architect**.\n\nI have full live awareness of your website canvas${name ? ` **"${name}"**` : ''}. Instruct me to generate complete landing pages, change visual themes, add pricing matrices, or insert customer testimonials.`,
         quickPrompts: [
-            { label: '🚀 SaaS Landing Page', prompt: 'Generate a high-converting modern dark-mode SaaS landing page with hero, 3 feature cards, pricing tiers, and contact CTA' },
-            { label: '🪔 Festive Diwali Campaign', prompt: 'Build a festive Diwali promotional campaign page with 40% discount offer cards, value props, and lead form' },
-            { label: '⭐ Add Customer Testimonials', prompt: 'Add a customer testimonials and social proof review section with 5-star ratings' },
-            { label: '🟢 Switch to Emerald Theme', prompt: 'Switch the visual theme to emerald green (#10b981) with modern glassmorphism' },
-            { label: '🟣 Switch to Royal Purple', prompt: 'Change visual theme to royal purple (#8b5cf6) with dark slate background' },
-            { label: '💰 Add Pricing Matrix', prompt: 'Add a 3-tier pricing matrix: Starter $29, Growth $79, Enterprise $199' }
+            { label: 'SaaS Landing Page', prompt: 'Generate a high-converting modern dark-mode SaaS landing page with hero, 3 feature cards, pricing tiers, and contact CTA' },
+            { label: 'Festive Diwali Campaign', prompt: 'Build a festive Diwali promotional campaign page with 40% discount offer cards, value props, and lead form' },
+            { label: 'Add Customer Testimonials', prompt: 'Add a customer testimonials and social proof review section with 5-star ratings' },
+            { label: 'Switch to Emerald Theme', prompt: 'Switch the visual theme to emerald green (#10b981) with modern glassmorphism' },
+            { label: 'Switch to Royal Purple', prompt: 'Change visual theme to royal purple (#8b5cf6) with dark slate background' },
+            { label: 'Add Pricing Matrix', prompt: 'Add a 3-tier pricing matrix: Starter $29, Growth $79, Enterprise $199' }
         ],
         endpoint: '/api/v1/ai/websites/patch'
     },
@@ -89,13 +89,13 @@ const MODE_CONFIG: Record<AIDrawerMode, {
         subtitle: 'Live Contract & Report Synthesizer',
         icon: <FileText className="w-4 h-4 text-emerald-300" />,
         themeGradient: 'from-emerald-600 via-teal-600 to-cyan-600',
-        welcomeText: (name) => `👋 Hello! I am your **180 Core AI Document Architect**.\n\nI can draft corporate contracts, proposals, executive summaries, and legal clauses with full context awareness of ${name ? `**"${name}"**` : 'your active document'}.`,
+        welcomeText: (name) => `Hello! I am your **180 Core AI Document Architect**.\n\nI can draft corporate contracts, proposals, executive summaries, and legal clauses with full context awareness of ${name ? `**"${name}"**` : 'your active document'}.`,
         quickPrompts: [
-            { label: '📄 Client Proposal', prompt: 'Draft a comprehensive client proposal with scope of work, timeline milestones, and investment breakdown' },
-            { label: '💼 Master Service Agreement', prompt: 'Generate a standard Master Service Agreement with payment terms, IP assignment, and liability clauses' },
-            { label: '📊 Executive Summary', prompt: 'Synthesize an executive summary highlighting key quarterly business goals and risk mitigation' },
-            { label: '✍️ Polish & Professional Tone', prompt: 'Rewrite this document with executive-level corporate clarity and persuasive tone' },
-            { label: '📋 Add Signature Block', prompt: 'Add a formal two-party signing block with dates and legal representations' }
+            { label: 'Client Proposal', prompt: 'Draft a comprehensive client proposal with scope of work, timeline milestones, and investment breakdown' },
+            { label: 'Master Service Agreement', prompt: 'Generate a standard Master Service Agreement with payment terms, IP assignment, and liability clauses' },
+            { label: 'Executive Summary', prompt: 'Synthesize an executive summary highlighting key quarterly business goals and risk mitigation' },
+            { label: 'Polish & Professional Tone', prompt: 'Rewrite this document with executive-level corporate clarity and persuasive tone' },
+            { label: 'Add Signature Block', prompt: 'Add a formal two-party signing block with dates and legal representations' }
         ],
         endpoint: '/api/v1/ai/documents/generate-section'
     },
@@ -104,11 +104,11 @@ const MODE_CONFIG: Record<AIDrawerMode, {
         subtitle: 'Powered by Orbit Intelligence',
         icon: <Sparkles className="w-4 h-4 text-amber-300" />,
         themeGradient: 'from-indigo-600 via-purple-600 to-pink-600',
-        welcomeText: () => `👋 Hello! I am your **Orbit Copilot**.\n\nHow can I help you automate, design, or execute today?`,
+        welcomeText: () => `Hello! I am your **Orbit Copilot**.\n\nHow can I help you automate, design, or execute today?`,
         quickPrompts: [
-            { label: '⚡ Summarize Context', prompt: 'Summarize the key objectives and action items for this workspace.' },
-            { label: '📈 Sales Forecast', prompt: 'Analyze our current pipeline and provide revenue projections.' },
-            { label: '📧 Draft Outreach Email', prompt: 'Draft a high-converting cold email for prospective enterprise clients.' }
+            { label: 'Summarize Context', prompt: 'Summarize the key objectives and action items for this workspace.' },
+            { label: 'Sales Forecast', prompt: 'Analyze our current pipeline and provide revenue projections.' },
+            { label: 'Draft Outreach Email', prompt: 'Draft a high-converting cold email for prospective enterprise clients.' }
         ],
         endpoint: '/api/v1/ai/chat'
     }
@@ -312,7 +312,7 @@ export function UniversalAIDrawer({
                 const assistantMsg: Message = {
                     id: `ai-${Date.now()}`,
                     sender: 'assistant',
-                    text: resData.reply || `✅ Changes synthesized and applied live!`,
+                    text: resData.reply || `Changes synthesized and applied live!`,
                     timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                     astData: resData.ast
                 };
@@ -327,7 +327,7 @@ export function UniversalAIDrawer({
             const errorMsg: Message = {
                 id: `ai-err-${Date.now()}`,
                 sender: 'assistant',
-                text: `⚠️ **AI Update Error**: ${error?.response?.data?.message || error?.message || 'Failed to apply changes. Please try again.'}`,
+                text: `**AI Update Error**: ${error?.response?.data?.message || error?.message || 'Failed to apply changes. Please try again.'}`,
                 timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             };
             setMessages(prev => [...prev, errorMsg]);

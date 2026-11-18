@@ -114,7 +114,7 @@ function ResetPasswordContent() {
       if (data.devOtp) {
         setDevOtpHint(data.devOtp);
         setOtp(data.devOtp);
-        toast(`Dev Code: ${data.devOtp}`, { icon: '🔑', duration: 8000 });
+        toast(`Dev Code: ${data.devOtp}`, { duration: 8000 });
       }
 
       setResendCooldown(30);

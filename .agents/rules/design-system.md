@@ -212,3 +212,6 @@ Every status badge or indicator must pair an icon, tinted background, border, an
 | **DO** ensure every hardcoded light color has a `dark:` counterpart. | **DON'T** write light-mode-only styles that blind users in dark mode. |
 | **DO** use `rounded-2xl` and `rounded-3xl` for modern, friendly surface boundaries. | **DON'T** use harsh square corners (`rounded-none` or `rounded-sm`) for cards. |
 | **DO** use real data from live endpoints. | **DON'T** use mock multipliers, fake percentages, or synthetic test data. |
+| **DO** default every application to Porcelain Clean **Light Mode** (`theme = 'light'`) until explicitly toggled by the user. | **DON'T** force dark mode as the initial default theme. |
+| **DO** use official industry-grade vector icons (`lucide-react`) exclusively across websites, dashboards, buttons, badges, and toasts. | **DON'T** use Unicode emojis anywhere in the platform UI, copy, labels, or notifications. |
+| **DO** apply tactile micro-interactions (`active:scale-[0.98]`, subtle hover lift, icon nudges, smooth page-entry fades) respecting `prefers-reduced-motion`. | **DON'T** ship static, lifeless interactive controls or jarring motion. |

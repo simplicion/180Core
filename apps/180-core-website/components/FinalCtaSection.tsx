@@ -58,7 +58,7 @@ export function FinalCtaSection() {
         <div className="relative grid grid-cols-1 sm:grid-cols-3 gap-3 pt-8 mt-8 border-t border-white/10">
           <Link
             href="/identity"
-            className="p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 transition-colors"
+            className="interactive-lift p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-blue-500/40"
           >
             <span className="text-xs font-bold text-white block">180 Identity &amp; Verify</span>
             <span className="text-[11px] font-mono text-zinc-400 mt-0.5 block">
@@ -67,7 +67,7 @@ export function FinalCtaSection() {
           </Link>
           <Link
             href="/pay"
-            className="p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 transition-colors"
+            className="interactive-lift p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-purple-500/40"
           >
             <span className="text-xs font-bold text-white block">180 Pay &amp; Ledger</span>
             <span className="text-[11px] font-mono text-zinc-400 mt-0.5 block">
@@ -76,7 +76,7 @@ export function FinalCtaSection() {
           </Link>
           <Link
             href="/security"
-            className="p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 transition-colors"
+            className="interactive-lift p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-emerald-500/40"
           >
             <span className="text-xs font-bold text-white block">Security Doctrine</span>
             <span className="text-[11px] font-mono text-zinc-400 mt-0.5 block">

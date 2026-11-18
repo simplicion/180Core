@@ -195,10 +195,10 @@ export function ArchitectureAndCodeSection() {
               return (
                 <Card
                   key={item.title}
-                  className="bg-white dark:bg-zinc-950 border-zinc-200/80 dark:border-white/10 shadow-sm"
+                  className="group interactive-lift bg-white dark:bg-zinc-950 border-zinc-200/80 dark:border-white/10 hover:border-blue-500/35 hover:shadow-md shadow-sm"
                 >
                   <CardContent className="p-5 flex items-start gap-3.5">
-                    <div className="h-10 w-10 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                    <div className="h-10 w-10 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105">
                       <Icon className="h-5 w-5" />
                     </div>
                     <div className="space-y-1">

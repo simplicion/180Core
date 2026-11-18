@@ -61,7 +61,7 @@ const DISCOVERY_ENDPOINTS = [
 
 export function SecurityShowcase() {
   return (
-    <div className="space-y-16 py-12 md:py-20">
+    <div className="space-y-16 py-12 md:py-20 animate-page-enter">
       <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
           <Lock className="h-3.5 w-3.5" />

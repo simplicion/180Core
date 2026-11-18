@@ -55,7 +55,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 var userSet = localStorage.getItem('180_theme_user_set');
                 var theme = localStorage.getItem('180_theme');
                 if (!userSet) {
-                  theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                  theme = 'light';
+                  localStorage.setItem('180_theme', 'light');
                 }
                 if (theme === 'dark') {
                   document.documentElement.classList.add('dark');

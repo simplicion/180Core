@@ -59,7 +59,7 @@ const NAV_ITEMS: NavItem[] = [
 
 export default function AdminShellLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [isDark, setIsDark] = useState(true);
+  const [isDark, setIsDark] = useState(false);
   const [pulseData, setPulseData] = useState<any>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -92,13 +92,16 @@ export default function AdminShellLayout({ children }: { children: React.ReactNo
   const toggleTheme = () => {
     const nextDark = !isDark;
     setIsDark(nextDark);
-    if (nextDark) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('180_theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('180_theme', 'light');
-    }
+    try {
+      localStorage.setItem('180_theme_user_set', 'true');
+      if (nextDark) {
+        document.documentElement.classList.add('dark');
+        localStorage.setItem('180_theme', 'dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+        localStorage.setItem('180_theme', 'light');
+      }
+    } catch (_) {}
   };
 
   return (
@@ -318,7 +321,9 @@ export default function AdminShellLayout({ children }: { children: React.ReactNo
         </header>
 
         {/* Viewport Children Container */}
-        <main className="flex-1 p-4 sm:p-8 overflow-x-hidden">{children}</main>
+        <main key={pathname} className="flex-1 p-4 sm:p-8 overflow-x-hidden animate-page-enter">
+          {children}
+        </main>
       </div>
 
       {/* Floating Support Desk Widget */}
