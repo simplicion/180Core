@@ -1,4 +1,4 @@
-import { Country } from 'country-state-city';
+import { ALL_COUNTRIES, getCountryByIso, getCountryByDial } from './countries-data';
 
 export interface CountryItem {
   code: string; // ISO 3166-1 alpha-2 (e.g., "NP", "US", "IN")
@@ -36,24 +36,12 @@ export class LocationService {
   }
 
   private initCatalog() {
-    try {
-      const raw = Country.getAllCountries();
-      this.allCountries = raw
-        .filter((c) => c.phonecode && c.phonecode.replace(/[^\d]/g, '').length > 0)
-        .map((c) => {
-          const cleanPhone = c.phonecode.replace(/[^\d]/g, '');
-          return {
-            code: c.isoCode.toUpperCase(),
-            name: c.name,
-            dialCode: `+${cleanPhone}`,
-            flag: c.flag || getFlagEmoji(c.isoCode),
-          };
-        })
-        .sort((a, b) => a.name.localeCompare(b.name));
-    } catch (e) {
-      console.error('[LocationService] Failed to load countries from country-state-city:', e);
-      this.allCountries = [];
-    }
+    this.allCountries = ALL_COUNTRIES.map((c) => ({
+      code: c.code,
+      name: c.name,
+      dialCode: c.dialCode,
+      flag: c.flag || getFlagEmoji(c.code),
+    }));
   }
 
   /**
@@ -88,8 +76,14 @@ export class LocationService {
    */
   getCountryByCode(code?: string): CountryItem | undefined {
     if (!code) return undefined;
-    const clean = code.trim().toUpperCase();
-    return this.getAllCountries().find((c) => c.code === clean);
+    const c = getCountryByIso(code);
+    if (!c) return undefined;
+    return {
+      code: c.code,
+      name: c.name,
+      dialCode: c.dialCode,
+      flag: c.flag || getFlagEmoji(c.code),
+    };
   }
 
   /**
@@ -97,9 +91,14 @@ export class LocationService {
    */
   getCountryByDialCode(dialCode?: string): CountryItem | undefined {
     if (!dialCode) return undefined;
-    const digits = dialCode.replace(/[^\d]/g, '');
-    if (!digits) return undefined;
-    return this.getAllCountries().find((c) => c.dialCode === `+${digits}`);
+    const c = getCountryByDial(dialCode);
+    if (!c) return undefined;
+    return {
+      code: c.code,
+      name: c.name,
+      dialCode: c.dialCode,
+      flag: c.flag || getFlagEmoji(c.code),
+    };
   }
 
   /**
@@ -228,31 +227,41 @@ export class LocationService {
         .replace(/Rangoon/i, 'Yangon')
         .replace(/Saigon/i, 'Ho_Chi_Minh');
 
-      const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-
       if (rawTz || tz) {
-        const raw = Country.getAllCountries();
-        for (const country of raw) {
-          const timezones = (country as any).timezones as Array<{ zoneName: string }> | undefined;
-          if (
-            timezones &&
-            timezones.some((t) => {
-              const nt = norm(t.zoneName);
-              return nt === norm(tz) || nt === norm(rawTz);
-            })
-          ) {
-            const matched = this.getCountryByCode(country.isoCode);
-            if (matched) {
-              const detected: DetectedLocation = {
-                countryCode: matched.code,
-                countryName: matched.name,
-                dialCode: matched.dialCode,
-                flag: matched.flag,
-                source: 'timezone',
-              };
-              this.persist(detected);
-              return detected;
-            }
+        const TIMEZONE_TO_COUNTRY: Record<string, string> = {
+          kathmandu: 'NP', kolkata: 'IN', calcutta: 'IN', delhi: 'IN', mumbai: 'IN',
+          dhaka: 'BD', karachi: 'PK', colombo: 'LK', dubai: 'AE', singapore: 'SG',
+          tokyo: 'JP', seoul: 'KR', shanghai: 'CN', beijing: 'CN', hong_kong: 'HK',
+          bangkok: 'TH', jakarta: 'ID', kuala_lumpur: 'MY', manila: 'PH', taipei: 'TW',
+          yangon: 'MM', ho_chi_minh: 'VN', riyadh: 'SA', qatar: 'QA', kuwait: 'KW',
+          bahrain: 'BH', muscat: 'OM', amman: 'JO', beirut: 'LB', tel_aviv: 'IL',
+          jerusalem: 'IL', tashkent: 'UZ', almaty: 'KZ', london: 'GB', paris: 'FR',
+          berlin: 'DE', madrid: 'ES', rome: 'IT', amsterdam: 'NL', brussels: 'BE',
+          zurich: 'CH', vienna: 'AT', stockholm: 'SE', oslo: 'NO', copenhagen: 'DK',
+          helsinki: 'FI', dublin: 'IE', lisbon: 'PT', athens: 'GR', warsaw: 'PL',
+          prague: 'CZ', budapest: 'HU', bucharest: 'RO', istanbul: 'TR', moscow: 'RU',
+          kyiv: 'UA', new_york: 'US', chicago: 'US', los_angeles: 'US', denver: 'US',
+          phoenix: 'US', anchorage: 'US', honolulu: 'US', toronto: 'CA', vancouver: 'CA',
+          montreal: 'CA', mexico_city: 'MX', sao_paulo: 'BR', buenos_aires: 'AR',
+          santiago: 'CL', bogota: 'CO', lima: 'PE', sydney: 'AU', melbourne: 'AU',
+          brisbane: 'AU', perth: 'AU', auckland: 'NZ', cairo: 'EG', johannesburg: 'ZA',
+          nairobi: 'KE', lagos: 'NG', casablanca: 'MA'
+        };
+
+        const city = (tz || rawTz).split('/').pop()?.toLowerCase().replace(/[^a-z0-9_]/g, '') || '';
+        const countryIso = TIMEZONE_TO_COUNTRY[city];
+        if (countryIso) {
+          const matched = this.getCountryByCode(countryIso);
+          if (matched) {
+            const detected: DetectedLocation = {
+              countryCode: matched.code,
+              countryName: matched.name,
+              dialCode: matched.dialCode,
+              flag: matched.flag,
+              source: 'timezone',
+            };
+            this.persist(detected);
+            return detected;
           }
         }
       }

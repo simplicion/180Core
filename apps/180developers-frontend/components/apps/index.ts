@@ -5,6 +5,5 @@ export * from './AppOverviewDetail';
 export * from './AppLogoUploader';
 export * from './AppModals';
 export * from './ProjectSettingsDrawer';
-export * from './ProjectQuickDrawer';
 export * from './WordPressIntegrationDrawer';
 

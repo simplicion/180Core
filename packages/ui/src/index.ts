@@ -81,6 +81,7 @@ export * from './components/OneEightyCoreLogo';
 export * from './components/FloatingSupportWidget';
 
 // Shared Location & Currency Services & Modals
+export * from './lib/countries-data';
 export * from './lib/location-service';
 export * from './lib/currency-service';
 export * from './components/CurrencySelectorModal';

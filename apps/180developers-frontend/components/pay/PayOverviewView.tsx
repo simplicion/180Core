@@ -143,7 +143,8 @@ export function PayOverviewView() {
   const { formatAmount, activeCurrency, activeMeta, openCurrencyModal } = usePlatformCurrency();
   const baseCurrency = (paymentAnalytics?.currency || 'USD').toUpperCase();
 
-  const [chartView, setChartView] = useState<'current-month' | '12-months'>('current-month');
+  const [chartFilter, setChartFilter] = useState<'7d' | '30d' | '12m'>('7d');
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
   useEffect(() => {
     fetchPaymentAnalytics();
@@ -171,101 +172,220 @@ export function PayOverviewView() {
   const gatewayInvocationsCount = capturedCount + gatewayAttemptsCount;
   const gatewayInvocationsVolume = gatewayAttemptsVolume + capturedVolume;
 
-  // Real Current Month Daily Activity & Rolling 12-Month Volume Breakdown
-  const { currentMonthDaily, currentMonthTotal, currentMonthCount, last12MonthsData, currentMonthName, currentYearNum } = useMemo(() => {
+  // Captured Payments Frequency Curve Data for 7D, 30D, and 12M
+  const chartData = useMemo(() => {
     const now = new Date();
     const curYear = now.getFullYear();
     const curMonth = now.getMonth();
     const curDate = now.getDate();
-    const daysInCurMonth = new Date(curYear, curMonth + 1, 0).getDate();
-    const monthName = now.toLocaleString('en-US', { month: 'long' });
-    const monthShort = now.toLocaleString('en-US', { month: 'short' });
-
-    const daily = Array.from({ length: daysInCurMonth }, (_, i) => ({
-      day: i + 1,
-      volume: 0,
-      count: 0,
-      isToday: i + 1 === curDate,
-      isFuture: i + 1 > curDate,
-      dateLabel: `${monthShort} ${i + 1}`,
-    }));
-
-    let curMoVol = 0;
-    let curMoCount = 0;
-
     const txList = paymentAnalytics?.transactions || [];
-    txList.forEach((tx) => {
-      if (tx.status === 'CAPTURED' || tx.status === 'SUCCESS') {
-        const d = new Date(tx.createdAt);
-        if (d.getFullYear() === curYear && d.getMonth() === curMonth) {
-          const dayIdx = d.getDate() - 1;
-          if (dayIdx >= 0 && dayIdx < daysInCurMonth) {
-            const amt = Number(tx.amount || 0);
-            daily[dayIdx].volume += amt;
-            daily[dayIdx].count += 1;
-            curMoVol += amt;
-            curMoCount += 1;
-          }
-        }
-      }
-    });
 
-    // Fallback: If no individual captured transactions matched the current month,
-    // but the backend reports thisMonthVolume or capturedVolume > 0, reflect it on today's bar
-    const fallbackVol = paymentAnalytics?.thisMonthVolume ?? capturedVolume;
-    if (curMoVol === 0 && fallbackVol > 0) {
-      const todayIdx = Math.min(curDate - 1, daysInCurMonth - 1);
-      daily[todayIdx].volume = fallbackVol;
-      daily[todayIdx].count = capturedCount || 1;
-      curMoVol = fallbackVol;
-      curMoCount = capturedCount || 1;
-    }
+    const isCaptured = (tx: any) => tx.status === 'CAPTURED' || tx.status === 'SUCCESS';
 
-    // Last 12 months rolling data using real transaction aggregation
-    const last12 = [];
-    for (let i = 11; i >= 0; i--) {
-      const targetDate = new Date(curYear, curMonth - i, 1);
-      const tYear = targetDate.getFullYear();
-      const tMonth = targetDate.getMonth();
-      const label = targetDate.toLocaleString('en-US', { month: 'short' });
-      let vol = 0;
-      let cnt = 0;
+    // 1. Last 7 Days (Default View)
+    const points7d: Array<{ label: string; axisLabel: string; volume: number; count: number; isCurrent: boolean }> = [];
+    let vol7d = 0;
+    let count7d = 0;
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(curYear, curMonth, curDate - i);
+      const y = d.getFullYear();
+      const m = d.getMonth();
+      const dt = d.getDate();
+      const label = i === 0 ? 'Today' : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      const axisLabel = i === 0 ? 'Today' : d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
 
+      let dayVol = 0;
+      let dayCount = 0;
       txList.forEach((tx) => {
-        if (tx.status === 'CAPTURED' || tx.status === 'SUCCESS') {
-          const d = new Date(tx.createdAt);
-          if (d.getFullYear() === tYear && d.getMonth() === tMonth) {
-            vol += Number(tx.amount || 0);
-            cnt += 1;
+        if (isCaptured(tx)) {
+          const txD = new Date(tx.createdAt);
+          if (txD.getFullYear() === y && txD.getMonth() === m && txD.getDate() === dt) {
+            dayVol += Number(tx.amount || 0);
+            dayCount += 1;
           }
         }
       });
 
-      if (i === 0 && vol === 0) {
-        vol = curMoVol;
-        cnt = curMoCount;
-      } else if (i === 1 && vol === 0 && paymentAnalytics?.lastMonthVolume) {
-        vol = paymentAnalytics.lastMonthVolume;
+      vol7d += dayVol;
+      count7d += dayCount;
+      points7d.push({
+        label,
+        axisLabel,
+        volume: dayVol,
+        count: dayCount,
+        isCurrent: i === 0,
+      });
+    }
+
+    // Fallback: If no individual transactions found in txList, but capturedVolume > 0
+    if (vol7d === 0 && capturedVolume > 0) {
+      points7d[points7d.length - 1].volume = capturedVolume;
+      points7d[points7d.length - 1].count = capturedCount || 1;
+      vol7d = capturedVolume;
+      count7d = capturedCount || 1;
+    }
+
+    // 2. Last 30 Days (Monthly View)
+    const points30d: Array<{ label: string; axisLabel: string; volume: number; count: number; isCurrent: boolean }> = [];
+    let vol30d = 0;
+    let count30d = 0;
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(curYear, curMonth, curDate - i);
+      const y = d.getFullYear();
+      const m = d.getMonth();
+      const dt = d.getDate();
+      const label = i === 0 ? 'Today' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const axisLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+      let dayVol = 0;
+      let dayCount = 0;
+      txList.forEach((tx) => {
+        if (isCaptured(tx)) {
+          const txD = new Date(tx.createdAt);
+          if (txD.getFullYear() === y && txD.getMonth() === m && txD.getDate() === dt) {
+            dayVol += Number(tx.amount || 0);
+            dayCount += 1;
+          }
+        }
+      });
+
+      vol30d += dayVol;
+      count30d += dayCount;
+      points30d.push({
+        label,
+        axisLabel,
+        volume: dayVol,
+        count: dayCount,
+        isCurrent: i === 0,
+      });
+    }
+
+    if (vol30d === 0 && (paymentAnalytics?.thisMonthVolume || capturedVolume > 0)) {
+      const fallback = paymentAnalytics?.thisMonthVolume || capturedVolume;
+      points30d[points30d.length - 1].volume = fallback;
+      points30d[points30d.length - 1].count = capturedCount || 1;
+      vol30d = fallback;
+      count30d = capturedCount || 1;
+    }
+
+    // 3. Last 12 Months
+    const points12m: Array<{ label: string; axisLabel: string; volume: number; count: number; isCurrent: boolean }> = [];
+    let vol12m = 0;
+    let count12m = 0;
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(curYear, curMonth - i, 1);
+      const y = d.getFullYear();
+      const m = d.getMonth();
+      const label = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      const axisLabel = d.toLocaleDateString('en-US', { month: 'short' });
+
+      let mVol = 0;
+      let mCount = 0;
+      txList.forEach((tx) => {
+        if (isCaptured(tx)) {
+          const txD = new Date(tx.createdAt);
+          if (txD.getFullYear() === y && txD.getMonth() === m) {
+            mVol += Number(tx.amount || 0);
+            mCount += 1;
+          }
+        }
+      });
+
+      if (i === 0 && mVol === 0) {
+        mVol = vol30d || capturedVolume;
+        mCount = count30d || capturedCount;
+      } else if (i === 1 && mVol === 0 && paymentAnalytics?.lastMonthVolume) {
+        mVol = paymentAnalytics.lastMonthVolume;
       }
 
-      last12.push({
-        month: label,
-        year: tYear,
-        volume: vol,
-        count: cnt,
+      vol12m += mVol;
+      count12m += mCount;
+      points12m.push({
+        label,
+        axisLabel,
+        volume: mVol,
+        count: mCount,
         isCurrent: i === 0,
       });
     }
 
     return {
-      currentMonthDaily: daily,
-      currentMonthTotal: curMoVol,
-      currentMonthCount: curMoCount,
-      last12MonthsData: last12,
-      currentMonthName: monthName,
-      currentYearNum: curYear,
+      '7d': {
+        points: points7d,
+        totalVolume: vol7d,
+        totalCount: count7d,
+        title: 'Captured Payments Frequency (Last 7 Days)',
+        periodLabel: 'Last 7 Days',
+      },
+      '30d': {
+        points: points30d,
+        totalVolume: vol30d,
+        totalCount: count30d,
+        title: 'Captured Payments Frequency (Last 30 Days)',
+        periodLabel: 'Last 30 Days',
+      },
+      '12m': {
+        points: points12m,
+        totalVolume: vol12m,
+        totalCount: count12m,
+        title: 'Captured Payments Frequency (Last 12 Months)',
+        periodLabel: 'Last 12 Months',
+      },
     };
   }, [paymentAnalytics, capturedVolume, capturedCount]);
+
+  const currentDataset = chartData[chartFilter];
+  const { points: currentPoints, totalVolume: currentTotalVolume, totalCount: currentTotalCount, title: currentChartTitle, periodLabel: currentPeriodLabel } = currentDataset;
+
+  const maxVal = Math.max(...currentPoints.map((p) => p.volume), 0.01);
+  const baselineY = 205;
+  const graphHeight = 175;
+  const paddingX = 0;
+  const graphWidth = 800;
+
+  const coords = currentPoints.map((p, i) => {
+    const x = (i / Math.max(currentPoints.length - 1, 1)) * graphWidth;
+    const normalized = p.volume / maxVal;
+    const y = baselineY - normalized * graphHeight;
+    return { ...p, x, y };
+  });
+
+  const getSmoothCurvePaths = (points: Array<{ x: number; y: number }>, base: number) => {
+    if (!points || points.length === 0) return { linePath: '', areaPath: '' };
+    if (points.length === 1) {
+      const p = points[0];
+      const linePath = `M 0 ${p.y} L 800 ${p.y}`;
+      const areaPath = `M 0 ${base} L 0 ${p.y} L 800 ${p.y} L 800 ${base} Z`;
+      return { linePath, areaPath };
+    }
+
+    let linePath = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = points[Math.max(i - 1, 0)];
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const p3 = points[Math.min(i + 2, points.length - 1)];
+
+      const cp1x = p1.x + (p2.x - p0.x) / 5;
+      const cp1y = p1.y + (p2.y - p0.y) / 5;
+      const cp2x = p2.x - (p3.x - p1.x) / 5;
+      const cp2y = p2.y - (p3.y - p1.y) / 5;
+
+      const clampedCp1y = Math.min(base, Math.max(15, cp1y));
+      const clampedCp2y = Math.min(base, Math.max(15, cp2y));
+
+      linePath += ` C ${cp1x.toFixed(1)} ${clampedCp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${clampedCp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+    }
+
+    const first = points[0];
+    const last = points[points.length - 1];
+    const areaPath = `${linePath} L ${last.x.toFixed(1)} ${base} L ${first.x.toFixed(1)} ${base} Z`;
+
+    return { linePath, areaPath };
+  };
+
+  const { linePath, areaPath } = getSmoothCurvePaths(coords, baselineY);
+  const hoveredPoint = hoveredIdx !== null && coords[hoveredIdx] ? coords[hoveredIdx] : null;
 
   return (
     <div className="space-y-6">
@@ -444,22 +564,28 @@ export function PayOverviewView() {
         </div>
       </div>
 
-      {/* 4. Processing Volume Histogram (Current Month by default, with Last 12 Months toggle) */}
-      <div className="p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/5 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* 4. Captured Payments Frequency Graph (Area / Spline Curve with 7d / 30d / 12m filters) */}
+      <div className="rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/5 overflow-hidden shadow-sm flex flex-col">
+        {/* Card Header with Filters */}
+        <div className="p-5 sm:p-6 pb-4 border-b border-zinc-200/60 dark:border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              <TrendingUp className="w-4 h-4 text-purple-600 dark:text-purple-400" />
               <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
-                {chartView === 'current-month'
-                  ? `Current Month Processing Volume (${currentMonthName} ${currentYearNum})`
-                  : 'Monthly Processing Volume (Last 12 Months)'}
+                {currentChartTitle}
               </h3>
             </div>
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 font-mono">
-              {chartView === 'current-month'
-                ? `${formatAmount(currentMonthTotal, baseCurrency)} processed across ${currentMonthCount} payment${currentMonthCount === 1 ? '' : 's'} this month`
-                : `${formatAmount(capturedVolume, baseCurrency)} gross volume across ${capturedCount} payment${capturedCount === 1 ? '' : 's'}`}
+              {hoveredPoint ? (
+                <span>
+                  <strong className="text-purple-600 dark:text-purple-400">{hoveredPoint.label}:</strong>{' '}
+                  {formatAmount(hoveredPoint.volume, baseCurrency)} across {hoveredPoint.count} payment{hoveredPoint.count === 1 ? '' : 's'}
+                </span>
+              ) : (
+                <span>
+                  {formatAmount(currentTotalVolume, baseCurrency)} processed across {currentTotalCount} payment{currentTotalCount === 1 ? '' : 's'} ({currentPeriodLabel})
+                </span>
+              )}
             </p>
           </div>
 
@@ -467,131 +593,310 @@ export function PayOverviewView() {
             <div className="flex items-center gap-1 bg-zinc-200/70 dark:bg-zinc-800 p-0.5 rounded-xl border border-zinc-200 dark:border-white/5">
               <button
                 type="button"
-                onClick={() => setChartView('current-month')}
+                onClick={() => {
+                  setChartFilter('7d');
+                  setHoveredIdx(null);
+                }}
                 className={`px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                  chartView === 'current-month'
+                  chartFilter === '7d'
                     ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-sm font-semibold'
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
                 }`}
               >
-                This Month
+                7 Days
               </button>
               <button
                 type="button"
-                onClick={() => setChartView('12-months')}
+                onClick={() => {
+                  setChartFilter('30d');
+                  setHoveredIdx(null);
+                }}
                 className={`px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                  chartView === '12-months'
+                  chartFilter === '30d'
                     ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-sm font-semibold'
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
                 }`}
               >
-                Last 12 Months
+                30 Days
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setChartFilter('12m');
+                  setHoveredIdx(null);
+                }}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                  chartFilter === '12m'
+                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-sm font-semibold'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                }`}
+              >
+                12 Months
               </button>
             </div>
             <span className="text-[10px] font-mono text-zinc-500 hidden md:inline">180 Pay Engine</span>
           </div>
         </div>
 
-        {chartView === 'current-month' ? (
-          (() => {
-            const maxDailyVal = Math.max(...currentMonthDaily.map((d) => d.volume), 0.01);
-            return (
-              <div className="space-y-2">
-                <div className="h-36 flex items-end gap-1 sm:gap-1.5 pt-4 px-1 sm:px-2 overflow-x-auto">
-                  {currentMonthDaily.map((d) => {
-                    const heightPct = d.volume > 0
-                      ? Math.max(14, Math.min(100, Math.round((d.volume / maxDailyVal) * 100)))
-                      : 4;
-                    return (
-                      <div
-                        key={d.day}
-                        className="flex-1 min-w-[8px] sm:min-w-[12px] flex flex-col items-center gap-1.5 group relative"
-                      >
-                        <div
-                          style={{ height: `${heightPct}%` }}
-                          className={`w-full rounded-t-sm sm:rounded-t-md transition-all duration-300 relative ${
-                            d.volume > 0
-                              ? 'bg-gradient-to-t from-purple-600 to-indigo-500 shadow-sm shadow-purple-500/25 ring-1 ring-purple-400/30'
-                              : d.isToday
-                              ? 'bg-purple-500/20 border-t-2 border-purple-500'
-                              : d.isFuture
-                              ? 'bg-zinc-200/40 dark:bg-zinc-800/20'
-                              : 'bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700'
-                          }`}
-                          title={`${d.dateLabel}: ${formatAmount(d.volume, baseCurrency)} (${d.count} payment${d.count === 1 ? '' : 's'})${d.isToday ? ' • Today' : ''}`}
-                        />
-                        <span
-                          className={`text-[8px] sm:text-[9px] font-mono leading-none ${
-                            d.isToday
-                              ? 'text-purple-600 dark:text-purple-400 font-bold'
-                              : d.volume > 0
-                              ? 'text-zinc-700 dark:text-zinc-300 font-semibold'
-                              : 'text-zinc-400 dark:text-zinc-500'
-                          } ${
-                            d.day === 1 || d.day % 5 === 0 || d.day === currentMonthDaily.length || d.isToday
-                              ? 'block'
-                              : 'hidden sm:block'
-                          }`}
-                        >
-                          {d.day}
-                        </span>
-                      </div>
-                    );
-                  })}
+        {/* Edge-to-Edge Full-Area Interactive Chart Canvas */}
+        <div className="relative w-full overflow-hidden bg-gradient-to-b from-transparent to-purple-500/[0.03]">
+          {/* Floating Tooltip Card */}
+          {hoveredPoint && (
+            <div
+              style={{
+                left: `${Math.min(90, Math.max(10, (hoveredPoint.x / 800) * 100))}%`,
+                top: `${(Math.max(hoveredPoint.y - 15, 20) / 250) * 100}%`,
+              }}
+              className="absolute -translate-x-1/2 -translate-y-full pointer-events-none z-20"
+            >
+              <div className="bg-zinc-900/95 dark:bg-zinc-800/95 text-white px-3 py-2 rounded-xl shadow-xl border border-white/10 backdrop-blur-md whitespace-nowrap text-xs space-y-0.5">
+                <div className="text-[10px] text-zinc-400 font-mono flex items-center justify-between gap-3">
+                  <span>{hoveredPoint.label}</span>
+                  {hoveredPoint.isCurrent && (
+                    <span className="px-1.5 py-0.2 rounded text-[9px] bg-purple-500/20 text-purple-300 font-semibold">
+                      Current
+                    </span>
+                  )}
                 </div>
-                <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400 dark:text-zinc-500 px-2 pt-1 border-t border-zinc-200/60 dark:border-white/5">
-                  <span>Day 1 ({currentMonthDaily[0]?.dateLabel})</span>
-                  <span className="text-purple-600 dark:text-purple-400 font-semibold">
-                    Daily Activity for {currentMonthName} {currentYearNum}
-                  </span>
-                  <span>Day {currentMonthDaily.length} ({currentMonthDaily[currentMonthDaily.length - 1]?.dateLabel})</span>
+                <div className="font-bold text-sm text-purple-400 font-mono">
+                  {formatAmount(hoveredPoint.volume, baseCurrency)}
+                </div>
+                <div className="text-[10px] text-zinc-300 font-mono">
+                  {hoveredPoint.count} captured payment{hoveredPoint.count === 1 ? '' : 's'}
                 </div>
               </div>
-            );
-          })()
-        ) : (
-          (() => {
-            const maxMonthlyVal = Math.max(...last12MonthsData.map((m) => m.volume), 0.01);
-            return (
-              <div className="space-y-2">
-                <div className="h-36 flex items-end gap-2 pt-4 px-2">
-                  {last12MonthsData.map((m, i) => {
-                    const heightPct = m.volume > 0
-                      ? Math.max(14, Math.min(100, Math.round((m.volume / maxMonthlyVal) * 100)))
-                      : 4;
-                    return (
-                      <div key={i} className="flex-1 flex flex-col items-center gap-1.5 group relative">
-                        <div
-                          style={{ height: `${heightPct}%` }}
-                          className={`w-full rounded-t-md transition-all duration-300 ${
-                            m.isCurrent
-                              ? 'bg-gradient-to-t from-purple-600 to-indigo-500 shadow-sm shadow-purple-500/25 ring-1 ring-purple-400/30'
-                              : m.volume > 0
-                              ? 'bg-indigo-600/70 dark:bg-indigo-500/70 hover:bg-indigo-600'
-                              : 'bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700'
-                          }`}
-                          title={`${m.month} ${m.year}: ${formatAmount(m.volume, baseCurrency)} (${m.count} payments)`}
-                        />
-                        <span
-                          className={`text-[9px] font-mono ${
-                            m.isCurrent ? 'text-purple-600 dark:text-purple-400 font-bold' : 'text-zinc-500'
-                          }`}
-                        >
-                          {m.month}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400 dark:text-zinc-500 px-2 pt-1 border-t border-zinc-200/60 dark:border-white/5">
-                  <span>{last12MonthsData[0]?.month} {last12MonthsData[0]?.year}</span>
-                  <span className="text-purple-600 dark:text-purple-400 font-semibold">12-Month Trend</span>
-                  <span>{last12MonthsData[last12MonthsData.length - 1]?.month} {last12MonthsData[last12MonthsData.length - 1]?.year}</span>
-                </div>
-              </div>
-            );
-          })()
-        )}
+            </div>
+          )}
+
+          <div className="w-full">
+            <svg
+              viewBox="0 0 800 250"
+              preserveAspectRatio="none"
+              className="w-full h-64 sm:h-72 md:h-80 cursor-crosshair block"
+              onMouseMove={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                if (!rect.width) return;
+                const mouseX = ((e.clientX - rect.left) / rect.width) * 800;
+                let closestIdx = 0;
+                let minDist = Infinity;
+                coords.forEach((c, idx) => {
+                  const dist = Math.abs(c.x - mouseX);
+                  if (dist < minDist) {
+                    minDist = dist;
+                    closestIdx = idx;
+                  }
+                });
+                setHoveredIdx(closestIdx);
+              }}
+              onMouseLeave={() => setHoveredIdx(null)}
+              onTouchMove={(e) => {
+                const touch = e.touches[0];
+                if (!touch) return;
+                const rect = e.currentTarget.getBoundingClientRect();
+                if (!rect.width) return;
+                const mouseX = ((touch.clientX - rect.left) / rect.width) * 800;
+                let closestIdx = 0;
+                let minDist = Infinity;
+                coords.forEach((c, idx) => {
+                  const dist = Math.abs(c.x - mouseX);
+                  if (dist < minDist) {
+                    minDist = dist;
+                    closestIdx = idx;
+                  }
+                });
+                setHoveredIdx(closestIdx);
+              }}
+              onTouchEnd={() => setHoveredIdx(null)}
+            >
+              <defs>
+                <linearGradient id="freqAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.55" />
+                  <stop offset="35%" stopColor="#8b5cf6" stopOpacity="0.30" />
+                  <stop offset="70%" stopColor="#6366f1" stopOpacity="0.12" />
+                  <stop offset="100%" stopColor="#6366f1" stopOpacity="0.02" />
+                </linearGradient>
+                <linearGradient id="freqLineGrad" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#6366f1" />
+                  <stop offset="35%" stopColor="#8b5cf6" />
+                  <stop offset="70%" stopColor="#a855f7" />
+                  <stop offset="100%" stopColor="#c084fc" />
+                </linearGradient>
+                <linearGradient id="chartBackdropGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.05" />
+                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.0" />
+                </linearGradient>
+              </defs>
+
+              {/* Subtle Full-Chart Ambient Backdrop */}
+              <rect x="0" y="0" width="800" height={baselineY} fill="url(#chartBackdropGrad)" pointerEvents="none" />
+
+              {/* Horizontal Reference Gridlines across 100% Width */}
+              <line
+                x1="0"
+                y1={baselineY - graphHeight}
+                x2="800"
+                y2={baselineY - graphHeight}
+                stroke="currentColor"
+                className="text-zinc-200/80 dark:text-zinc-800/80"
+                strokeWidth="1"
+                strokeDasharray="4 4"
+              />
+              <line
+                x1="0"
+                y1={baselineY - graphHeight / 2}
+                x2="800"
+                y2={baselineY - graphHeight / 2}
+                stroke="currentColor"
+                className="text-zinc-200/80 dark:text-zinc-800/80"
+                strokeWidth="1"
+                strokeDasharray="4 4"
+              />
+              <line
+                x1="0"
+                y1={baselineY}
+                x2="800"
+                y2={baselineY}
+                stroke="currentColor"
+                className="text-zinc-300 dark:text-zinc-700"
+                strokeWidth="1.5"
+              />
+
+              {/* Y-Axis Floating Value Labels */}
+              <text
+                x="16"
+                y={baselineY - graphHeight - 6}
+                className="text-[10px] font-mono fill-zinc-500 dark:fill-zinc-400 font-semibold"
+              >
+                {formatAmount(maxVal, baseCurrency)}
+              </text>
+              <text
+                x="16"
+                y={baselineY - graphHeight / 2 - 6}
+                className="text-[10px] font-mono fill-zinc-400 dark:fill-zinc-500 font-medium"
+              >
+                {formatAmount(maxVal / 2, baseCurrency)}
+              </text>
+              <text
+                x="16"
+                y={baselineY - 6}
+                className="text-[10px] font-mono fill-zinc-400 dark:fill-zinc-500 font-medium"
+              >
+                {formatAmount(0, baseCurrency)}
+              </text>
+
+              {/* Filled Frequency Area (Full Bleed from Left to Right) */}
+              {areaPath && (
+                <path d={areaPath} fill="url(#freqAreaGrad)" className="transition-all duration-300" />
+              )}
+
+              {/* Smooth Frequency Line Stroke */}
+              {linePath && (
+                <path
+                  d={linePath}
+                  fill="none"
+                  stroke="url(#freqLineGrad)"
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="transition-all duration-300"
+                />
+              )}
+
+              {/* Vertical Hover Guide Line */}
+              {hoveredPoint && (
+                <line
+                  x1={hoveredPoint.x}
+                  y1={baselineY - graphHeight}
+                  x2={hoveredPoint.x}
+                  y2={baselineY}
+                  stroke="#8b5cf6"
+                  strokeWidth="1.5"
+                  strokeDasharray="3 3"
+                  opacity="0.85"
+                />
+              )}
+
+              {/* Data Nodes & Halo Accents */}
+              {coords.map((c, i) => {
+                const isHovered = hoveredIdx === i;
+                const hasActivity = c.volume > 0;
+                if (!hasActivity && !isHovered && !c.isCurrent) return null;
+                return (
+                  <g key={i} className="transition-all duration-150">
+                    <circle
+                      cx={c.x}
+                      cy={c.y}
+                      r={isHovered ? 10 : 6.5}
+                      fill="#8b5cf6"
+                      opacity={isHovered ? 0.4 : 0.22}
+                    />
+                    <circle
+                      cx={c.x}
+                      cy={c.y}
+                      r={isHovered ? 5 : 3.8}
+                      fill="#ffffff"
+                      stroke="#8b5cf6"
+                      strokeWidth="2.5"
+                    />
+                  </g>
+                );
+              })}
+
+              {/* X-Axis Tick Labels with Edge Margin Protection */}
+              {coords.map((c, i) => {
+                let showLabel = false;
+                if (chartFilter === '7d' || chartFilter === '12m') {
+                  showLabel = true;
+                } else if (chartFilter === '30d') {
+                  showLabel = i === 0 || i % 5 === 0 || i === coords.length - 1 || c.isCurrent;
+                }
+                if (!showLabel) return null;
+
+                const isHovered = hoveredIdx === i;
+                const isCurrent = c.isCurrent;
+
+                let labelX = c.x;
+                let textAnchor: 'start' | 'middle' | 'end' = 'middle';
+                if (i === 0) {
+                  labelX = 16;
+                  textAnchor = 'start';
+                } else if (i === coords.length - 1) {
+                  labelX = 784;
+                  textAnchor = 'end';
+                }
+
+                return (
+                  <text
+                    key={i}
+                    x={labelX}
+                    y={232}
+                    textAnchor={textAnchor}
+                    className={`text-[10px] font-mono transition-colors ${
+                      isHovered || isCurrent
+                        ? 'fill-purple-600 dark:fill-purple-400 font-bold'
+                        : 'fill-zinc-500 dark:fill-zinc-400'
+                    }`}
+                  >
+                    {c.axisLabel}
+                  </text>
+                );
+              })}
+            </svg>
+          </div>
+        </div>
+
+        {/* Bottom Legend and Metric Strip */}
+        <div className="px-5 sm:px-6 py-3.5 bg-zinc-100/70 dark:bg-zinc-950/40 border-t border-zinc-200/60 dark:border-white/5 flex flex-wrap items-center justify-between gap-3 text-[11px] font-mono text-zinc-500 dark:text-zinc-400">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-purple-500" />
+            <span className="font-semibold text-zinc-900 dark:text-white">Captured Frequency &amp; Volume</span>
+          </div>
+          <div className="flex items-center gap-4 text-[10px]">
+            <span>Peak: <strong className="text-zinc-900 dark:text-white">{formatAmount(maxVal, baseCurrency)}</strong></span>
+            <span>Total: <strong className="text-emerald-600 dark:text-emerald-400">{formatAmount(currentTotalVolume, baseCurrency)}</strong></span>
+            <span>Payments: <strong className="text-purple-600 dark:text-purple-400">{currentTotalCount}</strong></span>
+          </div>
+        </div>
       </div>
 
       {/* 3. Incoming Transactions Ledger (Lazy Loaded) */}

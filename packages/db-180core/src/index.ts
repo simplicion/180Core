@@ -67,6 +67,33 @@ export function slugify(text: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+interface CachedOAuthApp {
+  app: any;
+  expiresAt: number;
+}
+const oauthAppResolveCache = new Map<string, CachedOAuthApp>();
+const OAUTH_APP_CACHE_TTL_MS = 60_000; // 60s in-memory TTL
+
+export function invalidateOAuthAppCache(identifier?: string) {
+  if (!identifier) {
+    oauthAppResolveCache.clear();
+    return;
+  }
+  const needle = String(identifier).toLowerCase().trim();
+  for (const [key, entry] of oauthAppResolveCache.entries()) {
+    if (
+      key.includes(needle) ||
+      (entry.app && (
+        entry.app.id?.toLowerCase() === needle ||
+        entry.app.clientId?.toLowerCase() === needle ||
+        slugify(entry.app.name) === needle
+      ))
+    ) {
+      oauthAppResolveCache.delete(key);
+    }
+  }
+}
+
 /**
  * Universal Two-Credential Model Helper:
  * Resolves an OAuthApp record by public clientId, internal UUID id, case-insensitive name, or slug.
@@ -75,6 +102,13 @@ export async function resolveOAuthApp(identifier: string) {
   if (!identifier) return null;
   const trimmed = String(identifier).trim();
   if (!trimmed) return null;
+
+  const cacheKey = trimmed.toLowerCase();
+  const now = Date.now();
+  const cached = oauthAppResolveCache.get(cacheKey);
+  if (cached && now < cached.expiresAt) {
+    return cached.app;
+  }
 
   // 1. Direct match by id, clientId, or exact name (case-insensitive)
   const direct = await (corePrisma as any).oAuthApp.findFirst({
@@ -86,7 +120,14 @@ export async function resolveOAuthApp(identifier: string) {
       ],
     },
   });
-  if (direct) return direct;
+  if (direct) {
+    const entry: CachedOAuthApp = { app: direct, expiresAt: now + OAUTH_APP_CACHE_TTL_MS };
+    oauthAppResolveCache.set(cacheKey, entry);
+    if (direct.id) oauthAppResolveCache.set(direct.id.toLowerCase(), entry);
+    if (direct.clientId) oauthAppResolveCache.set(direct.clientId.toLowerCase(), entry);
+    if (direct.name) oauthAppResolveCache.set(slugify(direct.name), entry);
+    return direct;
+  }
 
   // 2. Slug match against app name (e.g. "bookselling" -> "Bookselling")
   const targetSlug = slugify(trimmed);
@@ -96,7 +137,14 @@ export async function resolveOAuthApp(identifier: string) {
       const aSlug = slugify(a.name);
       return aSlug === targetSlug || aSlug.replace(/-/g, '') === targetSlug.replace(/-/g, '');
     });
-    if (slugMatch) return slugMatch;
+    if (slugMatch) {
+      const entry: CachedOAuthApp = { app: slugMatch, expiresAt: now + OAUTH_APP_CACHE_TTL_MS };
+      oauthAppResolveCache.set(cacheKey, entry);
+      if (slugMatch.id) oauthAppResolveCache.set(slugMatch.id.toLowerCase(), entry);
+      if (slugMatch.clientId) oauthAppResolveCache.set(slugMatch.clientId.toLowerCase(), entry);
+      oauthAppResolveCache.set(targetSlug, entry);
+      return slugMatch;
+    }
   }
 
   // 3. Fallback: Check if identifier matches a PaymentLink slug or ID
@@ -108,7 +156,7 @@ export async function resolveOAuthApp(identifier: string) {
       select: { appId: true },
     });
     if (link && link.appId) {
-      return (corePrisma as any).oAuthApp.findFirst({
+      const app = await (corePrisma as any).oAuthApp.findFirst({
         where: {
           OR: [
             { id: link.appId },
@@ -117,6 +165,11 @@ export async function resolveOAuthApp(identifier: string) {
           ],
         },
       });
+      if (app) {
+        const entry: CachedOAuthApp = { app, expiresAt: now + OAUTH_APP_CACHE_TTL_MS };
+        oauthAppResolveCache.set(cacheKey, entry);
+        return app;
+      }
     }
   } catch (_) {}
 
@@ -126,12 +179,20 @@ export async function resolveOAuthApp(identifier: string) {
       where: { isActive: true },
       orderBy: { createdAt: 'desc' },
     });
-    if (defaultApp) return defaultApp;
+    if (defaultApp) {
+      const entry: CachedOAuthApp = { app: defaultApp, expiresAt: now + OAUTH_APP_CACHE_TTL_MS };
+      oauthAppResolveCache.set(cacheKey, entry);
+      return defaultApp;
+    }
 
     const anyApp = await (corePrisma as any).oAuthApp.findFirst({
       orderBy: { createdAt: 'desc' },
     });
-    if (anyApp) return anyApp;
+    if (anyApp) {
+      const entry: CachedOAuthApp = { app: anyApp, expiresAt: now + OAUTH_APP_CACHE_TTL_MS };
+      oauthAppResolveCache.set(cacheKey, entry);
+      return anyApp;
+    }
   }
 
   return null;

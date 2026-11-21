@@ -1060,6 +1060,8 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
         isOpen={isSettingsDrawerOpen}
         onClose={() => setIsSettingsDrawerOpen(false)}
         app={app}
+        enablePay={app.enablePay ?? true}
+        enableAuth={Boolean(app.enableAuth)}
         name={name}
         setName={setName}
         description={description}

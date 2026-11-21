@@ -15,6 +15,8 @@ import {
   ShieldAlert,
   SlidersHorizontal,
   Info,
+  Download,
+  ExternalLink,
 } from 'lucide-react';
 import { PlatformDrawer } from '@workspace/ui';
 import { DeveloperAppDetail } from './types';
@@ -42,6 +44,11 @@ export interface ProjectSettingsDrawerProps {
   copiedKey: string | null;
   copyToClipboard: (text: string, key: string) => void;
   onRotateSecretClick?: () => void;
+  enablePay?: boolean;
+  setEnablePay?: (val: boolean) => void;
+  enableAuth?: boolean;
+  setEnableAuth?: (val: boolean) => void;
+  onToggleService?: (appId: string, service: 'enablePay' | 'enableAuth', enabled: boolean) => Promise<void>;
 }
 
 export function ProjectSettingsDrawer({
@@ -66,7 +73,43 @@ export function ProjectSettingsDrawer({
   copiedKey,
   copyToClipboard,
   onRotateSecretClick,
+  enablePay,
+  setEnablePay,
+  enableAuth,
+  setEnableAuth,
+  onToggleService,
 }: ProjectSettingsDrawerProps) {
+  const [internalPay, setInternalPay] = React.useState(enablePay ?? app.enablePay ?? true);
+  const [internalAuth, setInternalAuth] = React.useState(enableAuth ?? Boolean(app.enableAuth));
+
+  React.useEffect(() => {
+    if (enablePay !== undefined) setInternalPay(enablePay);
+    else if (app.enablePay !== undefined) setInternalPay(app.enablePay);
+  }, [enablePay, app.enablePay]);
+
+  React.useEffect(() => {
+    if (enableAuth !== undefined) setInternalAuth(enableAuth);
+    else if (app.enableAuth !== undefined) setInternalAuth(Boolean(app.enableAuth));
+  }, [enableAuth, app.enableAuth]);
+
+  const handleTogglePay = async () => {
+    const nextVal = !internalPay;
+    setInternalPay(nextVal);
+    setEnablePay?.(nextVal);
+    if (onToggleService && app.id) {
+      await onToggleService(app.id, 'enablePay', nextVal);
+    }
+  };
+
+  const handleToggleAuth = async () => {
+    const nextVal = !internalAuth;
+    setInternalAuth(nextVal);
+    setEnableAuth?.(nextVal);
+    if (onToggleService && app.id) {
+      await onToggleService(app.id, 'enableAuth', nextVal);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave(e);
@@ -186,7 +229,93 @@ export function ProjectSettingsDrawer({
           </div>
         </div>
 
-        {/* 2. Project Profile (Name, Description, Logo) */}
+        {/* 2. Platform Services: Just name and toggle */}
+        <div className="rounded-2xl border border-zinc-200 dark:border-white/10 bg-zinc-50/50 dark:bg-zinc-900/40 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+              Platform Services
+            </h3>
+            <span className="text-[10px] text-zinc-400 font-mono">180 Core</span>
+          </div>
+
+          <div className="divide-y divide-zinc-200/60 dark:divide-white/5">
+            {/* 180 Pay */}
+            <div className="py-2.5 flex items-center justify-between">
+              <span className="text-xs font-semibold text-zinc-900 dark:text-white">180 Pay</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={internalPay}
+                onClick={handleTogglePay}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  internalPay ? 'bg-purple-600' : 'bg-zinc-300 dark:bg-zinc-700'
+                }`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                    internalPay ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* 180 Identity */}
+            <div className="py-2.5 flex items-center justify-between">
+              <span className="text-xs font-semibold text-zinc-900 dark:text-white">180 Identity</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={internalAuth}
+                onClick={handleToggleAuth}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  internalAuth ? 'bg-blue-600' : 'bg-zinc-300 dark:bg-zinc-700'
+                }`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                    internalAuth ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Plugin: Just name, one line description, download btn, and docs btn */}
+        <div className="rounded-2xl border border-zinc-200 dark:border-white/10 bg-zinc-50/50 dark:bg-zinc-900/40 p-4 space-y-3">
+          <div>
+            <h4 className="text-xs font-bold text-zinc-900 dark:text-white">
+              180 Core WordPress &amp; WooCommerce Plugin
+            </h4>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+              Unified plugin for 1-Click Universal Identity login and 180 Pay WooCommerce gateway.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <a
+              href="/downloads/180-core.zip"
+              download="180-core.zip"
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition-all shadow-xs cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download .zip</span>
+            </a>
+            <a
+              href="/docs"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-zinc-200 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-semibold text-xs transition-all"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Read Docs</span>
+            </a>
+          </div>
+        </div>
+
+        {/* 4. Project Profile (Name, Description, Logo) */}
         <div className="space-y-4">
           <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
             Project Profile

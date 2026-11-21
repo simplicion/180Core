@@ -1,4 +1,4 @@
-import { Country } from 'country-state-city';
+import { getCurrencyByIso, getCountryByIso, ALL_COUNTRIES } from './countries-data';
 
 export interface CurrencyMeta {
   code: string;
@@ -87,18 +87,11 @@ export class CurrencyService {
 
   /**
    * Dynamically resolves official ISO currency for ANY country code in the world
-   * Uses country-state-city database — Zero hardcoding!
+   * Uses high-performance in-memory ISO country catalog — Zero hardcoding!
    */
   getCurrencyForCountry(countryCode?: string): string {
     if (!countryCode) return 'USD';
-    const clean = countryCode.trim().toUpperCase();
-    try {
-      const countryData = Country.getCountryByCode(clean);
-      if (countryData?.currency) {
-        return countryData.currency.toUpperCase();
-      }
-    } catch (_) {}
-    return 'USD';
+    return getCurrencyByIso(countryCode);
   }
 
   /**
@@ -127,10 +120,9 @@ export class CurrencyService {
 
     let flag = 'INTL';
     try {
-      const all = Country.getAllCountries();
-      const matched = all.find((c) => c.currency?.toUpperCase() === clean);
+      const matched = ALL_COUNTRIES.find((c) => c.currency === clean);
       if (matched) {
-        flag = getFlagCode(matched.isoCode);
+        flag = getFlagCode(matched.code);
       }
     } catch (_) {}
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useRouter, usePathname } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { DeveloperAppDetail, PaymentAnalyticsData, BankDetailsData, PayoutRecord, AppLedgerEntry, WebhookTestResult } from '@/components/apps/types';
@@ -129,6 +129,15 @@ export function ProjectProvider({
   }, [propProjectId, pathname, params?.id]);
 
   const [projectId, setProjectId] = useState<string>(getTargetAppId);
+  const projectIdRef = useRef(projectId);
+  useEffect(() => {
+    projectIdRef.current = projectId;
+  }, [projectId]);
+
+  const pathnameRef = useRef(pathname);
+  useEffect(() => {
+    pathnameRef.current = pathname;
+  }, [pathname]);
   const [project, setProject] = useState<DeveloperAppDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -414,9 +423,9 @@ export function ProjectProvider({
           // Find current active target from props, pathname, window, or state
           const currentTarget =
             propProjectId ||
-            extractAppIdFromPath(pathname) ||
+            extractAppIdFromPath(pathnameRef.current) ||
             (typeof window !== 'undefined' ? extractAppIdFromPath(window.location.pathname) : '') ||
-            projectId;
+            projectIdRef.current;
 
           let targetApp = null;
           if (currentTarget && currentTarget !== 'default') {
@@ -432,7 +441,7 @@ export function ProjectProvider({
           if (targetApp) {
             setProject(targetApp);
             const slug = getAppSlug(targetApp) || targetApp.id;
-            if (projectId !== slug && projectId !== targetApp.id) {
+            if (projectIdRef.current !== slug && projectIdRef.current !== targetApp.id) {
               setProjectId(slug);
             }
           } else if ((!currentTarget || currentTarget === 'default') && payload.apps.length > 0) {
@@ -445,7 +454,7 @@ export function ProjectProvider({
         }
       }
     } catch (_) {}
-  }, [router, propProjectId, pathname, projectId]);
+  }, [router, propProjectId]);
 
   // Fetch Auth Logs (Cached & Deduplicated)
   const fetchAuthLogs = useCallback(async (forceBypass?: any) => {

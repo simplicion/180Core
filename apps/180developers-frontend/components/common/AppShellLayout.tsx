@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 import { useProject } from '@/context/ProjectContext';
 import DeveloperHeader from '@/components/layout/DeveloperHeader';
@@ -113,9 +114,18 @@ export function AppShellLayout({
     );
   }
 
+  const pathname = usePathname();
+  const isPaySubpage = pathname.startsWith(`/apps/${projectId}/pay/`);
+  const isIdentitySubpage = pathname.startsWith(`/apps/${projectId}/identity/`);
+  const projectRootHref = isPaySubpage
+    ? `/apps/${projectId}/pay`
+    : isIdentitySubpage
+    ? `/apps/${projectId}/identity/users`
+    : undefined;
+
   const defaultBreadcrumbs = [
     { label: 'Projects', href: '/dashboard' },
-    { label: project?.name || 'Project', href: `/apps/${projectId}` },
+    { label: project?.name || 'Project', href: projectRootHref },
     { label: title },
   ];
 

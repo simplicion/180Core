@@ -31,6 +31,14 @@ export function IdentitySidebar({
   const router = useRouter();
   const { project, projectId, allProjects, isSidebarExpanded, setIsSidebarExpanded, authLogs } = useProject();
 
+  const handleBack = (e: React.MouseEvent) => {
+    onMobileClose();
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      e.preventDefault();
+      router.back();
+    }
+  };
+
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [isHovered, setIsHovered] = useState(false);
 
@@ -148,15 +156,15 @@ export function IdentitySidebar({
       {/* 2. Parent Project Breadcrumb / Back Link */}
       <div className="px-2.5 pt-3 pb-1 border-b border-zinc-100 dark:border-white/5">
         <Link
-          href={`/apps/${projectId}`}
-          onClick={onMobileClose}
+          href="/dashboard"
+          onClick={handleBack}
           className={`flex items-center gap-2 p-2 rounded-xl text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors ${
             !isExpanded ? 'justify-center' : ''
           }`}
-          title={`Back to ${project?.name || 'Project'}`}
+          title="Back to Projects"
         >
           <ArrowLeft className="w-4 h-4 shrink-0" />
-          {isExpanded && <span className="truncate">Back to {project?.name || 'Project'}</span>}
+          {isExpanded && <span className="truncate">Back to Projects</span>}
         </Link>
       </div>
 

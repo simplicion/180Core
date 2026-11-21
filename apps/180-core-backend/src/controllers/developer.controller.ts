@@ -20,31 +20,86 @@ function slugify(text: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
+interface CachedAppEntry {
+  app: any;
+  expiresAt: number;
+}
+const appResolveCache = new Map<string, CachedAppEntry>();
+const APP_RESOLVE_TTL_MS = 60_000; // 60s in-memory TTL
+
+export function invalidateAppResolveCache(idOrClientId?: string) {
+  if (!idOrClientId) {
+    appResolveCache.clear();
+    return;
+  }
+  const needle = String(idOrClientId).toLowerCase().trim();
+  for (const [key, entry] of appResolveCache.entries()) {
+    if (
+      key.includes(needle) ||
+      (entry.app && (
+        entry.app.id?.toLowerCase() === needle ||
+        entry.app.clientId?.toLowerCase() === needle ||
+        slugify(entry.app.name) === needle
+      ))
+    ) {
+      appResolveCache.delete(key);
+    }
+  }
+}
+
 /**
  * Resolves an OAuth application by internal UUID, public Client ID, name, or slug,
  * optionally verifying ownership against userId.
  */
 async function resolveApp(idOrClientId: string, userId?: string) {
   if (!idOrClientId) return null;
+  const trimmed = String(idOrClientId).trim();
+  if (!trimmed) return null;
+
+  const cacheKey = `${userId || 'all'}:${trimmed.toLowerCase()}`;
+  const now = Date.now();
+  const cached = appResolveCache.get(cacheKey);
+  if (cached && now < cached.expiresAt) {
+    return cached.app;
+  }
+
   const direct = await prisma.oAuthApp.findFirst({
     where: {
       OR: [
-        { id: idOrClientId },
-        { clientId: idOrClientId },
-        { name: { equals: idOrClientId, mode: 'insensitive' } },
+        { id: trimmed },
+        { clientId: trimmed },
+        { name: { equals: trimmed, mode: 'insensitive' } },
       ],
       ...(userId ? { userId } : {}),
     },
   });
-  if (direct) return direct;
 
-  const targetSlug = slugify(idOrClientId);
-  if (!targetSlug) return null;
+  let resolvedApp = direct;
+  if (!resolvedApp) {
+    const targetSlug = slugify(trimmed);
+    if (targetSlug) {
+      const userApps = await prisma.oAuthApp.findMany({
+        where: userId ? { userId } : {},
+      });
+      resolvedApp = userApps.find((a: any) => slugify(a.name) === targetSlug) || null;
+    }
+  }
 
-  const userApps = await prisma.oAuthApp.findMany({
-    where: userId ? { userId } : {},
-  });
-  return userApps.find((a: any) => slugify(a.name) === targetSlug) || null;
+  if (resolvedApp) {
+    const entry: CachedAppEntry = { app: resolvedApp, expiresAt: now + APP_RESOLVE_TTL_MS };
+    appResolveCache.set(cacheKey, entry);
+    if (resolvedApp.id) {
+      appResolveCache.set(`${userId || 'all'}:${resolvedApp.id.toLowerCase()}`, entry);
+    }
+    if (resolvedApp.clientId) {
+      appResolveCache.set(`${userId || 'all'}:${resolvedApp.clientId.toLowerCase()}`, entry);
+    }
+    if (resolvedApp.name) {
+      appResolveCache.set(`${userId || 'all'}:${slugify(resolvedApp.name)}`, entry);
+    }
+  }
+
+  return resolvedApp;
 }
 
 export class DeveloperApiController {
@@ -1227,6 +1282,7 @@ export class DeveloperApiController {
         } as any,
       });
 
+      invalidateAppResolveCache(app.id);
       return res.json({
         success: true,
         message: 'Settlement bank details saved successfully',
@@ -1496,6 +1552,7 @@ export class DeveloperApiController {
           where: { id: existingApp.id },
           data: { logoUrl: url },
         });
+        invalidateAppResolveCache(existingApp.id);
       }
 
       return res.status(200).json({
@@ -1589,6 +1646,7 @@ export class DeveloperApiController {
         },
       });
 
+      invalidateAppResolveCache(app.id);
       return res.json({ success: true, data: updated });
     } catch (err: any) {
       console.error('[DeveloperApiController:saveGatewaySettings] Error:', err);
