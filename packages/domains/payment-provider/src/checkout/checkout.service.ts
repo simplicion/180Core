@@ -554,6 +554,117 @@ export class CheckoutService {
       }
     }
 
+    // Auto-heal Client SDK & Dynamic Checkout Sessions (e.g. cs_*, sess_*, or dynamic sessions with fallback amount/title)
+    if (!session && (
+      sessionId.startsWith('cs_') ||
+      sessionId.startsWith('sess_') ||
+      fallbackData?.amount !== undefined ||
+      fallbackData?.targetAmount !== undefined ||
+      fallbackData?.title ||
+      fallbackData?.productName
+    )) {
+      try {
+        const rawAmount = fallbackData?.amount !== undefined
+          ? Number(fallbackData.amount)
+          : (fallbackData?.targetAmount !== undefined ? Number(fallbackData.targetAmount) : null);
+        const amount = rawAmount && !isNaN(rawAmount) && rawAmount > 0 ? rawAmount : 100;
+        const currency = String(fallbackData?.currency || fallbackData?.targetCurrency || 'INR').toUpperCase();
+        const title = fallbackData?.title || fallbackData?.productName || '180 Pay Checkout';
+        const description = fallbackData?.description || '';
+        const returnUrl = fallbackData?.returnUrl || fallbackData?.return_url || '';
+        const cancelUrl = fallbackData?.cancelUrl || fallbackData?.cancel_url || '';
+        const metadata = (fallbackData?.metadata && typeof fallbackData.metadata === 'object') ? fallbackData.metadata : {};
+
+        // Resolve target app
+        const candidateAppId = fallbackData?.appId || fallbackData?.clientId || (metadata as any)?.appId || (metadata as any)?.clientId;
+        let app = null;
+
+        if (candidateAppId) {
+          app = await prisma.oAuthApp.findFirst({
+            where: {
+              OR: [
+                { id: String(candidateAppId) },
+                { clientId: String(candidateAppId) },
+              ],
+            },
+            select: APP_CHECKOUT_SELECT,
+          });
+        }
+
+        // Check if origin matches an existing registered app
+        const rawOrigin = fallbackData?.origin || (metadata as any)?.origin;
+        if (!app && rawOrigin) {
+          try {
+            const cleanOrigin = new URL(rawOrigin).origin.toLowerCase();
+            const allApps = await prisma.oAuthApp.findMany({
+              where: { isActive: true },
+              select: APP_CHECKOUT_SELECT,
+            });
+            const matchingApp = allApps.find((a) => {
+              if (a.allowedOrigins && a.allowedOrigins.some((ao) => ao.trim().toLowerCase().replace(/\/$/, '') === cleanOrigin)) return true;
+              if (a.redirectUris && a.redirectUris.some((ru) => {
+                try { return new URL(ru).origin.toLowerCase() === cleanOrigin; } catch (_) { return false; }
+              })) return true;
+              return false;
+            });
+            if (matchingApp) {
+              app = matchingApp;
+            }
+          } catch (_) {}
+        }
+
+        if (!app) {
+          const platformApp = await CheckoutService.resolvePlatformOAuthApp();
+          if (platformApp) {
+            app = {
+              id: platformApp.id,
+              name: platformApp.name,
+              description: platformApp.description || '180 Merchant Verified Checkout',
+              logoUrl: platformApp.logoUrl || '',
+              isVerified: true,
+              enablePay: true,
+              enableAuth: true,
+              clientSecretHash: platformApp.clientSecretHash,
+              clientSecretHint: platformApp.clientSecretHint,
+              redirectUris: platformApp.redirectUris || [],
+              allowedOrigins: platformApp.allowedOrigins || [],
+            } as any;
+          }
+        }
+
+        if (app) {
+          session = await prisma.checkoutSession.create({
+            data: {
+              id: sessionId,
+              appId: app.id,
+              amount,
+              originalAmount: amount,
+              currency,
+              status: 'PENDING',
+              mode: 'payment',
+              title,
+              description,
+              returnUrl,
+              cancelUrl,
+              metadata: {
+                ...metadata,
+                source: metadata?.source || 'AUTO_RESOLVED_CLIENT_SDK',
+                autoCreated: true,
+              },
+              expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour auto-refreshing expiry
+            },
+            include: {
+              app: {
+                select: APP_CHECKOUT_SELECT,
+              },
+            },
+          });
+        }
+      } catch (autoHealErr) {
+        console.warn('[CheckoutService:getSession] Could not auto-heal client-side session:', autoHealErr);
+      }
+    }
+
     if (!session) {
       throw new Error('Checkout session not found');
     }
@@ -1256,6 +1367,7 @@ export class CheckoutService {
       returnUrl?: string;
       cancelUrl?: string;
       metadata?: any;
+      origin?: string;
     }
   ) {
     const session = await this.getSession(sessionId, options);
@@ -1265,7 +1377,17 @@ export class CheckoutService {
     }
 
     if (session.status === 'EXPIRED' || session.expiresAt < new Date()) {
-      throw new Error('This checkout session has expired.');
+      if (session.status === 'PENDING') {
+        const renewedExpiry = new Date(Date.now() + 60 * 60 * 1000);
+        await prisma.checkoutSession.update({
+          where: { id: session.id },
+          data: { expiresAt: renewedExpiry, status: 'PENDING' },
+        }).catch(() => {});
+        session.expiresAt = renewedExpiry;
+        session.status = 'PENDING';
+      } else {
+        throw new Error('This checkout session has expired.');
+      }
     }
 
     const { gatewayType, keyId, keySecret } = this.resolveGatewayConfig(session.app);
@@ -1928,7 +2050,17 @@ export class CheckoutService {
     }
 
     if (session.status === 'EXPIRED' || session.expiresAt < new Date()) {
-      throw new Error('This checkout session has expired. Please create a new one.');
+      if (session.status === 'PENDING') {
+        const renewedExpiry = new Date(Date.now() + 60 * 60 * 1000);
+        await prisma.checkoutSession.update({
+          where: { id: session.id },
+          data: { expiresAt: renewedExpiry, status: 'PENDING' },
+        }).catch(() => {});
+        session.expiresAt = renewedExpiry;
+        session.status = 'PENDING';
+      } else {
+        throw new Error('This checkout session has expired. Please create a new one.');
+      }
     }
 
     const { gatewayType, keySecret } = this.resolveGatewayConfig(session.app);

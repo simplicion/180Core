@@ -47,6 +47,7 @@ export const corePrisma =
 
 export const db180core = corePrisma;
 export const developersPrisma = corePrisma;
+export const prisma = corePrisma;
 
 if (process.env.NODE_ENV !== 'production') {
   globalForCorePrisma.corePrisma = corePrisma;

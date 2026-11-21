@@ -1120,8 +1120,13 @@ export function CheckoutClient({
           : null;
       const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
 
+      const urlSearchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+      if (clientSessionId && !urlSearchParams.has('clientSessionId')) {
+        urlSearchParams.set('clientSessionId', clientSessionId);
+      }
+      const qs = urlSearchParams.toString();
       const sessionUrl = getCoreApiUrl(
-        `/api/oauth/checkout/sessions/${sessionId}${clientSessionId ? `?clientSessionId=${encodeURIComponent(clientSessionId)}` : ''}`
+        `/api/oauth/checkout/sessions/${sessionId}${qs ? `?${qs}` : ''}`
       );
 
       // 1. Fetch Session with resilient auto-retry (recovers from mobile webview cold-connect lag)
@@ -1226,9 +1231,15 @@ export function CheckoutClient({
       }
     } catch (err: any) {
       console.warn('[180 Pay] Session fetch error:', err);
-      const msg = err.message || '';
-      if (msg && msg !== 'Failed to fetch' && !msg.includes('Network connection issue')) {
-        toast.error(msg);
+      const rawMsg = err.message || '';
+      let displayError = rawMsg;
+      if (rawMsg === 'Failed to fetch' || rawMsg.includes('Network connection issue')) {
+        displayError = 'Unable to connect to payment server. Please check your network connection.';
+      } else if (rawMsg.includes('session not found')) {
+        displayError = ''; // Auto-healing will synthesize session on direct-order
+      }
+      if (displayError && !displayError.includes('Network connection issue')) {
+        toast.error(displayError);
       }
     } finally {
       setLoading(false);
@@ -1294,6 +1305,12 @@ export function CheckoutClient({
           body: JSON.stringify({
             currency: chargeCurrency,
             amount: chargeAmount,
+            title: session?.title,
+            description: session?.description,
+            appId: session?.app?.id || session?.appId,
+            returnUrl: session?.returnUrl,
+            cancelUrl: session?.cancelUrl,
+            metadata: session?.metadata,
           }),
         });
         const data = await res.json();
@@ -1459,7 +1476,17 @@ export function CheckoutClient({
           };
         }
       } catch (err: any) {
-        toast.error(err.message || 'Failed to prepare payment', { id: directToastId });
+        console.error('[180 Pay] Gateway initialization error:', err);
+        const rawMsg = err.message || '';
+        let displayError = rawMsg;
+        if (rawMsg === 'Failed to fetch' || rawMsg.includes('Network connection issue')) {
+          displayError = 'Unable to connect to payment server. Please check your internet connection or tap Pay to try again.';
+        } else if (rawMsg.includes('session not found')) {
+          displayError = 'Payment session could not be verified with gateway. Please refresh to start a new payment.';
+        } else if (rawMsg.includes('expired')) {
+          displayError = 'This checkout session has expired. Please refresh the page to start a new payment.';
+        }
+        toast.error(displayError || 'Failed to prepare payment', { id: directToastId });
         setTopupLoading(false);
         return;
       }

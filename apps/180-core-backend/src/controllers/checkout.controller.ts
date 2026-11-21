@@ -506,15 +506,26 @@ export class CheckoutApiController {
     try {
       const id = String(req.params.id);
       const clientSessionId = (req.query.clientSessionId as string) || (req.headers['x-client-session-id'] as string) || (req.headers['x-180-client-session-id'] as string);
-      const session = await CheckoutService.getSession(id, undefined, { clientSessionId, skipReconcile: true });
+      const rawOrigin = (req.headers.origin as string) || (req.headers.referer ? (() => {
+        try { return new URL(req.headers.referer as string).origin; } catch (_) { return ''; }
+      })() : '');
+      const fallbackData = {
+        amount: req.query.amount ? Number(req.query.amount) : undefined,
+        currency: (req.query.currency as string) || undefined,
+        title: (req.query.title as string) || undefined,
+        description: (req.query.description as string) || undefined,
+        appId: (req.query.appId as string) || (req.query.app_id as string) || (req.query.clientId as string) || (req.query.client_id as string) || undefined,
+        returnUrl: (req.query.returnUrl as string) || (req.query.return_url as string) || undefined,
+        cancelUrl: (req.query.cancelUrl as string) || (req.query.cancel_url as string) || undefined,
+        metadata: req.query.metadata ? (typeof req.query.metadata === 'string' ? (() => { try { return JSON.parse(req.query.metadata as string); } catch (_) { return {}; } })() : req.query.metadata) : undefined,
+        origin: rawOrigin || undefined,
+      };
+      const session = await CheckoutService.getSession(id, fallbackData, { clientSessionId, skipReconcile: true });
       if (!session) {
         return res.status(404).json({ success: false, error: 'Checkout session not found or expired.' });
       }
 
       // Security Validation: Strict Domain Whitelisting for 180 Pay
-      const rawOrigin = (req.headers.origin as string) || (req.headers.referer ? (() => {
-        try { return new URL(req.headers.referer as string).origin; } catch (_) { return ''; }
-      })() : '');
       const cleanOrigin = rawOrigin ? rawOrigin.toLowerCase().replace(/\/$/, '') : '';
 
       if (cleanOrigin && session.appId) {
@@ -817,6 +828,9 @@ export class CheckoutApiController {
     try {
       const id = String(req.params.id);
       const { currency, amount, title, description, appId, metadata, returnUrl, cancelUrl } = req.body || {};
+      const rawOrigin = (req.headers.origin as string) || (req.headers.referer ? (() => {
+        try { return new URL(req.headers.referer as string).origin; } catch (_) { return ''; }
+      })() : '');
       const order = await CheckoutService.createDirectOrder(id, {
         targetCurrency: currency,
         targetAmount: typeof amount === 'number' ? amount : undefined,
@@ -826,6 +840,7 @@ export class CheckoutApiController {
         metadata,
         returnUrl,
         cancelUrl,
+        origin: rawOrigin || undefined,
       });
       return res.json({ success: true, ...order, data: order });
     } catch (err: any) {
