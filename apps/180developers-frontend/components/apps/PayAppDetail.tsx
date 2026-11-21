@@ -536,24 +536,24 @@ export function PayAppDetail({
 
           <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/5 space-y-1">
             <div className="flex items-center justify-between text-zinc-500 text-xs">
-              <span>Pending Settlements</span>
+              <span>Settlement Pending</span>
               <Clock className="w-3.5 h-3.5 text-amber-500" />
             </div>
             <div className="text-lg font-bold text-amber-600 dark:text-amber-400">
               {paymentAnalytics?.currency || 'INR'} {(paymentAnalytics?.pendingSettlements || 0).toLocaleString()}
             </div>
-            <p className="text-[10px] text-zinc-400">In T+1 clearing cycle</p>
+            <p className="text-[10px] text-zinc-400">Awaiting bank settlement</p>
           </div>
 
           <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/5 space-y-1">
             <div className="flex items-center justify-between text-zinc-500 text-xs">
-              <span>Withdrawable Balance</span>
+              <span>Ready for Payout</span>
               <Landmark className="w-3.5 h-3.5 text-purple-500" />
             </div>
             <div className="text-lg font-bold text-purple-600 dark:text-purple-400">
               {paymentAnalytics?.currency || 'INR'} {(payoutBalance || paymentAnalytics?.withdrawableBalance || 0).toLocaleString()}
             </div>
-            <p className="text-[10px] text-zinc-400">Available for payout</p>
+            <p className="text-[10px] text-zinc-400">Available to transfer to bank</p>
           </div>
         </div>
 
@@ -579,15 +579,15 @@ export function PayAppDetail({
                 <div>
                   <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
                     <BarChart3 className="w-3.5 h-3.5 text-purple-500" />
-                    <span>Checkout Funnel &amp; Behavioral Conversion</span>
+                    <span>Payment Success Funnel</span>
                   </h3>
                   <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                    User drop-offs tracked from bottom sheet launch to gateway invocation and final capture.
+                    See how customers move from opening checkout to paying successfully.
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs font-bold font-mono self-start sm:self-auto">
                   <Percent className="w-3 h-3" />
-                  <span>{conversionRate}% Conversion Rate</span>
+                  <span>{conversionRate}% Success Rate</span>
                 </div>
               </div>
 
@@ -596,52 +596,52 @@ export function PayAppDetail({
                 <div className="p-3 rounded-xl bg-white dark:bg-zinc-800/60 border border-zinc-200/60 dark:border-white/5 space-y-1">
                   <div className="flex items-center gap-1.5 text-zinc-400 text-[10px] uppercase font-semibold">
                     <Compass className="w-3 h-3 text-blue-500" />
-                    <span>Purchase Intents</span>
+                    <span>Checkouts Started</span>
                   </div>
                   <div className="text-base font-bold text-zinc-900 dark:text-white font-mono">
                     ₹{totalIntentsVolume.toLocaleString()}
                   </div>
                   <p className="text-[10px] text-zinc-400 font-sans">
-                    {totalIntentsCount} sheets initiated
+                    {totalIntentsCount} checkout sheets opened
                   </p>
                 </div>
 
                 <div className="p-3 rounded-xl bg-white dark:bg-zinc-800/60 border border-zinc-200/60 dark:border-white/5 space-y-1">
                   <div className="flex items-center gap-1.5 text-zinc-400 text-[10px] uppercase font-semibold">
                     <AlertTriangle className="w-3 h-3 text-amber-500" />
-                    <span>Gateway Invocations</span>
+                    <span>Proceeded to Pay</span>
                   </div>
                   <div className="text-base font-bold text-amber-600 dark:text-amber-400 font-mono">
                     ₹{(gatewayAttemptsVolume + capturedVolume).toLocaleString()}
                   </div>
                   <p className="text-[10px] text-zinc-400 font-sans">
-                    {gatewayAttemptsCount + capturedCount} opened gateway
+                    {gatewayAttemptsCount + capturedCount} reached gateway
                   </p>
                 </div>
 
                 <div className="p-3 rounded-xl bg-white dark:bg-zinc-800/60 border border-zinc-200/60 dark:border-white/5 space-y-1">
                   <div className="flex items-center gap-1.5 text-zinc-400 text-[10px] uppercase font-semibold">
                     <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                    <span>Captured Revenue</span>
+                    <span>Payments Collected</span>
                   </div>
                   <div className="text-base font-bold text-emerald-600 dark:text-emerald-400 font-mono">
                     ₹{capturedVolume.toLocaleString()}
                   </div>
                   <p className="text-[10px] text-zinc-400 font-sans">
-                    {capturedCount} settled payments
+                    {capturedCount} successful payments
                   </p>
                 </div>
 
                 <div className="p-3 rounded-xl bg-white dark:bg-zinc-800/60 border border-zinc-200/60 dark:border-white/5 space-y-1">
                   <div className="flex items-center gap-1.5 text-zinc-400 text-[10px] uppercase font-semibold">
                     <Percent className="w-3 h-3 text-purple-500" />
-                    <span>Realized Yield</span>
+                    <span>Success Rate</span>
                   </div>
                   <div className="text-base font-bold text-purple-600 dark:text-purple-400 font-mono">
                     {conversionRate}%
                   </div>
                   <p className="text-[10px] text-zinc-400 font-sans">
-                    Funnel efficiency
+                    Payment conversion
                   </p>
                 </div>
               </div>

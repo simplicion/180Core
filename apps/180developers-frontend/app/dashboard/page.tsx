@@ -26,6 +26,9 @@ import {
   Wallet,
   ExternalLink,
   Download,
+  Settings,
+  MoreVertical,
+  SlidersHorizontal,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -39,6 +42,7 @@ import {
 } from '@workspace/ui';
 import { use180Identity, use180Pay } from '@workspace/identity-sdk';
 import { AppLogoUploader } from '@/components/apps/AppLogoUploader';
+import { ProjectQuickDrawer, ProjectSettingsDrawer } from '@/components/apps';
 import DeveloperSidebar from '@/components/layout/DeveloperSidebar';
 import DeveloperHeader from '@/components/layout/DeveloperHeader';
 import { OneEightyCoreLogo } from '@/components/OneEightyCoreLogo';
@@ -211,6 +215,22 @@ function DeveloperDashboardContent() {
     responseBody: string;
     timestamp: string;
   } | null>(null);
+
+  // Drawer States: Quick Overview & Project Settings
+  const [quickDrawerApp, setQuickDrawerApp] = useState<DeveloperApp | null>(null);
+  const [isQuickDrawerOpen, setIsQuickDrawerOpen] = useState(false);
+  const [settingsDrawerApp, setSettingsDrawerApp] = useState<DeveloperApp | null>(null);
+  const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
+
+  // Project Settings Form State
+  const [settingsName, setSettingsName] = useState('');
+  const [settingsDescription, setSettingsDescription] = useState('');
+  const [settingsLogoUrl, setSettingsLogoUrl] = useState('');
+  const [settingsRedirectUris, setSettingsRedirectUris] = useState('');
+  const [settingsAllowedOrigins, setSettingsAllowedOrigins] = useState('');
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [isRevokingTokens, setIsRevokingTokens] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Set default selected app for playground/webhooks once apps load
   useEffect(() => {
@@ -754,6 +774,184 @@ function DeveloperDashboardContent() {
     }
   };
 
+  // Open Quick Overview Drawer
+  const handleOpenQuickDrawer = (app: DeveloperApp) => {
+    setQuickDrawerApp(app);
+    setIsQuickDrawerOpen(true);
+  };
+
+  // Open Project Settings Drawer
+  const handleOpenSettingsDrawer = (app: DeveloperApp) => {
+    setSettingsDrawerApp(app);
+    setSettingsName(app.name || '');
+    setSettingsDescription(app.description || '');
+    setSettingsLogoUrl(app.logoUrl || '');
+    setSettingsRedirectUris((app.redirectUris || []).join('\n'));
+    setSettingsAllowedOrigins((app.allowedOrigins || []).join('\n'));
+    setIsSettingsDrawerOpen(true);
+  };
+
+  const copyToClipboard = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 2000);
+    toast.success('Copied to clipboard');
+  };
+
+  const handleSaveSettings = async (e?: React.SyntheticEvent) => {
+    if (e) e.preventDefault();
+    if (!settingsDrawerApp) return;
+
+    const redirectUris = settingsRedirectUris.split('\n').map((u) => u.trim()).filter(Boolean);
+    const allowedOrigins = settingsAllowedOrigins.split('\n').map((o) => o.trim()).filter(Boolean);
+
+    setIsSavingSettings(true);
+    try {
+      const token = localStorage.getItem('platform_auth_token');
+      const apiBase = getApiBase();
+
+      let res = await fetch(`${apiBase}/api/v1/identity/developer/apps/${settingsDrawerApp.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: settingsName.trim(),
+          description: settingsDescription.trim(),
+          logoUrl: settingsLogoUrl.trim() || undefined,
+          redirectUris,
+          allowedOrigins,
+          allowedScopes: settingsDrawerApp.allowedScopes || DEFAULT_AUTHORIZED_SCOPES,
+          enableAuth: settingsDrawerApp.enableAuth ?? true,
+          enablePay: settingsDrawerApp.enablePay ?? true,
+          webhookUrl: settingsDrawerApp.webhookUrl?.trim(),
+        }),
+      });
+
+      if (!res.ok) {
+        res = await fetch(`${apiBase}/api/oauth/developer/apps/${settingsDrawerApp.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: settingsName.trim(),
+            description: settingsDescription.trim(),
+            logoUrl: settingsLogoUrl.trim() || undefined,
+            redirectUris,
+            allowedOrigins,
+            allowedScopes: settingsDrawerApp.allowedScopes || DEFAULT_AUTHORIZED_SCOPES,
+            enableAuth: settingsDrawerApp.enableAuth ?? true,
+            enablePay: settingsDrawerApp.enablePay ?? true,
+            webhookUrl: settingsDrawerApp.webhookUrl?.trim(),
+          }),
+        });
+      }
+
+      if (!res.ok) {
+        throw new Error('Failed to update project settings');
+      }
+
+      toast.success('Project settings saved successfully!');
+      setIsSettingsDrawerOpen(false);
+      await checkAuthAndFetchApps();
+    } catch (err: any) {
+      toast.error(err.message || 'Error updating settings');
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
+  const handleToggleService = async (appId: string, service: 'enablePay' | 'enableAuth', enabled: boolean) => {
+    // Optimistic update
+    setApps((prev) =>
+      prev.map((a) => (a.id === appId ? { ...a, [service]: enabled } : a))
+    );
+    if (quickDrawerApp && quickDrawerApp.id === appId) {
+      setQuickDrawerApp((prev) => (prev ? { ...prev, [service]: enabled } : null));
+    }
+
+    try {
+      const token = localStorage.getItem('platform_auth_token');
+      const apiBase = getApiBase();
+      const targetApp = apps.find((a) => a.id === appId) || quickDrawerApp;
+      if (!targetApp) return;
+
+      const payload = {
+        name: targetApp.name,
+        description: targetApp.description,
+        enableAuth: service === 'enableAuth' ? enabled : Boolean(targetApp.enableAuth),
+        enablePay: service === 'enablePay' ? enabled : (targetApp.enablePay ?? true),
+      };
+
+      let res = await fetch(`${apiBase}/api/v1/identity/developer/apps/${appId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        res = await fetch(`${apiBase}/api/oauth/developer/apps/${appId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        });
+      }
+
+      if (!res.ok) {
+        throw new Error('Failed to update service status');
+      }
+
+      toast.success(
+        service === 'enablePay'
+          ? enabled ? '180 Pay enabled for this project' : '180 Pay disabled'
+          : enabled ? '180 Identity enabled for this project' : '180 Identity disabled'
+      );
+    } catch (err: any) {
+      // Revert optimistic update
+      setApps((prev) =>
+        prev.map((a) => (a.id === appId ? { ...a, [service]: !enabled } : a))
+      );
+      if (quickDrawerApp && quickDrawerApp.id === appId) {
+        setQuickDrawerApp((prev) => (prev ? { ...prev, [service]: !enabled } : null));
+      }
+      toast.error(err.message || 'Failed to update service');
+    }
+  };
+
+  const handleRevokeTokens = async () => {
+    if (!settingsDrawerApp) return;
+    setIsRevokingTokens(true);
+    try {
+      const token = localStorage.getItem('platform_auth_token');
+      const apiBase = getApiBase();
+      let res = await fetch(`${apiBase}/api/v1/identity/developer/apps/${settingsDrawerApp.id}/revoke-tokens`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        res = await fetch(`${apiBase}/api/oauth/developer/apps/${settingsDrawerApp.id}/revoke-tokens`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+      if (!res.ok) throw new Error('Failed to revoke tokens');
+      toast.success('All active tokens and sessions revoked!');
+    } catch (err: any) {
+      toast.error(err.message || 'Error revoking tokens');
+    } finally {
+      setIsRevokingTokens(false);
+    }
+  };
+
   const handleCopyAllCredentials = () => {
     if (!revealedCredentials) return;
     const lines = [
@@ -1179,11 +1377,11 @@ function DeveloperDashboardContent() {
                   {filteredApps.map((app) => (
                     <div
                       key={app.id}
-                      onClick={() => router.push(`/apps/${getAppSlug(app)}`)}
+                      onClick={() => handleOpenQuickDrawer(app)}
                       className="rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#101012] p-5 shadow-xs hover:border-zinc-300 dark:hover:border-white/20 hover:shadow-md hover:-translate-y-0.5 transition-all group flex flex-col justify-between cursor-pointer"
                     >
                       <div className="space-y-3.5">
-                        {/* Header with App Logo, Badges, and Client ID */}
+                        {/* Header with App Logo, Badges, and Action Icons */}
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-start gap-2.5 min-w-0">
                             {app.logoUrl ? (
@@ -1199,27 +1397,54 @@ function DeveloperDashboardContent() {
                             )}
                             <div className="space-y-0.5 min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                <h3 className="font-bold text-sm text-zinc-950 dark:text-white tracking-tight truncate max-w-[130px]" title={app.name}>
+                                <h3 className="font-bold text-sm text-zinc-950 dark:text-white tracking-tight truncate max-w-[120px]" title={app.name}>
                                   {app.name}
                                 </h3>
                                 <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 shrink-0">
                                   Active
                                 </span>
                               </div>
-                              <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400 truncate max-w-[190px]" title={app.clientId}>
+                              <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400 truncate max-w-[160px]" title={app.clientId}>
                                 {app.clientId}
                               </p>
                             </div>
                           </div>
 
-                          <div className="w-7 h-7 rounded-full flex items-center justify-center text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-white group-hover:bg-zinc-100 dark:group-hover:bg-white/10 transition-all shrink-0">
-                            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                          {/* Quick Actions: Settings Icon, 3-Dots Menu, Drawer Arrow */}
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenSettingsDrawer(app);
+                              }}
+                              className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                              title="Project Settings"
+                              aria-label="Project Settings"
+                            >
+                              <Settings className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenQuickDrawer(app);
+                              }}
+                              className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                              title="Project Menu & Plugins"
+                              aria-label="Project Menu & Plugins"
+                            >
+                              <MoreVertical className="w-3.5 h-3.5" />
+                            </button>
+                            <div className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-white group-hover:bg-zinc-100 dark:group-hover:bg-white/10 transition-all">
+                              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                            </div>
                           </div>
                         </div>
                       </div>
 
-                      {/* Optional Badges: 180 Identity, 180 Pay */}
-                      {(app.enableAuth || app.enablePay) && (
+                      {/* Optional Badges / Chips: 180 Identity, 180 Pay */}
+                      {((app.enablePay ?? true) || app.enableAuth) && (
                         <div className="pt-3 border-t border-zinc-100 dark:border-white/5 flex items-center justify-end gap-1.5 text-xs">
                           {app.enableAuth && (
                             <button
@@ -1228,21 +1453,25 @@ function DeveloperDashboardContent() {
                                 e.stopPropagation();
                                 router.push(`/apps/${getAppSlug(app)}/identity/users`);
                               }}
-                              className="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 transition-colors cursor-pointer"
+                              title="Open 180 Identity Dashboard"
                             >
-                              Identity
+                              <Shield className="w-3 h-3" />
+                              <span>Identity</span>
                             </button>
                           )}
-                          {app.enablePay && (
+                          {(app.enablePay ?? true) && (
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 router.push(`/apps/${getAppSlug(app)}/pay`);
                               }}
-                              className="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 transition-colors cursor-pointer"
+                              title="Open 180 Pay Dashboard"
                             >
-                              Pay
+                              <CreditCard className="w-3 h-3" />
+                              <span>Pay</span>
                             </button>
                           )}
                         </div>
@@ -1688,6 +1917,69 @@ function DeveloperDashboardContent() {
           </div>
         </div>
       </PlatformModal>
+
+      {/* ─────────────────────────────────────────────────────────────────────────────
+          PROJECT SERVICES & PLUGINS QUICK DRAWER
+          ───────────────────────────────────────────────────────────────────────────── */}
+      <ProjectQuickDrawer
+        isOpen={isQuickDrawerOpen}
+        onClose={() => setIsQuickDrawerOpen(false)}
+        app={quickDrawerApp}
+        onOpenSettings={(app) => handleOpenSettingsDrawer(app)}
+        onToggleService={handleToggleService}
+      />
+
+      {/* ─────────────────────────────────────────────────────────────────────────────
+          PROJECT SETTINGS DRAWER
+          ───────────────────────────────────────────────────────────────────────────── */}
+      {settingsDrawerApp && (
+        <ProjectSettingsDrawer
+          isOpen={isSettingsDrawerOpen}
+          onClose={() => setIsSettingsDrawerOpen(false)}
+          app={{
+            id: settingsDrawerApp.id,
+            name: settingsDrawerApp.name,
+            description: settingsDrawerApp.description || '',
+            logoUrl: settingsDrawerApp.logoUrl,
+            clientId: settingsDrawerApp.clientId,
+            clientSecretHint: settingsDrawerApp.clientSecretHint || '****',
+            redirectUris: settingsDrawerApp.redirectUris || [],
+            allowedOrigins: settingsDrawerApp.allowedOrigins || [],
+            allowedScopes: settingsDrawerApp.allowedScopes || DEFAULT_AUTHORIZED_SCOPES,
+            isVerified: settingsDrawerApp.isVerified ?? true,
+            isActive: settingsDrawerApp.isActive ?? true,
+            enableAuth: Boolean(settingsDrawerApp.enableAuth),
+            enablePay: settingsDrawerApp.enablePay ?? true,
+            webhookUrl: settingsDrawerApp.webhookUrl || '',
+            webhookSecret: settingsDrawerApp.webhookSecret || '',
+            createdAt: new Date().toISOString(),
+          }}
+          name={settingsName}
+          setName={setSettingsName}
+          description={settingsDescription}
+          setDescription={setSettingsDescription}
+          logoUrl={settingsLogoUrl}
+          setLogoUrl={setSettingsLogoUrl}
+          redirectUrisInput={settingsRedirectUris}
+          setRedirectUrisInput={setSettingsRedirectUris}
+          allowedOriginsInput={settingsAllowedOrigins}
+          setAllowedOriginsInput={setSettingsAllowedOrigins}
+          onSave={handleSaveSettings}
+          saving={isSavingSettings}
+          onRevokeTokens={handleRevokeTokens}
+          isRevoking={isRevokingTokens}
+          onDeleteAppClick={() => {
+            setIsSettingsDrawerOpen(false);
+          }}
+          copiedKey={copiedKey}
+          copyToClipboard={copyToClipboard}
+          onRotateSecretClick={() => {
+            setIsSettingsDrawerOpen(false);
+            setRotatingApp(settingsDrawerApp);
+            setShowRotateModal(true);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -251,10 +251,10 @@ export function BankDetailsDrawer({
         <div className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-white/5 space-y-1">
           <div className="flex items-center gap-2 text-xs font-bold text-zinc-900 dark:text-white">
             <Building2 className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
-            <span>Target Financial Destination</span>
+            <span>Bank or UPI Payout Destination</span>
           </div>
           <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-            Payout requests from your Settled Withdrawable Balance will be credited directly to your selected destination below.
+            Payouts from your available balance will be deposited directly to your bank account or UPI ID below.
           </p>
         </div>
 

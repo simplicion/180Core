@@ -101,10 +101,20 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
 
   useEffect(() => {
     const effectiveSlug = (app ? getAppSlug(app) : '') || appId;
-    if (paramView === 'identity' && effectiveSlug) {
+    if (!effectiveSlug) return;
+    if (paramView === 'identity') {
       router.replace(`/apps/${effectiveSlug}/identity/users`);
-    } else if (paramView === 'pay' && effectiveSlug) {
+    } else if (paramView === 'pay') {
       router.replace(`/apps/${effectiveSlug}/pay`);
+    } else {
+      // Intermediate overview page is retired. Route directly to the active service dashboard or dashboard.
+      if (app?.enablePay ?? true) {
+        router.replace(`/apps/${effectiveSlug}/pay`);
+      } else if (app?.enableAuth) {
+        router.replace(`/apps/${effectiveSlug}/identity/users`);
+      } else {
+        router.replace('/dashboard');
+      }
     }
   }, [paramView, appId, app, router]);
 
@@ -892,20 +902,12 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
           </div>
 
           {/* ═══════════════════════════════════════════════════════════════════════
-              VIEW 1: OVERVIEW HUB (Credentials, Reusable App Cards, Quickstart)
+              VIEW 1: OVERVIEW REDIRECT SKELETON (Intermediate overview retired)
               ═══════════════════════════════════════════════════════════════════════ */}
           {activeView === 'overview' && (
-            <AppOverviewDetail
-              app={app}
-              enableAuth={enableAuth}
-              enablePay={enablePay}
-              copiedKey={copiedKey}
-              copyToClipboard={copyToClipboard}
-              onOpenIdentity={() => navigateView('identity')}
-              onOpenPay={() => navigateView('pay')}
-              onRotateSecretClick={() => setShowRotateModal(true)}
-              onOpenSettings={() => setIsSettingsDrawerOpen(true)}
-            />
+            <div className="py-12">
+              <AdaptiveSkeleton screen="app-detail" />
+            </div>
           )}
 
       {/* ═══════════════════════════════════════════════════════════════════════
