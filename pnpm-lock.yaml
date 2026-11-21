@@ -223,9 +223,6 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
-      country-state-city:
-        specifier: ^3.2.1
-        version: 3.2.1
       lucide-react:
         specifier: ^0.447.0
         version: 0.447.0(react@19.3.0)
@@ -287,9 +284,6 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
-      country-state-city:
-        specifier: ^3.2.1
-        version: 3.2.1
       lucide-react:
         specifier: ^0.447.0
         version: 0.447.0(react@19.3.0)
@@ -474,9 +468,6 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
-      country-state-city:
-        specifier: ^3.2.1
-        version: 3.2.1
       date-fns:
         specifier: ^4.4.0
         version: 4.4.0
@@ -1325,9 +1316,6 @@ packages:
   cors@2.8.6:
     resolution: {integrity: sha512-tJtZBBHA6vjIAaF6EnIaq6laBBP9aq/Y3ouVJjEfoHbRBcHBAHYcMh/w8LDrk2PvIMMq8gmopa5D4V8RmbrxGw==}
     engines: {node: '>= 0.10'}
-
-  country-state-city@3.2.1:
-    resolution: {integrity: sha512-kxbanqMc6izjhc/EHkGPCTabSPZ2G6eG4/97akAYHJUN4stzzFEvQPZoF8oXDQ+10gM/O/yUmISCR1ZVxyb6EA==}
 
   cross-env@7.0.3:
     resolution: {integrity: sha512-+/HKd6EgcQCJGh2PSjZuUitQBQynKor4wrFbRg4DtAgS1aWO+gU52xpH7M9ScGgXSYmAVS9bIJ8EzuaGw0oNAw==}
@@ -3133,8 +3121,6 @@ snapshots:
     dependencies:
       object-assign: 4.1.1
       vary: 1.1.2
-
-  country-state-city@3.2.1: {}
 
   cross-env@7.0.3:
     dependencies:
