@@ -1382,9 +1382,9 @@ function DeveloperDashboardContent() {
                           handleOpenSettingsDrawer(app);
                         }
                       }}
-                      className="rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#101012] p-5 shadow-xs hover:border-zinc-300 dark:hover:border-white/20 hover:shadow-md hover:-translate-y-0.5 transition-all group flex flex-col justify-between cursor-pointer min-h-[175px]"
+                      className="rounded-2xl sm:rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#101012] p-4 sm:p-4.5 shadow-xs hover:border-zinc-300 dark:hover:border-white/20 hover:shadow-md hover:-translate-y-0.5 transition-all group flex flex-col justify-between cursor-pointer"
                     >
-                      <div className="space-y-3.5">
+                      <div>
                         {/* Header with App Logo, Badges, and Action Icons */}
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-start gap-2.5 min-w-0">
@@ -1437,7 +1437,7 @@ function DeveloperDashboardContent() {
 
                       {/* Improved Size & Visibility CTAs for 180 Pay and 180 Identity - Strictly Side-by-Side Pills */}
                       {((app.enablePay ?? true) || app.enableAuth) && (
-                        <div className="pt-3.5 mt-2 border-t border-zinc-100 dark:border-white/5 flex items-center justify-end gap-2 flex-nowrap shrink-0">
+                        <div className="pt-2.5 mt-2.5 border-t border-zinc-100 dark:border-white/5 flex items-center justify-end gap-1.5 sm:gap-2 flex-nowrap shrink-0">
                           {app.enableAuth && (
                             <button
                               type="button"
@@ -1445,7 +1445,7 @@ function DeveloperDashboardContent() {
                                 e.stopPropagation();
                                 router.push(`/apps/${getAppSlug(app)}/identity/users`);
                               }}
-                              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold bg-blue-50/80 hover:bg-blue-600 dark:bg-blue-950/60 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-300 dark:hover:text-white border border-blue-200 dark:border-blue-800 hover:border-blue-600 shadow-xs transition-all cursor-pointer group/cta shrink-0 whitespace-nowrap"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-blue-50/80 hover:bg-blue-600 dark:bg-blue-950/60 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-300 dark:hover:text-white border border-blue-200 dark:border-blue-800 hover:border-blue-600 shadow-xs transition-all cursor-pointer group/cta shrink-0 whitespace-nowrap"
                               title="Open 180 Identity Dashboard"
                             >
                               <Shield className="w-3.5 h-3.5 text-blue-600 group-hover/cta:text-white dark:text-blue-400 transition-colors shrink-0" />
@@ -1459,7 +1459,7 @@ function DeveloperDashboardContent() {
                                 e.stopPropagation();
                                 router.push(`/apps/${getAppSlug(app)}/pay`);
                               }}
-                              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold bg-purple-50/80 hover:bg-purple-600 dark:bg-purple-950/60 dark:hover:bg-purple-600 text-purple-600 hover:text-white dark:text-purple-300 dark:hover:text-white border border-purple-200 dark:border-purple-800 hover:border-purple-600 shadow-xs transition-all cursor-pointer group/cta shrink-0 whitespace-nowrap"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-purple-50/80 hover:bg-purple-600 dark:bg-purple-950/60 dark:hover:bg-purple-600 text-purple-600 hover:text-white dark:text-purple-300 dark:hover:text-white border border-purple-200 dark:border-purple-800 hover:border-purple-600 shadow-xs transition-all cursor-pointer group/cta shrink-0 whitespace-nowrap"
                               title="Open 180 Pay Dashboard"
                             >
                               <CreditCard className="w-3.5 h-3.5 text-purple-600 group-hover/cta:text-white dark:text-purple-400 transition-colors shrink-0" />
