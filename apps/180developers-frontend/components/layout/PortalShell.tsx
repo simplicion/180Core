@@ -4,11 +4,30 @@ import React from 'react';
 import { usePathname } from 'next/navigation';
 import Navbar from '../Navbar';
 import Link from 'next/link';
+import { MaintenanceLockWall } from '@workspace/ui';
 
 const WEBSITE_URL = (process.env.NEXT_PUBLIC_WEBSITE_URL || 'https://180core.cloud').replace(/\/+$/, '');
 
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+
+  // Check if platform maintenance mode is enabled (active by default per user request unless explicitly disabled)
+  const isMaintenance = process.env.NEXT_PUBLIC_MAINTENANCE_MODE !== 'false';
+
+  if (isMaintenance) {
+    return (
+      <MaintenanceLockWall
+        mode="platform"
+        title="180 Core Platform Under Scheduled Maintenance"
+        subtitle="Sovereign Infrastructure & Database Optimization"
+        description="We are actively upgrading our core infrastructure, token verifiers, and payment ledgers. The developer platform and console controls are temporarily locked to protect your data."
+        estimatedTime="Under 2 hours"
+        allowBypass={true}
+      >
+        {children}
+      </MaintenanceLockWall>
+    );
+  }
 
   // 1. Full-bleed developer console, billing & auth callback (no outer marketing navbar/footer)
   const isDeveloperConsole =

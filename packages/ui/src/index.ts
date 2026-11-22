@@ -72,6 +72,7 @@ export * from './components/QuickSupportDrawer';
 export * from './components/AILogo';
 export * from './components/BulkActionBar';
 export * from './components/OfflineWall';
+export * from './components/MaintenanceLockWall';
 export * from './components/AICreditProgressWidget';
 export * from './components/OneEightyIdentityButton';
 export * from './components/OneEightyPayButton';

@@ -28,7 +28,7 @@ import {
   X,
   Download,
 } from 'lucide-react';
-import { Button, LogoLoader, AILogoIcon, AdaptiveSkeleton } from '@workspace/ui';
+import { Button, LogoLoader, AILogoIcon, AdaptiveSkeleton, MaintenanceLockWall } from '@workspace/ui';
 import toast from 'react-hot-toast';
 import { getCoreApiUrl } from '@/lib/api';
 import { locationService, DetectedLocation, CountryItem } from '@/lib/location-service';
@@ -197,6 +197,24 @@ export function CheckoutClient({
   }, [initialSessionId, params?.sessionId, params?.slug]);
 
   const [sessionId, setSessionId] = useState<string>(getInitialSessionId);
+
+  // 180 Pay Maintenance Mode (enabled by default per user request unless explicitly disabled)
+  const isMaintenance = process.env.NEXT_PUBLIC_MAINTENANCE_MODE !== 'false';
+  const [isMaintenanceBypassed, setIsMaintenanceBypassed] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const sp = new URLSearchParams(window.location.search);
+        if (sp.get('bypass') === '1' || sp.get('bypass') === 'true' || sp.get('admin') === '1') {
+          sessionStorage.setItem('__180_maintenance_bypass__', 'true');
+          setIsMaintenanceBypassed(true);
+        } else if (sessionStorage.getItem('__180_maintenance_bypass__') === 'true') {
+          setIsMaintenanceBypassed(true);
+        }
+      }
+    } catch (_) {}
+  }, []);
 
   const [session, setSession] = useState<any>(() => {
     if (typeof window === 'undefined') return null;
@@ -1745,6 +1763,34 @@ export function CheckoutClient({
     }
   };
 
+
+  // ─── 180 Pay Maintenance Lock Screen ────────────────────────────────────
+  if (isMaintenance && !isMaintenanceBypassed) {
+    return (
+      <div className="w-full flex items-center justify-center p-2 sm:p-4 min-h-[380px]">
+        <MaintenanceLockWall
+          mode="payment"
+          compact
+          fullScreen={false}
+          title="180 Pay Under Scheduled Maintenance"
+          subtitle="Sovereign Payment Gateway Paused"
+          description="Our payment clearing engine is currently undergoing routine sovereign maintenance. Payment checkouts, UPI captures, and automated debits are temporarily locked to protect your transactions."
+          estimatedTime="Under 2 hours"
+          allowBypass={true}
+          onDismiss={() => {
+            if (onClose) onClose();
+            if (typeof window !== 'undefined') {
+              try {
+                window.parent.postMessage({ type: '180_PAYMENT_CLOSE' }, '*');
+                window.parent.postMessage({ type: '180_PAY_CLOSE' }, '*');
+                window.parent.postMessage({ type: '180_MODAL_CLOSE' }, '*');
+              } catch (_) {}
+            }
+          }}
+        />
+      </div>
+    );
+  }
 
   if (loading) {
     return <AdaptiveSkeleton screen="checkout" />;
