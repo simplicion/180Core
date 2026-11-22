@@ -86,15 +86,6 @@ export interface DeveloperBillingStatus {
 
 const ENTERPRISE_FORM_URL = 'https://app.180core.cloud/f/9hbzy4u62s';
 
-const CARD_GRADIENTS = [
-  'from-[#7c3aed] via-[#6366f1] to-[#a855f7]', // Violet / Indigo / Purple
-  'from-[#0284c7] via-[#06b6d4] to-[#38bdf8]', // Sky / Cyan / Blue
-  'from-[#ec4899] via-[#f43f5e] to-[#fb7185]', // Rose / Pink
-  'from-[#059669] via-[#10b981] to-[#34d399]', // Emerald / Teal
-  'from-[#4f46e5] via-[#3b82f6] to-[#06b6d4]', // Indigo / Blue / Cyan
-  'from-[#d97706] via-[#f59e0b] to-[#fbbf24]', // Amber / Gold
-];
-
 interface DeveloperApp {
   id: string;
   name: string;
@@ -1377,8 +1368,8 @@ function DeveloperDashboardContent() {
                   </Button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-5 xl:gap-6">
-                  {filteredApps.map((app, index) => (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 xl:gap-5">
+                  {filteredApps.map((app) => (
                     <div
                       key={app.id}
                       onClick={() => {
@@ -1391,117 +1382,76 @@ function DeveloperDashboardContent() {
                           handleOpenSettingsDrawer(app);
                         }
                       }}
-                      className="relative overflow-hidden rounded-[26px] border border-zinc-200/90 dark:border-white/10 bg-white dark:bg-[#121215] shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group flex flex-col justify-between cursor-pointer"
+                      className="rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#101012] p-5 shadow-xs hover:border-zinc-300 dark:hover:border-white/20 hover:shadow-md hover:-translate-y-0.5 transition-all group flex flex-col justify-between cursor-pointer min-h-[175px]"
                     >
-                      <div>
-                        {/* Modern Gradient Wave Banner */}
-                        <div
-                          className={`relative h-20 sm:h-22 bg-gradient-to-r ${
-                            CARD_GRADIENTS[index % CARD_GRADIENTS.length]
-                          } overflow-hidden`}
-                        >
-                          {/* Decorative subtle backdrop mesh */}
-                          <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_top,_var(--tw-gradient-stops))] from-white/30 via-transparent to-black/20" />
-
-                          {/* Active Status Badge in Top Right */}
-                          <div className="absolute top-3.5 right-3.5 z-10">
-                            <span className="inline-flex items-center px-3 py-0.5 rounded-full text-[11px] font-bold bg-[#A3F7BF]/95 text-[#064E2B] dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-400/40 shadow-xs backdrop-blur-xs">
-                              Active
-                            </span>
-                          </div>
-
-                          {/* Organic Curved Wave at Bottom of Banner */}
-                          <div className="absolute inset-x-0 bottom-0 leading-none pointer-events-none">
-                            <svg
-                              viewBox="0 0 500 80"
-                              preserveAspectRatio="none"
-                              className="w-full h-7 sm:h-8 fill-white dark:fill-[#121215]"
-                            >
-                              <path d="M0,32 C140,75 320,10 500,48 L500,80 L0,80 Z" />
-                            </svg>
-                          </div>
-                        </div>
-
-                        {/* Content Area: Circular Avatar overlapping wave, Title, Client ID, Settings */}
-                        <div className="px-5 pb-2 -mt-7 sm:-mt-8 relative z-10">
-                          <div className="flex items-start gap-3.5">
-                            {/* Overlapping Circular Avatar */}
+                      <div className="space-y-3.5">
+                        {/* Header with App Logo, Badges, and Action Icons */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-2.5 min-w-0">
                             {app.logoUrl ? (
                               <img
                                 src={app.logoUrl}
                                 alt={app.name}
-                                className="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover ring-4 ring-white dark:ring-[#121215] shadow-md bg-white dark:bg-zinc-900 shrink-0"
+                                className="w-10 h-10 rounded-2xl object-cover border border-zinc-200 dark:border-white/10 shrink-0"
                               />
                             ) : (
-                              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full ring-4 ring-white dark:ring-[#121215] shadow-md bg-gradient-to-tr from-violet-600 to-indigo-600 text-white flex items-center justify-center font-bold text-lg sm:text-xl shrink-0">
+                              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-sm shrink-0">
                                 {app.name[0]?.toUpperCase() || 'A'}
                               </div>
                             )}
-
-                            {/* Project Title, Settings & Client ID */}
-                            <div className="flex-1 min-w-0 pt-7 sm:pt-8 space-y-1">
-                              <div className="flex items-center justify-between gap-1.5">
-                                <h3
-                                  className="font-bold text-base sm:text-[17px] text-zinc-950 dark:text-white tracking-tight truncate"
-                                  title={app.name}
-                                >
+                            <div className="space-y-0.5 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <h3 className="font-bold text-sm text-zinc-950 dark:text-white tracking-tight truncate max-w-[120px]" title={app.name}>
                                   {app.name}
                                 </h3>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenSettingsDrawer(app);
-                                  }}
-                                  className="w-7 h-7 -mr-1 rounded-lg flex items-center justify-center text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
-                                  title="Project Settings"
-                                  aria-label="Project Settings"
-                                >
-                                  <Settings className="w-4 h-4" />
-                                </button>
-                              </div>
-
-                              {/* Copyable Client ID */}
-                              <div
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  copyToClipboard(app.clientId, `card-${app.id}`);
-                                }}
-                                className="inline-flex items-center gap-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 font-mono text-[11px] sm:text-xs cursor-pointer group/copy transition-colors max-w-full"
-                                title="Click to copy Client ID"
-                              >
-                                {copiedKey === `card-${app.id}` ? (
-                                  <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                                ) : (
-                                  <Copy className="w-3.5 h-3.5 shrink-0 group-hover/copy:text-zinc-700 dark:group-hover/copy:text-zinc-300" />
-                                )}
-                                <span className="truncate max-w-[170px] sm:max-w-[200px]">
-                                  {app.clientId}
+                                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 shrink-0">
+                                  Active
                                 </span>
                               </div>
+                              <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400 truncate max-w-[160px]" title={app.clientId}>
+                                {app.clientId}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Quick Actions: Settings Icon and Drawer Arrow */}
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenSettingsDrawer(app);
+                              }}
+                              className="w-8 h-8 rounded-xl flex items-center justify-center text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                              title="Project Settings"
+                              aria-label="Project Settings"
+                            >
+                              <Settings className="w-4 h-4" />
+                            </button>
+                            <div className="w-8 h-8 rounded-xl flex items-center justify-center text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-white group-hover:bg-zinc-100 dark:group-hover:bg-white/10 transition-all">
+                              <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
                             </div>
                           </div>
                         </div>
                       </div>
 
-                      {/* Dual Action Bottom Pill Buttons */}
-                      <div className="p-4 sm:p-5 pt-3">
-                        <div className="flex items-center gap-2.5">
-                          {(app.enableAuth ?? true) && (
+                      {/* Improved Size & Visibility CTAs for 180 Pay and 180 Identity - Strictly Side-by-Side Pills */}
+                      {((app.enablePay ?? true) || app.enableAuth) && (
+                        <div className="pt-3.5 mt-2 border-t border-zinc-100 dark:border-white/5 flex items-center justify-end gap-2 flex-nowrap shrink-0">
+                          {app.enableAuth && (
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 router.push(`/apps/${getAppSlug(app)}/identity/users`);
                               }}
-                              className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-full border border-blue-400/40 bg-blue-50/70 hover:bg-blue-100/90 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 text-blue-600 dark:text-blue-400 font-bold text-xs sm:text-[13px] shadow-2xs hover:shadow-xs transition-all cursor-pointer group/id"
+                              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold bg-blue-50/80 hover:bg-blue-600 dark:bg-blue-950/60 dark:hover:bg-blue-600 text-blue-600 hover:text-white dark:text-blue-300 dark:hover:text-white border border-blue-200 dark:border-blue-800 hover:border-blue-600 shadow-xs transition-all cursor-pointer group/cta shrink-0 whitespace-nowrap"
                               title="Open 180 Identity Dashboard"
                             >
-                              <Shield className="w-4 h-4 text-blue-600 dark:text-blue-400 group-hover/id:scale-110 transition-transform" />
+                              <Shield className="w-3.5 h-3.5 text-blue-600 group-hover/cta:text-white dark:text-blue-400 transition-colors shrink-0" />
                               <span>180 Identity</span>
                             </button>
                           )}
-
                           {(app.enablePay ?? true) && (
                             <button
                               type="button"
@@ -1509,29 +1459,15 @@ function DeveloperDashboardContent() {
                                 e.stopPropagation();
                                 router.push(`/apps/${getAppSlug(app)}/pay`);
                               }}
-                              className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-full border border-fuchsia-400/40 bg-fuchsia-50/70 hover:bg-fuchsia-100/90 dark:bg-fuchsia-950/40 dark:hover:bg-fuchsia-900/50 text-fuchsia-600 dark:text-fuchsia-400 font-bold text-xs sm:text-[13px] shadow-2xs hover:shadow-xs transition-all cursor-pointer group/pay"
+                              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold bg-purple-50/80 hover:bg-purple-600 dark:bg-purple-950/60 dark:hover:bg-purple-600 text-purple-600 hover:text-white dark:text-purple-300 dark:hover:text-white border border-purple-200 dark:border-purple-800 hover:border-purple-600 shadow-xs transition-all cursor-pointer group/cta shrink-0 whitespace-nowrap"
                               title="Open 180 Pay Dashboard"
                             >
-                              <CreditCard className="w-4 h-4 text-fuchsia-600 dark:text-fuchsia-400 group-hover/pay:scale-110 transition-transform" />
+                              <CreditCard className="w-3.5 h-3.5 text-purple-600 group-hover/cta:text-white dark:text-purple-400 transition-colors shrink-0" />
                               <span>180 Pay</span>
                             </button>
                           )}
-
-                          {!app.enableAuth && !(app.enablePay ?? true) && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenSettingsDrawer(app);
-                              }}
-                              className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-full border border-zinc-200 dark:border-white/10 bg-zinc-50 hover:bg-zinc-100 dark:bg-white/5 dark:hover:bg-white/10 text-zinc-700 dark:text-zinc-300 font-bold text-xs transition-all cursor-pointer"
-                            >
-                              <Settings className="w-4 h-4 text-zinc-500" />
-                              <span>Configure Services</span>
-                            </button>
-                          )}
                         </div>
-                      </div>
+                      )}
                     </div>
                   ))}
                 </div>
