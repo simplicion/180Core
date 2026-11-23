@@ -5,21 +5,20 @@ import Link from 'next/link';
 import {
   ArrowRight,
   BookOpen,
-  CreditCard,
+  CheckCircle2,
+  FileCheck,
   Key,
   ScanLine,
   Shield,
   Sparkles,
-  Wallet,
 } from 'lucide-react';
 import { Button } from '@workspace/ui';
-import { use180Identity, OneEightyVerify, use180Pay } from '@workspace/identity-sdk';
+import { use180Identity, OneEightyVerify } from '@workspace/identity-sdk';
 import toast from 'react-hot-toast';
 import { DEMO_CLIENT_ID, developerLink, docsLink } from '@/lib/urls';
 
 export function HeroSection() {
   const { launch180Identity, isOpeningIdentity } = use180Identity(DEMO_CLIENT_ID);
-  const { launch180Pay, isOpeningPay } = use180Pay();
 
   const handleIdentityDemo = () => {
     launch180Identity({
@@ -46,18 +45,6 @@ export function HeroSection() {
     });
   };
 
-  const handlePayDemo = () => {
-    launch180Pay({
-      amount: 49.0,
-      currency: 'USD',
-      title: '180 Core Pro Sandbox Order',
-      orderId: `ord_web_${Math.random().toString(36).slice(2, 8)}`,
-      onSuccess: (res) => {
-        toast.success(`Payment confirmed (${res.sessionId})`);
-      },
-    });
-  };
-
   return (
     <section className="relative overflow-hidden border-b border-zinc-200/80 dark:border-white/10">
       <div className="marketing-grid-bg absolute inset-0 pointer-events-none opacity-80" />
@@ -67,19 +54,19 @@ export function HeroSection() {
         <div className="max-w-4xl mx-auto text-center space-y-7">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/90 dark:bg-zinc-900/90 border border-zinc-200 dark:border-white/10 text-zinc-700 dark:text-zinc-300 text-xs font-semibold shadow-sm backdrop-blur-md animate-page-enter">
             <Sparkles className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-            <span>Sovereign Identity, KYC Verification &amp; Global Payments</span>
+            <span>Sovereign Identity, Passkeys &amp; Official KYC Verification</span>
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-zinc-950 dark:text-white leading-[1.06] animate-stagger-1">
             The Sovereign Core for{' '}
             <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-blue-400 dark:via-indigo-300 dark:to-purple-300 bg-clip-text text-transparent">
-              Identity &amp; Payments.
+              Identity &amp; Auth.
             </span>
           </h1>
 
           <p className="text-base sm:text-lg text-zinc-600 dark:text-zinc-400 max-w-2xl mx-auto leading-relaxed animate-stagger-2">
             Ship passwordless OpenID Connect login, official API Setu &amp; ArcFace AI verification,
-            and dual-gateway Razorpay + Stripe checkout — with zero custom auth or payment screens.
+            and FIDO2 biometric passkeys — with zero custom authentication screens.
           </p>
 
           {/* Primary CTAs */}
@@ -137,18 +124,6 @@ export function HeroSection() {
                   <ScanLine className="h-3.5 w-3.5 mr-1.5" />
                   <span>180 Verify</span>
                 </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handlePayDemo}
-                  disabled={isOpeningPay}
-                  className="h-11 rounded-xl px-3.5 text-xs font-semibold border-purple-500/25 bg-purple-500/10 text-purple-700 dark:text-purple-300 hover:bg-purple-500/20"
-                >
-                  <Wallet className="h-3.5 w-3.5 mr-1.5" />
-                  <span>{isOpeningPay ? 'Opening...' : '180 Pay Checkout'}</span>
-                </Button>
               </div>
             </div>
           </div>
@@ -158,14 +133,14 @@ export function HeroSection() {
             {[
               { title: 'OIDC + PKCE', sub: 'RFC 7636 S256', icon: Shield, accent: 'text-blue-600 dark:text-blue-400' },
               { title: 'RS256 JWKS', sub: 'Asymmetric Keys', icon: Key, accent: 'text-indigo-600 dark:text-indigo-400' },
-              { title: 'Dual Gateway', sub: 'Razorpay + Stripe', icon: CreditCard, accent: 'text-purple-600 dark:text-purple-400' },
-              { title: '135+ Currencies', sub: 'Dynamic Geo-PPP', icon: Sparkles, accent: 'text-emerald-600 dark:text-emerald-400' },
+              { title: 'ArcFace AI', sub: '512-D Face Match', icon: ScanLine, accent: 'text-purple-600 dark:text-purple-400' },
+              { title: 'API Setu KYC', sub: 'Official Registries', icon: FileCheck, accent: 'text-emerald-600 dark:text-emerald-400' },
             ].map((item) => {
               const Icon = item.icon;
               return (
                 <Link
                   key={item.title}
-                  href={item.title === 'Dual Gateway' || item.title === '135+ Currencies' ? '/pay' : '/identity'}
+                  href="/identity"
                   className="group interactive-lift p-4 rounded-2xl bg-white dark:bg-zinc-950 border border-zinc-200/80 dark:border-white/10 hover:border-blue-500/40 hover:shadow-md shadow-sm"
                 >
                   <div className="flex items-center justify-between">

@@ -24,7 +24,7 @@ export function FinalCtaSection() {
             </h2>
             <p className="text-sm sm:text-base text-zinc-400 leading-relaxed">
               Create your first OAuth application, generate scoped API keys, and test live 180
-              Identity &amp; 180 Pay flows directly from the Developer Console.
+              Identity &amp; 180 Verify flows directly from the Developer Console.
             </p>
           </div>
 
@@ -60,23 +60,23 @@ export function FinalCtaSection() {
             href="/identity"
             className="interactive-lift p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-blue-500/40"
           >
-            <span className="text-xs font-bold text-white block">180 Identity &amp; Verify</span>
+            <span className="text-xs font-bold text-white block">180 Identity &amp; Auth</span>
             <span className="text-[11px] font-mono text-zinc-400 mt-0.5 block">
-              OIDC · PKCE · API Setu · ArcFace AI
+              OIDC · PKCE · Passkeys · Zero Shared Secrets
             </span>
           </Link>
           <Link
-            href="/pay"
-            className="interactive-lift p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-purple-500/40"
+            href="/identity#verify"
+            className="interactive-lift p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-emerald-500/40"
           >
-            <span className="text-xs font-bold text-white block">180 Pay &amp; Ledger</span>
+            <span className="text-xs font-bold text-white block">180 Verify &amp; KYC</span>
             <span className="text-[11px] font-mono text-zinc-400 mt-0.5 block">
-              Razorpay · Stripe · BYOG · 135+ PPP
+              API Setu · ArcFace AI · PAN · DL · Bank IMPS
             </span>
           </Link>
           <Link
             href="/security"
-            className="interactive-lift p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-emerald-500/40"
+            className="interactive-lift p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.07] border border-white/10 hover:border-purple-500/40"
           >
             <span className="text-xs font-bold text-white block">Security Doctrine</span>
             <span className="text-[11px] font-mono text-zinc-400 mt-0.5 block">

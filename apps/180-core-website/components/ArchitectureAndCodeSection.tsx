@@ -5,7 +5,7 @@ import { Check, Code2, Copy, Lock, Server, ShieldCheck, Terminal, Webhook } from
 import { Button, Card, CardContent } from '@workspace/ui';
 import toast from 'react-hot-toast';
 
-type TabId = 'auth' | 'pay' | 'elements' | 'webhook';
+type TabId = 'auth' | 'verify' | 'elements' | 'webhook';
 
 const CODE_SNIPPETS: Record<TabId, { label: string; filename: string; code: string }> = {
   auth: {
@@ -22,18 +22,17 @@ await OneEighty.signIn({
   },
 });`,
   },
-  pay: {
-    label: '180 Pay Checkout',
-    filename: 'checkout.ts',
-    code: `import { OneEightyPay } from '@workspace/identity-sdk';
+  verify: {
+    label: '180 Verify SDK',
+    filename: 'verify.ts',
+    code: `import { OneEightyVerify } from '@workspace/identity-sdk';
 
-await OneEightyPay.checkout({
-  amount: 499,
-  currency: 'INR',
-  title: 'Enterprise Subscription',
-  description: 'Monthly access tier with PPP localization',
-  onSuccess: (tx) => {
-    console.log('Verified Payment:', tx.paymentId);
+await OneEightyVerify.launch({
+  clientId: process.env.NEXT_PUBLIC_180_CLIENT_ID!,
+  documents: ['PAN', 'DRIVING_LICENSE', 'BANK_ACCOUNT', 'FACE_MATCH'],
+  onSuccess: (session) => {
+    console.log('Verified Citizen KYC:', session.status);
+    console.log('Session ID:', session.sessionId);
   },
 });`,
   },
@@ -48,15 +47,14 @@ await OneEightyPay.checkout({
   label="Sign in with 180"
 ></one-eighty-auth-button>
 
-<one-eighty-pay-button
-  amount="499"
-  currency="INR"
-  title="Pro Membership"
+<one-eighty-verify-button
   client-id="180_client_your_app_id"
-></one-eighty-pay-button>`,
+  documents="PAN,DRIVING_LICENSE,FACE_MATCH"
+  label="Verify Identity with 180"
+></one-eighty-verify-button>`,
   },
   webhook: {
-    label: 'HMAC Verification',
+    label: 'HMAC Webhooks',
     filename: 'verify-webhook.ts',
     code: `import crypto from 'crypto';
 
@@ -87,7 +85,7 @@ const ARCHITECTURE_PILLARS = [
     icon: Webhook,
     title: 'Replay-Safe Webhooks',
     description:
-      'Every payment and subscription event carries an X-180-Signature HMAC-SHA256 digest and timestamp validation.',
+      'Every identity, authentication, and KYC event carries an X-180-Signature HMAC-SHA256 digest and timestamp validation.',
   },
   {
     icon: Server,
@@ -125,8 +123,7 @@ export function ArchitectureAndCodeSection() {
             One SDK. Every Surface.
           </h2>
           <p className="text-sm sm:text-base text-zinc-600 dark:text-zinc-400 leading-relaxed">
-            Integrate authentication, KYC, and sovereign checkout in minutes without building login
-            forms, OTP popups, card inputs, or currency math.
+            Integrate authentication and citizen KYC in minutes without building login forms, OTP popups, biometric scanners, or verification screens.
           </p>
         </div>
 
