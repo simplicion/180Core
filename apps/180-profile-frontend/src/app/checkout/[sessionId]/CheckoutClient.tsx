@@ -198,8 +198,8 @@ export function CheckoutClient({
 
   const [sessionId, setSessionId] = useState<string>(getInitialSessionId);
 
-  // 180 Pay Maintenance Mode (enabled by default per user request unless explicitly disabled)
-  const isMaintenance = process.env.NEXT_PUBLIC_MAINTENANCE_MODE !== 'false';
+  // 180 Pay Maintenance Mode (disabled by default)
+  const isMaintenance = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
   const [isMaintenanceBypassed, setIsMaintenanceBypassed] = useState(false);
 
   useEffect(() => {

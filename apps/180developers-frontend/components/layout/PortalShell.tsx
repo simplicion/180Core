@@ -11,8 +11,8 @@ const WEBSITE_URL = (process.env.NEXT_PUBLIC_WEBSITE_URL || 'https://180core.clo
 export function PortalShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
-  // Check if platform maintenance mode is enabled (active by default per user request unless explicitly disabled)
-  const isMaintenance = process.env.NEXT_PUBLIC_MAINTENANCE_MODE !== 'false';
+  // Check if platform maintenance mode is enabled (disabled by default)
+  const isMaintenance = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
 
   if (isMaintenance) {
     return (
