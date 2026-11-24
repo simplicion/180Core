@@ -98,6 +98,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             `,
           }}
         />
+        {/* 180workspace Traffic Director - Dynamic Script Tag */}
+        <script src="https://www.180trafficdirector.pro/tag/180core.js" async />
       </head>
       <body className="bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 min-h-screen flex flex-col selection:bg-blue-600 selection:text-white antialiased">
         <Toaster
