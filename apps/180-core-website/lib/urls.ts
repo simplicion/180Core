@@ -26,7 +26,9 @@ export const API_URL = trimTrailingSlash(
 );
 
 export const DEMO_CLIENT_ID =
-  process.env.NEXT_PUBLIC_180_CLIENT_ID || '180_client_system_primary';
+  process.env.NEXT_PUBLIC_180_CLIENT_ID ||
+  process.env.NEXT_PUBLIC_CORE_CLIENT_ID ||
+  '180_client_2d51a605038c38ffb6fa037688988a83';
 
 export function developerLink(path = '/dashboard'): string {
   const clean = path.startsWith('/') ? path : `/${path}`;

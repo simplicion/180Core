@@ -1211,7 +1211,7 @@
           this.innerHTML = [
             '<button type="button" class="identity-btn-shimmer" style="position: relative; display: inline-flex; align-items: center; gap: 12px; min-height: 44px; padding: 7px 15px; border-radius: 14px; border: 1.5px solid transparent; background: linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(135deg, #2563eb, #4f46e5, #3b82f6, #1d4ed8) border-box; background-size: 100% 100%, 250% 250%; animation: identity-border-flow 4s ease infinite; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px -1px rgba(37, 99, 235, 0.15), 0 1px 3px rgba(0, 0, 0, 0.04); transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); outline: none; user-select: none; overflow: hidden;">',
             '<div style="width: 28px; height: 28px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center; position: relative;">',
-            '<img src="/black icon.svg" alt="180 Profile" style="width: 17px; height: 17px; object-fit: contain;" onerror="this.src=\'/black-icon.svg\'" />',
+            '<img src="/black icon.svg" alt="180 Profile" style="width: 17px; height: 17px; object-fit: contain;" onerror="this.onerror=null;this.src=\'/black-icon.svg\'" />',
             '<div style="width: 7px; height: 7px; border-radius: 50%; background: #10b981; border: 1px solid #ffffff; position: absolute; top: -2px; right: -2px;"><span style="position: absolute; inset: 0; border-radius: 50%; background: #10b981; opacity: 0.7; animation: ping 1.5s cubic-bezier(0,0,0.2,1) infinite;"></span></div>',
             '</div>',
             '<div style="display: flex; flex-direction: column; text-align: left; line-height: 1.2;">',

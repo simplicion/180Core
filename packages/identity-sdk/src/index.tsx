@@ -505,7 +505,7 @@ function getOrCreateResidentSheet(): ResidentSheetElements {
   const titleWrap = document.createElement('div');
   titleWrap.style.cssText = 'display: flex; align-items: center; gap: 8px; min-width: 0;';
   titleWrap.innerHTML = `
-    <img src="/black icon.svg" alt="180" style="width: 18px; height: 18px; object-fit: contain; filter: invert(1);" onerror="this.src='/black-icon.svg';" />
+    <img src="/black icon.svg" alt="180" style="width: 18px; height: 18px; object-fit: contain; filter: invert(1);" onerror="this.onerror=null;this.src='/black-icon.svg';" />
     <div class="__180_title_text__" style="font-size: 13px; font-weight: 700; color: #f4f4f5; letter-spacing: -0.01em;">180 Sovereign Protocol</div>
   `;
   bar.appendChild(titleWrap);
@@ -999,6 +999,7 @@ export const OneEightyIdentity = {
     img.alt = '180 Profile';
     img.style.cssText = 'width: 17px; height: 17px; object-fit: contain;';
     img.onerror = () => {
+      img.onerror = null;
       img.src = '/black-icon.svg';
     };
     iconBadge.appendChild(img);
@@ -1899,6 +1900,7 @@ export const OneEightyIdentityButton: React.FC<OneEightyIdentityButtonProps> = (
           className="w-4 h-4 object-contain"
           onError={(e) => {
             const target = e.currentTarget as HTMLImageElement;
+            target.onerror = null;
             if (!target.src.includes('black-icon')) {
               target.src = '/black-icon.svg';
             }
