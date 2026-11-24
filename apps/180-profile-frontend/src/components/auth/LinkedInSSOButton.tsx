@@ -10,20 +10,29 @@ interface LinkedInSSOButtonProps {
   oauthParams: OAuthParams;
   label?: string;
   onSuccess?: (user: any, token: string, meta?: any) => void;
+  clientId?: string;
 }
 
 export function LinkedInSSOButton({
   oauthParams,
   label = 'Continue with LinkedIn',
   onSuccess,
+  clientId: propClientId,
 }: LinkedInSSOButtonProps) {
   const [linkedinLoading, setLinkedinLoading] = useState(false);
   const [linkedinClientId, setLinkedinClientId] = useState<string>(
-    process.env.NEXT_PUBLIC_LINKEDIN_CLIENT_ID || ''
+    propClientId || process.env.NEXT_PUBLIC_LINKEDIN_CLIENT_ID || ''
   );
 
-  // Dynamic LinkedIn OAuth config resolution from core backend
   useEffect(() => {
+    if (propClientId && propClientId !== linkedinClientId) {
+      setLinkedinClientId(propClientId);
+    }
+  }, [propClientId]);
+
+  // Dynamic LinkedIn OAuth config resolution from core backend (skip if clientId already present)
+  useEffect(() => {
+    if (propClientId || linkedinClientId) return;
     let isMounted = true;
     fetch(getCoreApiUrl('/api/oauth/linkedin-config'))
       .then((res) => res.json())
@@ -39,7 +48,7 @@ export function LinkedInSSOButton({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [propClientId, linkedinClientId]);
 
   const activeClientId = linkedinClientId || process.env.NEXT_PUBLIC_LINKEDIN_CLIENT_ID || '';
 

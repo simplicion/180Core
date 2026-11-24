@@ -48,5 +48,5 @@ export class MemoryLRUCache<T> {
   }
 }
 
-// Global in-memory cache instance for OAuthApp objects (TTL: 60s)
-export const globalOAuthAppCache = new MemoryLRUCache<any>(60000, 1000);
+// Global in-memory cache instance for OAuthApp objects (TTL: 5 minutes)
+export const globalOAuthAppCache = new MemoryLRUCache<any>(300000, 2000);

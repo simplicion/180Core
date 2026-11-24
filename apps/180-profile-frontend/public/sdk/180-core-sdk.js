@@ -621,6 +621,22 @@
         'app=auth'
       ].join('&');
 
+      if (isBrowser) {
+        try {
+          var raw = window.sessionStorage.getItem('__180_app_config_' + clientId + '__') ||
+                    window.localStorage.getItem('180_oauth_app_' + clientId);
+          if (raw) {
+            var cachedConfig = JSON.parse(raw);
+            if (cachedConfig.name) params += '&appName=' + encodeURIComponent(cachedConfig.name);
+            if (cachedConfig.logoUrl) params += '&appLogo=' + encodeURIComponent(cachedConfig.logoUrl);
+            if (cachedConfig.enableGoogleAuth !== undefined) params += '&google=' + (cachedConfig.enableGoogleAuth ? '1' : '0');
+            if (cachedConfig.enableLinkedInAuth !== undefined) params += '&linkedin=' + (cachedConfig.enableLinkedInAuth ? '1' : '0');
+            if (cachedConfig.enableGitHubAuth !== undefined) params += '&github=' + (cachedConfig.enableGitHubAuth ? '1' : '0');
+            if (cachedConfig.enableEmailAuth !== undefined) params += '&email=' + (cachedConfig.enableEmailAuth ? '1' : '0');
+          }
+        } catch (_) {}
+      }
+
       var authUrl = authServer + '/auth/login?' + params;
 
       return openAdaptiveModal({

@@ -10,18 +10,26 @@ interface GoogleSSOButtonProps {
   oauthParams: OAuthParams;
   label?: string;
   onSuccess?: (user: any, token: string, meta?: any) => void;
+  clientId?: string;
 }
 
 export function GoogleSSOButton({
   oauthParams,
   label = 'Continue with Google',
   onSuccess,
+  clientId: propClientId,
 }: GoogleSSOButtonProps) {
   const [googleLoading, setGoogleLoading] = useState(false);
   const tokenClientRef = useRef<any>(null);
   const [googleClientId, setGoogleClientId] = useState<string>(
-    process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ''
+    propClientId || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ''
   );
+
+  useEffect(() => {
+    if (propClientId && propClientId !== googleClientId) {
+      setGoogleClientId(propClientId);
+    }
+  }, [propClientId]);
 
   // Safety timeout and window focus listener to ensure button resets if popup is closed or blocked
   useEffect(() => {
@@ -45,8 +53,9 @@ export function GoogleSSOButton({
     };
   }, [googleLoading]);
 
-  // Dynamic Google OAuth config resolution from core backend
+  // Dynamic Google OAuth config resolution from core backend (skip if clientId already present)
   useEffect(() => {
+    if (propClientId || googleClientId) return;
     let isMounted = true;
     fetch(getCoreApiUrl('/api/oauth/google-config'))
       .then((res) => res.json())
@@ -62,7 +71,7 @@ export function GoogleSSOButton({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [propClientId, googleClientId]);
 
   const activeClientId = googleClientId || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
 

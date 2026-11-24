@@ -10,20 +10,29 @@ interface GitHubSSOButtonProps {
   oauthParams: OAuthParams;
   label?: string;
   onSuccess?: (user: any, token: string, meta?: any) => void;
+  clientId?: string;
 }
 
 export function GitHubSSOButton({
   oauthParams,
   label = 'Continue with GitHub',
   onSuccess,
+  clientId: propClientId,
 }: GitHubSSOButtonProps) {
   const [githubLoading, setGithubLoading] = useState(false);
   const [githubClientId, setGithubClientId] = useState<string>(
-    process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID || ''
+    propClientId || process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID || ''
   );
 
-  // Dynamic GitHub OAuth config resolution from core backend
   useEffect(() => {
+    if (propClientId && propClientId !== githubClientId) {
+      setGithubClientId(propClientId);
+    }
+  }, [propClientId]);
+
+  // Dynamic GitHub OAuth config resolution from core backend (skip if clientId already present)
+  useEffect(() => {
+    if (propClientId || githubClientId) return;
     let isMounted = true;
     fetch(getCoreApiUrl('/api/oauth/github-config'))
       .then((res) => res.json())
@@ -39,7 +48,7 @@ export function GitHubSSOButton({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [propClientId, githubClientId]);
 
   const activeClientId = githubClientId || process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID || '';
 

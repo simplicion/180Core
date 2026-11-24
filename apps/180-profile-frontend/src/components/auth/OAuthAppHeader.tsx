@@ -37,6 +37,7 @@ export function OAuthAppHeader({
 }: OAuthAppHeaderProps) {
   const [app, setApp] = useState<AppBranding | null>(initialApp || null);
   const [logoFailed, setLogoFailed] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Sync initialApp if provided or updated by parent
@@ -95,6 +96,18 @@ export function OAuthAppHeader({
   const appName = hasApp ? app!.name.trim() : null;
   const hasValidLogo = Boolean(app?.logoUrl && app.logoUrl.trim() && !logoFailed);
 
+  if (clientId && !hasApp && loading) {
+    return (
+      <div className={`flex flex-col items-center gap-2.5 pb-2 animate-pulse ${className}`}>
+        <div className="w-16 h-16 rounded-2xl bg-slate-100 border border-slate-200/60 p-2.5" />
+        <div className="space-y-1.5 flex flex-col items-center">
+          <div className="h-5 w-32 bg-slate-200/80 rounded-md" />
+          <div className="h-3 w-44 bg-slate-100 rounded-md" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`flex flex-col items-center gap-2.5 pb-2 animate-in fade-in duration-300 ${className}`}>
       {/* 
@@ -108,7 +121,8 @@ export function OAuthAppHeader({
             <img
               src={app!.logoUrl}
               alt={appName || 'App Logo'}
-              className="w-full h-full object-contain"
+              className={`w-full h-full object-contain transition-opacity duration-200 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+              onLoad={() => setImgLoaded(true)}
               onError={() => setLogoFailed(true)}
             />
           ) : (
@@ -118,8 +132,9 @@ export function OAuthAppHeader({
               className="w-full h-full object-contain"
               onError={(e) => {
                 const target = e.currentTarget as HTMLImageElement;
-                if (!target.src.includes('icon.svg')) {
-                  target.src = '/icon.svg';
+                target.onerror = null;
+                if (!target.src.includes('black-icon')) {
+                  target.src = '/black-icon.svg';
                 }
               }}
             />

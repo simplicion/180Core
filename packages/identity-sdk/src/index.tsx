@@ -37,6 +37,10 @@ export interface AppClientConfig {
   authMobileDefault?: 'popup' | 'bottom_sheet' | 'fullscreen' | 'redirect';
   payDesktopDefault?: 'popup' | 'bottom_sheet' | 'full_page' | 'redirect';
   payMobileDefault?: 'popup' | 'bottom_sheet' | 'full_page' | 'redirect';
+  enableGoogleAuth?: boolean;
+  enableLinkedInAuth?: boolean;
+  enableGitHubAuth?: boolean;
+  enableEmailAuth?: boolean;
 }
 
 export interface OpenPopupOptions {
@@ -279,9 +283,14 @@ export function getCachedAppConfig(clientId: string): AppClientConfig | null {
 export function setCachedAppConfig(clientId: string, config: AppClientConfig): void {
   if (!clientId) return;
   APP_CONFIG_CACHE.set(clientId, config);
-  if (typeof window !== 'undefined' && window.sessionStorage) {
+  if (typeof window !== 'undefined') {
     try {
-      window.sessionStorage.setItem(`__180_app_config_${clientId}__`, JSON.stringify(config));
+      if (window.sessionStorage) {
+        window.sessionStorage.setItem(`__180_app_config_${clientId}__`, JSON.stringify(config));
+      }
+      if (window.localStorage) {
+        window.localStorage.setItem(`180_oauth_app_${clientId}`, JSON.stringify(config));
+      }
     } catch (_) {}
   }
 }
@@ -313,6 +322,10 @@ export async function prefetchAppConfig(clientId: string, customServerUrl?: stri
           authMobileDefault: data.authMobileDefault || 'bottom_sheet',
           payDesktopDefault: data.payDesktopDefault || 'bottom_sheet',
           payMobileDefault: data.payMobileDefault || 'bottom_sheet',
+          enableGoogleAuth: data.enableGoogleAuth !== false,
+          enableLinkedInAuth: data.enableLinkedInAuth !== false,
+          enableGitHubAuth: data.enableGitHubAuth !== false,
+          enableEmailAuth: data.enableEmailAuth !== false,
         };
         setCachedAppConfig(clientId, config);
         return config;
@@ -334,6 +347,10 @@ export async function prefetchAppConfig(clientId: string, customServerUrl?: stri
             authMobileDefault: app.authMobileDefault || data?.authMobileDefault || 'bottom_sheet',
             payDesktopDefault: app.payDesktopDefault || data?.payDesktopDefault || 'bottom_sheet',
             payMobileDefault: app.payMobileDefault || data?.payMobileDefault || 'bottom_sheet',
+            enableGoogleAuth: (app as any).enableGoogleAuth !== false,
+            enableLinkedInAuth: (app as any).enableLinkedInAuth !== false,
+            enableGitHubAuth: (app as any).enableGitHubAuth !== false,
+            enableEmailAuth: (app as any).enableEmailAuth !== false,
           };
           setCachedAppConfig(clientId, config);
           return config;
@@ -868,7 +885,16 @@ export const OneEightyIdentity = {
     const responseType = options.responseType || 'code';
 
     // Always use adaptive in-DOM bottom sheet (bottom sheet on mobile, centered modal card on desktop)
-    const authUrl = `${authServer}/auth/login?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(state)}&response_type=${encodeURIComponent(responseType)}&ux_mode=bottom_sheet&env=${encodeURIComponent(env)}&app=auth`;
+    const cachedConfig = getCachedAppConfig(clientId);
+    let authUrl = `${authServer}/auth/login?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(state)}&response_type=${encodeURIComponent(responseType)}&ux_mode=bottom_sheet&env=${encodeURIComponent(env)}&app=auth`;
+    if (cachedConfig) {
+      if (cachedConfig.name) authUrl += `&appName=${encodeURIComponent(cachedConfig.name)}`;
+      if (cachedConfig.logoUrl) authUrl += `&appLogo=${encodeURIComponent(cachedConfig.logoUrl)}`;
+      if (cachedConfig.enableGoogleAuth !== undefined) authUrl += `&google=${cachedConfig.enableGoogleAuth ? '1' : '0'}`;
+      if (cachedConfig.enableLinkedInAuth !== undefined) authUrl += `&linkedin=${cachedConfig.enableLinkedInAuth ? '1' : '0'}`;
+      if (cachedConfig.enableGitHubAuth !== undefined) authUrl += `&github=${cachedConfig.enableGitHubAuth ? '1' : '0'}`;
+      if (cachedConfig.enableEmailAuth !== undefined) authUrl += `&email=${cachedConfig.enableEmailAuth ? '1' : '0'}`;
+    }
 
     return openInBottomSheet<AuthResponse>({
       url: authUrl,

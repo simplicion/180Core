@@ -72,9 +72,9 @@ export async function getResolvedOAuthApp(effectiveClientId: string): Promise<an
     }
 
     if (app) {
-        globalOAuthAppCache.set(effectiveClientId, app, 60000);
+        globalOAuthAppCache.set(effectiveClientId, app, 300000);
     } else {
-        globalOAuthAppCache.set(effectiveClientId, NOT_FOUND_SENTINEL, 10000);
+        globalOAuthAppCache.set(effectiveClientId, NOT_FOUND_SENTINEL, 15000);
     }
     return app;
 }
@@ -393,6 +393,7 @@ export class OAuthController {
 
             const computedDefaultUx = isMobileReq ? authMobileDefault : authDesktopDefault;
 
+            res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
             return res.json({
                 success: true,
                 app: clientPayload,
@@ -465,7 +466,7 @@ export class OAuthController {
             }
 
             // High performance edge & client cache header
-            res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+            res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
             return res.json({
                 success: true,
                 app: {
@@ -514,6 +515,7 @@ export class OAuthController {
                 return res.status(404).json({ error: 'client_not_found', error_description: `OAuth Application '${clientId}' was not found or is inactive.` });
             }
 
+            res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
             return res.json({
                 success: true,
                 clientId: app.clientId,

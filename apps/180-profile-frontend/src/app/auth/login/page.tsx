@@ -34,6 +34,57 @@ import { resolveUserAvatar, getFallbackAvatar } from '@/lib/avatar';
 
 type AuthScreenMode = 'login' | 'signup' | 'otp' | 'password' | 'onboarding';
 
+function AuthScreenSkeleton() {
+  return (
+    <div className="space-y-5 animate-in fade-in duration-200">
+      {/* App Header Skeleton */}
+      <div className="flex flex-col items-center gap-2.5 pb-2">
+        <div className="w-16 h-16 rounded-2xl bg-slate-100 border border-slate-200/60 animate-pulse flex items-center justify-center p-2.5">
+          <div className="w-8 h-8 rounded-lg bg-slate-200/60" />
+        </div>
+        <div className="space-y-1.5 flex flex-col items-center">
+          <div className="h-5 w-36 bg-slate-200/80 rounded-md animate-pulse" />
+          <div className="h-3.5 w-48 bg-slate-100 rounded-md animate-pulse" />
+        </div>
+      </div>
+
+      {/* Social Button Skeleton */}
+      <div className="space-y-2.5">
+        <div className="w-full h-[42px] bg-slate-100/90 border border-slate-200/60 rounded-xl animate-pulse" />
+      </div>
+
+      {/* Divider */}
+      <div className="relative flex items-center justify-center my-3">
+        <div className="border-t border-slate-200/60 w-full" />
+        <span className="bg-white px-3 text-[10px] font-bold text-slate-300 uppercase tracking-wider relative">
+          or continue with email
+        </span>
+      </div>
+
+      {/* Form Fields Skeleton */}
+      <div className="space-y-3.5">
+        <div>
+          <div className="h-3 w-20 bg-slate-200/70 rounded mb-1.5 animate-pulse" />
+          <div className="w-full h-[42px] bg-slate-50 border border-slate-200/80 rounded-xl animate-pulse" />
+        </div>
+        <div>
+          <div className="flex justify-between mb-1.5">
+            <div className="h-3 w-16 bg-slate-200/70 rounded animate-pulse" />
+            <div className="h-3 w-24 bg-slate-100 rounded animate-pulse" />
+          </div>
+          <div className="w-full h-[42px] bg-slate-50 border border-slate-200/80 rounded-xl animate-pulse" />
+        </div>
+        <div className="w-full h-[44px] bg-blue-600/30 rounded-xl animate-pulse" />
+      </div>
+
+      {/* Switch Link Skeleton */}
+      <div className="pt-2 text-center border-t border-slate-100">
+        <div className="h-3.5 w-44 bg-slate-100 rounded mx-auto animate-pulse" />
+      </div>
+    </div>
+  );
+}
+
 function LoginFormContent() {
   const searchParams = useSearchParams();
   const oauthParams = extractOAuthParams(searchParams);
@@ -50,6 +101,40 @@ function LoginFormContent() {
     details?: OAuthErrorDetails;
   } | null>(null);
   const [isValidatingOAuth, setIsValidatingOAuth] = useState(false);
+
+  // Authoritative app readiness check (synchronous frame-0 check)
+  const [isAppConfigReady, setIsAppConfigReady] = useState<boolean>(() => {
+    if (!oauthParams.clientId) return true;
+    const urlName = searchParams.get('appName') || searchParams.get('app_name');
+    if (urlName && urlName.trim() && !urlName.startsWith('180_client_')) {
+      return true;
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(`180_oauth_app_${oauthParams.clientId}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.name) return true;
+        }
+      } catch (_) {}
+    }
+    return false;
+  });
+
+  const [ssoConfig, setSsoConfig] = useState<{
+    google?: { clientId?: string };
+    linkedin?: { clientId?: string };
+    github?: { clientId?: string };
+  } | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('180_sso_config');
+        if (raw) return JSON.parse(raw);
+      } catch (_) {}
+    }
+    return null;
+  });
+
   const [oauthApp, setOauthApp] = useState<{
     name: string;
     logoUrl: string;
@@ -62,17 +147,56 @@ function LoginFormContent() {
     enableEmailAuth?: boolean;
   } | null>(() => {
     if (!oauthParams.clientId) return null;
-    return {
-      name: searchParams.get('appName') || (oauthParams.clientId.startsWith('180') ? '180 Identity' : oauthParams.clientId),
-      logoUrl: searchParams.get('appLogo') || '',
-      description: searchParams.get('appDescription') || '',
-      isVerified: true,
-      clientId: oauthParams.clientId,
-      enableGoogleAuth: true,
-      enableLinkedInAuth: true,
-      enableGitHubAuth: true,
-      enableEmailAuth: true,
-    };
+
+    const urlName = searchParams.get('appName') || searchParams.get('app_name');
+    const urlLogo = searchParams.get('appLogo') || searchParams.get('app_logo');
+    const urlDesc = searchParams.get('appDescription') || searchParams.get('app_description') || '';
+    const hasGoogle = searchParams.has('google') || searchParams.has('enableGoogleAuth');
+    const hasLinkedIn = searchParams.has('linkedin') || searchParams.has('enableLinkedInAuth');
+    const hasGitHub = searchParams.has('github') || searchParams.has('enableGitHubAuth');
+    const hasEmail = searchParams.has('email') || searchParams.has('enableEmailAuth');
+
+    // 1. Check local storage cache
+    let cachedApp: any = null;
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(`180_oauth_app_${oauthParams.clientId}`);
+        if (raw) cachedApp = JSON.parse(raw);
+      } catch (_) {}
+    }
+
+    // 2. If URL provided an authoritative name (e.g. from SDK prefetch), use it immediately
+    if (urlName && urlName.trim() && !urlName.startsWith('180_client_')) {
+      return {
+        name: urlName.trim(),
+        logoUrl: urlLogo || cachedApp?.logoUrl || '',
+        description: urlDesc || cachedApp?.description || '',
+        isVerified: true,
+        clientId: oauthParams.clientId,
+        enableGoogleAuth: hasGoogle ? (searchParams.get('google') === '1' || searchParams.get('enableGoogleAuth') === 'true') : (cachedApp?.enableGoogleAuth !== false),
+        enableLinkedInAuth: hasLinkedIn ? (searchParams.get('linkedin') === '1' || searchParams.get('enableLinkedInAuth') === 'true') : (cachedApp?.enableLinkedInAuth !== false),
+        enableGitHubAuth: hasGitHub ? (searchParams.get('github') === '1' || searchParams.get('enableGitHubAuth') === 'true') : (cachedApp?.enableGitHubAuth !== false),
+        enableEmailAuth: hasEmail ? (searchParams.get('email') === '1' || searchParams.get('enableEmailAuth') === 'true') : (cachedApp?.enableEmailAuth !== false),
+      };
+    }
+
+    // 3. If cached in localStorage, use cached app immediately
+    if (cachedApp && cachedApp.name) {
+      return {
+        name: cachedApp.name,
+        logoUrl: cachedApp.logoUrl || '',
+        description: cachedApp.description || '',
+        isVerified: cachedApp.isVerified ?? true,
+        clientId: oauthParams.clientId,
+        enableGoogleAuth: cachedApp.enableGoogleAuth !== false,
+        enableLinkedInAuth: cachedApp.enableLinkedInAuth !== false,
+        enableGitHubAuth: cachedApp.enableGitHubAuth !== false,
+        enableEmailAuth: cachedApp.enableEmailAuth !== false,
+      };
+    }
+
+    // 4. Cold cache and no URL metadata: return null so skeleton displays cleanly without layout shift
+    return null;
   });
 
   // Cached User Session (for 1-click return)
@@ -216,7 +340,7 @@ function LoginFormContent() {
         const data = await res.json().catch(() => ({}));
         const appData = data.app || data.client;
         if (appData) {
-          setOauthApp({
+          const resolved = {
             name: appData.name || oauthParams.clientId,
             logoUrl: appData.logoUrl || '',
             description: appData.description || '',
@@ -226,7 +350,18 @@ function LoginFormContent() {
             enableLinkedInAuth: appData.enableLinkedInAuth !== false,
             enableGitHubAuth: appData.enableGitHubAuth !== false,
             enableEmailAuth: appData.enableEmailAuth !== false,
-          });
+          };
+          setOauthApp(resolved);
+          setIsAppConfigReady(true);
+          try {
+            localStorage.setItem(`180_oauth_app_${oauthParams.clientId}`, JSON.stringify(resolved));
+          } catch (_) {}
+        }
+        if (data.sso) {
+          setSsoConfig(data.sso);
+          try {
+            localStorage.setItem('180_sso_config', JSON.stringify(data.sso));
+          } catch (_) {}
         }
         if (data.isOriginAllowed === false) {
           setOauthValidationError({
@@ -247,6 +382,7 @@ function LoginFormContent() {
       console.warn('[180 Identity] OAuth pre-validation note:', e.message);
     } finally {
       setIsValidatingOAuth(false);
+      setIsAppConfigReady(true);
     }
   }, [oauthParams.clientId, oauthParams.redirectUri, oauthParams.scope, oauthParams.state, searchParams]);
 
@@ -869,6 +1005,8 @@ function LoginFormContent() {
           onRetry={validateOAuthParams}
           onClose={() => setOauthValidationError(null)}
         />
+      ) : oauthParams.clientId && !isAppConfigReady ? (
+        <AuthScreenSkeleton />
       ) : (
         <>
       {/* ─────────────────────────────────────────────────────────────────────────────
@@ -981,6 +1119,7 @@ function LoginFormContent() {
                   <GoogleSSOButton
                     oauthParams={oauthParams}
                     label="Continue with Google"
+                    clientId={ssoConfig?.google?.clientId}
                     onSuccess={handleGoogleSuccess}
                   />
                 )}
@@ -989,6 +1128,7 @@ function LoginFormContent() {
                   <LinkedInSSOButton
                     oauthParams={oauthParams}
                     label="Continue with LinkedIn"
+                    clientId={ssoConfig?.linkedin?.clientId}
                     onSuccess={handleGoogleSuccess}
                   />
                 )}
@@ -997,6 +1137,7 @@ function LoginFormContent() {
                   <GitHubSSOButton
                     oauthParams={oauthParams}
                     label="Continue with GitHub"
+                    clientId={ssoConfig?.github?.clientId}
                     onSuccess={handleGoogleSuccess}
                   />
                 )}
@@ -1119,6 +1260,7 @@ function LoginFormContent() {
                   <GoogleSSOButton
                     oauthParams={oauthParams}
                     label="Sign up with Google"
+                    clientId={ssoConfig?.google?.clientId}
                     onSuccess={handleGoogleSuccess}
                   />
                 )}
@@ -1127,6 +1269,7 @@ function LoginFormContent() {
                   <LinkedInSSOButton
                     oauthParams={oauthParams}
                     label="Sign up with LinkedIn"
+                    clientId={ssoConfig?.linkedin?.clientId}
                     onSuccess={handleGoogleSuccess}
                   />
                 )}
@@ -1135,6 +1278,7 @@ function LoginFormContent() {
                   <GitHubSSOButton
                     oauthParams={oauthParams}
                     label="Sign up with GitHub"
+                    clientId={ssoConfig?.github?.clientId}
                     onSuccess={handleGoogleSuccess}
                   />
                 )}
@@ -1594,14 +1738,7 @@ function LoginFormContent() {
 
 export default function StandaloneLoginPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="py-12 text-center space-y-4 max-w-sm mx-auto flex flex-col items-center justify-center">
-          <LogoLoader size={36} className="w-9 h-9 text-blue-600 animate-spin" />
-          <p className="text-xs text-slate-500 font-medium">Loading 180 Identity portal...</p>
-        </div>
-      }
-    >
+    <Suspense fallback={<AuthScreenSkeleton />}>
       <LoginFormContent />
     </Suspense>
   );
