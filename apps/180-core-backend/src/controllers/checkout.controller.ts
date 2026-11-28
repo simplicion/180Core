@@ -1,8 +1,32 @@
 'use strict';
 
 import { Request, Response } from 'express';
+import os from 'os';
 import { CheckoutService, CouponService, GeoPricingService, WebhookDispatcherService, IdentityWalletService } from '@workspace/payment-provider';
 import { developersPrisma as prisma } from '@workspace/db-180core';
+
+function getLocalLanIp(): string | undefined {
+  if (process.env.NODE_ENV === 'production') return undefined;
+  try {
+    const nets = os.networkInterfaces();
+    const candidates: string[] = [];
+    for (const ifaceList of Object.values(nets)) {
+      if (!ifaceList) continue;
+      for (const iface of ifaceList) {
+        if (iface.family === 'IPv4' && !iface.internal && iface.address) {
+          candidates.push(iface.address);
+        }
+      }
+    }
+    return (
+      candidates.find((ip) => ip.startsWith('192.168.')) ||
+      candidates.find((ip) => ip.startsWith('10.')) ||
+      candidates[0]
+    );
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Authorizes first-party 180 Core platform origins and hosted payment links.
@@ -29,12 +53,13 @@ export function isAuthorizedPlatformOrigin(
   // 2. Platform master application
   if (appName === '180 Core') return true;
 
-  // 3. Local development origins for 180 Core ecosystem (Profile, Devs, Landing, API)
+  // 3. Local development origins for 180 Core ecosystem (Profile, Devs, Landing, API, and LAN IPs in non-prod)
   if (
     cleanOrigin.startsWith('http://localhost:') ||
     cleanOrigin.startsWith('https://localhost:') ||
     cleanOrigin.startsWith('http://127.0.0.1:') ||
-    cleanOrigin.startsWith('https://127.0.0.1:')
+    cleanOrigin.startsWith('https://127.0.0.1:') ||
+    (process.env.NODE_ENV !== 'production' && /^https?:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/.test(cleanOrigin))
   ) {
     return true;
   }
@@ -572,7 +597,8 @@ export class CheckoutApiController {
         }
       }
 
-      return res.json({ success: true, session, data: session });
+      const lanIp = getLocalLanIp();
+      return res.json({ success: true, session: { ...session, ...(lanIp ? { lanIp } : {}) }, data: { ...session, ...(lanIp ? { lanIp } : {}) } });
     } catch (err: any) {
       console.error('[CheckoutApiController:getCheckoutSession] Error:', err);
       return res.status(404).json({ success: false, error: err.message });
@@ -842,7 +868,9 @@ export class CheckoutApiController {
         cancelUrl,
         origin: rawOrigin || undefined,
       });
-      return res.json({ success: true, ...order, data: order });
+      const lanIp = getLocalLanIp();
+      const orderWithLan = lanIp ? { ...order, lanIp } : order;
+      return res.json({ success: true, ...orderWithLan, data: orderWithLan });
     } catch (err: any) {
       console.error('[CheckoutApiController:createDirectOrder] Error:', err);
       return res.status(400).json({ success: false, error: err.message });

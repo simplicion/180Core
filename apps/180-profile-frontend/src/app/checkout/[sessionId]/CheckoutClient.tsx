@@ -1715,11 +1715,18 @@ export function CheckoutClient({
         return;
       }
 
-      // Generate a standard web QR pointing to this 180 Pay checkout page
+      // Generate a standard web QR pointing to this 180 Pay checkout page (auto-replace localhost with LAN IP for phone scanning)
       const targetId = session?.id || sessionId;
-      const qrBaseOrigin =
-        process.env.NEXT_PUBLIC_PUBLIC_CHECKOUT_ORIGIN ||
-        (typeof window !== 'undefined' ? window.location.origin : '');
+      let qrBaseOrigin = process.env.NEXT_PUBLIC_PUBLIC_CHECKOUT_ORIGIN || '';
+      if (!qrBaseOrigin && typeof window !== 'undefined') {
+        const { protocol, hostname, port, origin } = window.location;
+        const lanIp = orderInfo?.lanIp || session?.lanIp;
+        if ((hostname === 'localhost' || hostname === '127.0.0.1') && lanIp) {
+          qrBaseOrigin = `${protocol}//${lanIp}${port ? `:${port}` : ''}`;
+        } else {
+          qrBaseOrigin = origin;
+        }
+      }
       const mobilePageUrl = qrBaseOrigin
         ? `${qrBaseOrigin.replace(/\/$/, '')}/checkout/${encodeURIComponent(targetId)}?rail=upi`
         : effectiveUpi.qrPayload;
