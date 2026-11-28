@@ -53,3 +53,27 @@ export const generalApiLimiter = rateLimit({
   },
 }) as any;
 
+export const checkoutVerifyLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: process.env.NODE_ENV === 'production' ? 12 : 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req: any) => req.method === 'OPTIONS',
+  message: {
+    success: false,
+    error: 'Too many payment verification attempts. Please wait a minute and try again.',
+  },
+}) as any;
+
+export const checkoutOrderLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: process.env.NODE_ENV === 'production' ? 30 : 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req: any) => req.method === 'OPTIONS',
+  message: {
+    success: false,
+    error: 'Too many checkout requests. Please slow down.',
+  },
+}) as any;
+

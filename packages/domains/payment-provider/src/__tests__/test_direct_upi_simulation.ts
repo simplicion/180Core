@@ -1,6 +1,6 @@
 'use strict';
 
-import { CheckoutService, validateNpciUtr } from '../checkout/checkout.service';
+import { CheckoutService, validateNpciUtr, isValidUpiVpa, encryptGatewaySecret, decryptGatewaySecret } from '../checkout/checkout.service';
 import { developersPrisma as prisma } from '@workspace/db-180core';
 
 async function runDirectUpiSimulation() {
@@ -319,12 +319,79 @@ async function runDirectUpiSimulation() {
     }
     assert(reVerificationBlocked, 'Bypass blocked: cannot re-verify a disputed or cancelled checkout session');
 
+    // -------------------------------------------------------------------------
+    // SUITE 5: Audit Remediation Regression Checks
+    // -------------------------------------------------------------------------
+    console.log('\n--- SUITE 5: Audit Remediation Regression Checks ---');
+
+    // Test F: VPA format validation & Gateway secret encryption roundtrip
+    assert(isValidUpiVpa('merchant@okhdfcbank'), 'Valid UPI VPA passes server-side validation');
+    assert(!isValidUpiVpa('invalid-vpa-without-at'), 'Malformed UPI VPA without @ is rejected');
+    const encSecret = encryptGatewaySecret('rzp_live_secret_xyz');
+    assert(encSecret.startsWith('enc:v1:'), 'Gateway secret is AES-256-GCM encrypted at rest');
+    assert(decryptGatewaySecret(encSecret) === 'rzp_live_secret_xyz', 'Gateway secret decrypts cleanly');
+
+    // Test G: Direct UPI does NOT inflate withdrawable appWallet balance (logs DIRECT_UPI_SETTLED with amount=0)
+    const directLedger = await prisma.ledgerEntry.findFirst({
+      where: { referenceId: autoVerifyResultA.transactionId },
+    });
+    assert(directLedger?.type === 'DIRECT_UPI_SETTLED' && directLedger.amount === 0, 'Direct UPI logs zero-balance DIRECT_UPI_SETTLED audit entry');
+
+    // Test H: executeDirectPayment (direct-pay) blocked for paid DIRECT_UPI sessions
+    const testSessionC = await prisma.checkoutSession.create({
+      data: {
+        appId: testDbApp.id,
+        amount: 250.00,
+        currency: 'INR',
+        title: 'Bypass Block Test',
+        status: 'PENDING',
+        expiresAt: new Date(Date.now() + 3600 * 1000),
+      },
+    });
+    await prisma.oAuthApp.update({
+      where: { id: testDbApp.id },
+      data: { customGatewayType: 'DIRECT_UPI', enablePlatformGateway: false },
+    });
+
+    let directPayBypassBlocked = false;
+    try {
+      await CheckoutService.executeDirectPayment({ sessionId: testSessionC.id, paymentMethod: '180_PAY' });
+    } catch (err: any) {
+      if (err.message.includes('Direct bypass payment is disabled')) {
+        directPayBypassBlocked = true;
+      }
+    }
+    assert(directPayBypassBlocked, 'Security: executeDirectPayment blocked on paid DIRECT_UPI session');
+
+    // Test I: Public verifyDirectPayment rejects magic string 'auto_polled_capture' on Razorpay session
+    await prisma.oAuthApp.update({
+      where: { id: testDbApp.id },
+      data: { customGatewayType: 'RAZORPAY', customGatewayKeyId: 'rzp_test_123', customGatewaySecret: encryptGatewaySecret('rzp_secret_123'), enablePlatformGateway: true },
+    });
+    let magicSigBlocked = false;
+    try {
+      await CheckoutService.verifyDirectPayment({
+        sessionId: testSessionC.id,
+        orderId: 'order_fake_123',
+        paymentId: 'pay_fake_123',
+        signature: 'auto_polled_capture',
+      });
+    } catch (err: any) {
+      if (err.message.includes('signature verification failed')) {
+        magicSigBlocked = true;
+      }
+    }
+    assert(magicSigBlocked, 'Security: verifyDirectPayment rejects auto_polled_capture magic string');
+
     // Clean up test sessions & verifications
     await prisma.upiPaymentVerification.deleteMany({
-      where: { sessionId: { in: [testSessionA.id, testSessionB.id, testSessionDual.id] } },
+      where: { sessionId: { in: [testSessionA.id, testSessionB.id, testSessionDual.id, testSessionC.id] } },
+    });
+    await prisma.ledgerEntry.deleteMany({
+      where: { referenceId: autoVerifyResultA.transactionId },
     });
     await prisma.checkoutSession.deleteMany({
-      where: { id: { in: [testSessionA.id, testSessionB.id, testSessionDual.id] } },
+      where: { id: { in: [testSessionA.id, testSessionB.id, testSessionDual.id, testSessionC.id] } },
     });
     console.log('\nTest artifacts cleaned up successfully.');
 

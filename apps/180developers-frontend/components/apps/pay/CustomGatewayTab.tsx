@@ -17,6 +17,9 @@ import {
   ShieldCheck,
   ExternalLink,
   ArrowRight,
+  Copy,
+  Check,
+  BellRing,
 } from 'lucide-react';
 import { Button } from '@workspace/ui';
 import { toast } from 'react-hot-toast';
@@ -58,15 +61,37 @@ export function CustomGatewayTab({ appId }: CustomGatewayTabProps) {
   const [hasSecret, setHasSecret] = useState(false);
 
   const [showSecret, setShowSecret] = useState(false);
+  const [bankListener, setBankListener] = useState<{
+    appId: string;
+    clientId: string;
+    webhookUrl: string;
+    bankListenerSecret: string;
+    inboundAlertAddress: string;
+  } | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const copyText = (label: string, value: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(value);
+      setCopiedField(label);
+      toast.success(`${label} copied`);
+      setTimeout(() => setCopiedField(null), 2000);
+    }
+  };
 
   const fetchSettings = useCallback(async () => {
     setLoading(true);
     try {
       const apiBase = getApiBase();
       const token = getAuthToken();
-      const res = await fetch(`${apiBase}/api/v1/developer/apps/${appId}/gateway`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const [res, listenerRes] = await Promise.all([
+        fetch(`${apiBase}/api/v1/developer/apps/${appId}/gateway`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }),
+        fetch(`${apiBase}/api/v1/developer/apps/${appId}/bank-listener`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }).catch(() => null),
+      ]);
       const data = await res.json();
       if (res.ok && data.success && data.data) {
         const d: GatewaySettings = data.data;
@@ -80,6 +105,12 @@ export function CustomGatewayTab({ appId }: CustomGatewayTabProps) {
         setEnableDirectUpi(d.enableDirectUpi !== false);
         setEnablePlatformGateway(d.enablePlatformGateway !== false);
         setHasSecret(d.hasSecret || false);
+      }
+      if (listenerRes && listenerRes.ok) {
+        const listenerData = await listenerRes.json();
+        if (listenerData.success && listenerData.data) {
+          setBankListener(listenerData.data);
+        }
       }
     } catch {
       toast.error('Failed to load gateway settings');
@@ -336,6 +367,61 @@ export function CustomGatewayTab({ appId }: CustomGatewayTabProps) {
                     The payee name shown to customers inside Google Pay, PhonePe, and Paytm.
                   </span>
                 </div>
+
+                {bankListener && (
+                  <div className="sm:col-span-2 rounded-xl border border-indigo-500/20 bg-indigo-500/[0.04] dark:bg-indigo-500/[0.06] p-4 space-y-3 mt-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <BellRing className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                        <span className="text-xs font-bold text-zinc-950 dark:text-white">
+                          Zero-Typing Bank Alert Auto-Verification (Method A &amp; Method B)
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                        Instant 2s Match
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                      Connect your Bank Email Alert forwarder (Gmail/Outlook) or Android Notification Listener (MacroDroid/Tasker) to this endpoint. Incoming bank credit alerts automatically match and verify customer payments in real time without manual UTR entry.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
+                      <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 space-y-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">
+                          Bank Listener Webhook URL
+                        </span>
+                        <div className="flex items-center justify-between gap-2">
+                          <code className="font-mono text-zinc-900 dark:text-zinc-100 truncate">
+                            {bankListener.webhookUrl}
+                          </code>
+                          <button
+                            type="button"
+                            onClick={() => copyText('Webhook URL', bankListener.webhookUrl)}
+                            className="p-1 text-zinc-400 hover:text-zinc-900 dark:hover:text-white cursor-pointer shrink-0"
+                          >
+                            {copiedField === 'Webhook URL' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="p-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 space-y-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">
+                          Listener Secret Header (x-180-bank-secret)
+                        </span>
+                        <div className="flex items-center justify-between gap-2">
+                          <code className="font-mono text-zinc-900 dark:text-zinc-100 truncate">
+                            {bankListener.bankListenerSecret}
+                          </code>
+                          <button
+                            type="button"
+                            onClick={() => copyText('Listener Secret', bankListener.bankListenerSecret)}
+                            className="p-1 text-zinc-400 hover:text-zinc-900 dark:hover:text-white cursor-pointer shrink-0"
+                          >
+                            {copiedField === 'Listener Secret' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <p className="text-xs text-zinc-400 dark:text-zinc-500 italic pt-1">

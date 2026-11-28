@@ -68,6 +68,163 @@ export interface CreateCheckoutSessionInput {
   paymentSource?: 'WALLET' | 'RAZORPAY_RECURRING' | 'HYBRID';
 }
 
+const UPI_VPA_REGEX = /^[a-zA-Z0-9._-]{2,256}@[a-zA-Z0-9.-]{2,64}$/;
+
+export function isValidUpiVpa(vpa: string): boolean {
+  if (!vpa || typeof vpa !== 'string') return false;
+  return UPI_VPA_REGEX.test(vpa.trim());
+}
+
+function getGatewayEncryptionKey(): Buffer {
+  const rawSecret =
+    process.env.GATEWAY_ENCRYPTION_KEY ||
+    process.env.ENCRYPTION_KEY ||
+    process.env.JWT_SECRET ||
+    '180core_dev_gateway_key_fallback';
+  return crypto.createHash('sha256').update(rawSecret).digest();
+}
+
+export function encryptGatewaySecret(plaintext: string): string {
+  if (!plaintext) return '';
+  if (plaintext.startsWith('enc:v1:')) return plaintext;
+  const iv = crypto.randomBytes(12);
+  const key = getGatewayEncryptionKey();
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `enc:v1:${iv.toString('hex')}:${tag.toString('hex')}:${encrypted.toString('hex')}`;
+}
+
+export function decryptGatewaySecret(ciphertext?: string | null): string {
+  if (!ciphertext) return '';
+  if (!ciphertext.startsWith('enc:v1:')) return ciphertext;
+  try {
+    const parts = ciphertext.split(':');
+    if (parts.length !== 5) return ciphertext;
+    const iv = Buffer.from(parts[2], 'hex');
+    const tag = Buffer.from(parts[3], 'hex');
+    const encrypted = Buffer.from(parts[4], 'hex');
+    const key = getGatewayEncryptionKey();
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
+  } catch {
+    return '';
+  }
+}
+
+export function computeBankListenerSecret(appId: string): string {
+  return crypto
+    .createHmac('sha256', getGatewayEncryptionKey())
+    .update(`upi_bank_listener:${appId}`)
+    .digest('hex')
+    .slice(0, 48);
+}
+
+export function verifyBankListenerSecret(app: any, providedSecret: string): boolean {
+  if (!app?.id || !providedSecret || typeof providedSecret !== 'string') return false;
+  const cleanProvided = providedSecret.trim();
+  const derivedSecret = computeBankListenerSecret(app.id);
+  if (timingSafeCompare(derivedSecret, cleanProvided)) return true;
+  const customWebhookSecret = decryptGatewaySecret(app.customGatewayWebhookSecret);
+  if (customWebhookSecret && timingSafeCompare(customWebhookSecret, cleanProvided)) return true;
+  return false;
+}
+
+export interface ParsedBankUpiAlert {
+  isCredit: boolean;
+  amount?: number;
+  utr?: string;
+  sessionRef?: string;
+  payerVpa?: string;
+  rejectionReason?: string;
+}
+
+/**
+ * Parses Indian bank SMS, email, and UPI business app notifications (HDFC, ICICI, SBI, Axis, Kotak, PhonePe/GPay/Paytm Business).
+ * Strictly rejects OTPs, debits, failed/declined alerts, and mandate notifications.
+ */
+export function parseIndianBankUpiAlert(rawText: string): ParsedBankUpiAlert {
+  if (!rawText || typeof rawText !== 'string') {
+    return { isCredit: false, rejectionReason: 'Empty bank alert payload' };
+  }
+
+  const text = rawText.replace(/\s+/g, ' ').trim();
+  const lower = text.toLowerCase();
+
+  // Reject OTPs and security codes immediately
+  if (/\b(otp|one[\s-]*time[\s-]*password|verification\s*code|cvv|mpin|upi\s*pin)\b/i.test(lower)) {
+    return { isCredit: false, rejectionReason: 'Rejected OTP or security notification' };
+  }
+
+  // Reject failed / declined / reversed / pending alerts
+  if (/\b(failed|declined|unsuccessful|rejected|cancelled|canceled|expired|pending)\b/i.test(lower)) {
+    return { isCredit: false, rejectionReason: 'Rejected non-success transaction alert' };
+  }
+
+  // Reject debit / outgoing payment messages (unless explicitly indicating a credit to merchant)
+  const hasDebitKeyword = /\b(debited|withdrawn|spent|paid\s+(?:rs|inr|₹)|sent\s+(?:rs|inr|₹)|transferred\s+to|dr\.?\s+from|auto-?debit|will\s+be\s+debited)\b/i.test(lower);
+  const hasCreditKeyword = /\b(credited|received|deposited|cr\.?\s+to|payment\s+of|received\s+from|paid\s+you|added\s+to\s+your)\b/i.test(lower);
+
+  if (hasDebitKeyword && !hasCreditKeyword) {
+    return { isCredit: false, rejectionReason: 'Rejected outgoing debit alert' };
+  }
+  if (!hasCreditKeyword) {
+    return { isCredit: false, rejectionReason: 'Alert does not indicate an incoming UPI credit' };
+  }
+
+  // Extract INR amount: supports Rs.149.00, INR 1,299.50, ₹499, Rs 49
+  let amount: number | undefined;
+  const amountMatch =
+    text.match(/(?:rs\.?|inr|₹)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i) ||
+    text.match(/([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s*(?:rs\.?|inr)/i);
+  if (amountMatch && amountMatch[1]) {
+    const parsed = parseFloat(amountMatch[1].replace(/,/g, ''));
+    if (!isNaN(parsed) && parsed > 0) {
+      amount = Math.round(parsed * 100) / 100;
+    }
+  }
+
+  // Extract 12-digit NPCI UTR (prioritize explicit UTR/Ref/UPI labels first)
+  let utr: string | undefined;
+  const labeledUtrMatch =
+    text.match(/(?:utr|upi\s*ref(?:\s*no\.?)?|upi\s*txn\s*id|transaction\s*id|ref(?:\s*no\.?|\s*id)?|rrn|imps\/upi)\s*[:#/\-\s]*(\d{12})\b/i) ||
+    text.match(/\/upi\/(\d{12})(?:\/|\b)/i) ||
+    text.match(/\bupi\/(\d{12})\b/i);
+
+  if (labeledUtrMatch && labeledUtrMatch[1]) {
+    utr = labeledUtrMatch[1];
+  } else {
+    const standaloneMatches = text.match(/\b(\d{12})\b/g);
+    if (standaloneMatches && standaloneMatches.length > 0) {
+      utr = standaloneMatches[0];
+    }
+  }
+
+  // Extract 180P_<shortRef> transaction note
+  let sessionRef: string | undefined;
+  const refMatch = text.match(/180P_([a-zA-Z0-9]{6,20})/i);
+  if (refMatch && refMatch[1]) {
+    sessionRef = refMatch[1];
+  }
+
+  // Extract payer VPA if present (ignore common bank domains that aren't VPAs if needed)
+  let payerVpa: string | undefined;
+  const vpaMatches = text.match(/\b([a-zA-Z0-9._-]{2,64}@[a-zA-Z0-9.-]{2,32})\b/g);
+  if (vpaMatches) {
+    const nonEmailVpa = vpaMatches.find((v) => !/\.(com|net|org|in|co\.in)$/i.test(v));
+    if (nonEmailVpa) payerVpa = nonEmailVpa;
+  }
+
+  return {
+    isCredit: true,
+    amount,
+    utr,
+    sessionRef,
+    payerVpa,
+  };
+}
+
 /**
  * Validates whether a 12-digit string adheres to the official NPCI UPI UTR standard:
  * Digit 1: Year digit
@@ -598,8 +755,13 @@ export class CheckoutService {
       }
     }
 
-    // Auto-heal Client SDK & Dynamic Checkout Sessions (e.g. cs_*, sess_*, or dynamic sessions with fallback amount/title)
-    if (!session && (
+    // Auto-heal Client SDK & Dynamic Checkout Sessions (sandbox/demo always allowed; cs_*/sess_* only in non-production)
+    const isSandboxOrDemo =
+      sessionId.startsWith('sess_sandbox_') ||
+      sessionId.startsWith('sess_demo_');
+    const allowDynamicAutoHeal = isSandboxOrDemo || process.env.NODE_ENV !== 'production';
+
+    if (!session && allowDynamicAutoHeal && (
       sessionId.startsWith('cs_') ||
       sessionId.startsWith('sess_') ||
       fallbackData?.amount !== undefined ||
@@ -735,16 +897,24 @@ export class CheckoutService {
       }
     }
 
-    // 2. Active checkout interaction resiliency: if session is PENDING or was EXPIRED without charge,
-    // auto-renew it by 30 minutes to guarantee ZERO payment drops while customer is actively on checkout!
+    // 2. Keep EXPIRED terminal for production sessions; only auto-renew sandbox/demo or active PENDING grace
+    const isSandboxSession = session.id.startsWith('sess_sandbox_') || session.id.startsWith('sess_demo_');
     if (session.status === 'PENDING' && session.expiresAt < new Date()) {
-      const renewedExpiry = new Date(Date.now() + 30 * 60 * 1000);
-      await prisma.checkoutSession.update({
-        where: { id: session.id },
-        data: { expiresAt: renewedExpiry },
-      }).catch(() => {});
-      session.expiresAt = renewedExpiry;
-    } else if (session.status === 'EXPIRED') {
+      if (isSandboxSession || process.env.NODE_ENV !== 'production') {
+        const renewedExpiry = new Date(Date.now() + 30 * 60 * 1000);
+        await prisma.checkoutSession.update({
+          where: { id: session.id },
+          data: { expiresAt: renewedExpiry },
+        }).catch(() => {});
+        session.expiresAt = renewedExpiry;
+      } else {
+        await prisma.checkoutSession.update({
+          where: { id: session.id },
+          data: { status: 'EXPIRED' },
+        }).catch(() => {});
+        session.status = 'EXPIRED';
+      }
+    } else if (session.status === 'EXPIRED' && isSandboxSession) {
       const renewedExpiry = new Date(Date.now() + 30 * 60 * 1000);
       await prisma.checkoutSession.update({
         where: { id: session.id },
@@ -1320,15 +1490,16 @@ export class CheckoutService {
 
     const appAny = app || {};
 
-    // Direct UPI resolution
-    const fallbackPlatformUpi = process.env.PLATFORM_UPI_ID || '180core@okaxis';
-    const rawAppUpi = appAny.customUpiId || (appAny.customGatewayType === 'DIRECT_UPI' ? appAny.customGatewayKeyId : '') || '';
-    const upiId = rawAppUpi || fallbackPlatformUpi;
+    // Direct UPI resolution (strictly requires developer's configured VPA; never fall back to dummy 180core@okaxis)
+    const rawAppUpi = String(
+      appAny.customUpiId || (appAny.customGatewayType === 'DIRECT_UPI' ? appAny.customGatewayKeyId : '') || ''
+    ).trim();
+    const envPlatformUpi = String(process.env.PLATFORM_UPI_ID || '').trim();
+    const upiId = rawAppUpi || envPlatformUpi;
     const upiName = appAny.customUpiName || appAny.name || 'Merchant';
 
-    // Does app enable direct UPI?
-    // Enabled if platform allows it AND app has not explicitly turned it off (enableDirectUpi !== false)
-    const enableDirectUpi = globalDirectUpi && appAny.enableDirectUpi !== false && Boolean(upiId);
+    // Direct UPI is only active when platform allows it, app hasn't disabled it, AND a real VPA is configured
+    const enableDirectUpi = globalDirectUpi && appAny.enableDirectUpi !== false && Boolean(rawAppUpi || (envPlatformUpi && !appAny.id));
 
     // Developer BYOG check
     const hasDeveloperByog = Boolean(
@@ -1395,8 +1566,8 @@ export class CheckoutService {
       return {
         gatewayType: 'STRIPE',
         keyId: appAny.customGatewayKeyId || process.env.STRIPE_PUBLISHABLE_KEY || process.env.STRIPE_KEY_ID || '',
-        keySecret: appAny.customGatewaySecret || process.env.STRIPE_SECRET_KEY || '',
-        webhookSecret: appAny.customGatewayWebhookSecret || process.env.STRIPE_WEBHOOK_SECRET,
+        keySecret: decryptGatewaySecret(appAny.customGatewaySecret) || process.env.STRIPE_SECRET_KEY || '',
+        webhookSecret: decryptGatewaySecret(appAny.customGatewayWebhookSecret) || process.env.STRIPE_WEBHOOK_SECRET,
         customUpiId: enableDirectUpi ? upiId : undefined,
         customUpiName: enableDirectUpi ? upiName : undefined,
         isCustomBYOG: true,
@@ -1411,8 +1582,8 @@ export class CheckoutService {
       return {
         gatewayType: 'RAZORPAY',
         keyId: appAny.customGatewayKeyId,
-        keySecret: appAny.customGatewaySecret,
-        webhookSecret: appAny.customGatewayWebhookSecret || process.env.RAZORPAY_WEBHOOK_SECRET,
+        keySecret: decryptGatewaySecret(appAny.customGatewaySecret),
+        webhookSecret: decryptGatewaySecret(appAny.customGatewayWebhookSecret) || process.env.RAZORPAY_WEBHOOK_SECRET,
         customUpiId: enableDirectUpi ? upiId : undefined,
         customUpiName: enableDirectUpi ? upiName : undefined,
         isCustomBYOG: true,
@@ -1608,7 +1779,8 @@ export class CheckoutService {
     }
 
     if (session.status === 'EXPIRED' || session.expiresAt < new Date()) {
-      if (session.status === 'PENDING') {
+      const isSandboxOrder = session.id.startsWith('sess_sandbox_') || session.id.startsWith('sess_demo_');
+      if (session.status === 'PENDING' && (isSandboxOrder || process.env.NODE_ENV !== 'production')) {
         const renewedExpiry = new Date(Date.now() + 60 * 60 * 1000);
         await prisma.checkoutSession.update({
           where: { id: session.id },
@@ -2170,7 +2342,8 @@ export class CheckoutService {
           },
         });
 
-        // Only credit developer wallet when UTR is verified (not provisional)
+        // Direct Native UPI settles straight to the merchant's bank account (customUpiId), never 180 Core's pool.
+        // Record a zero-balance-impact audit ledger entry so withdrawable appWallet.balance is not inflated.
         if (!isProvisional) {
           let appWallet = await tx.wallet.findUnique({
             where: { developerAppId: session.appId },
@@ -2186,23 +2359,19 @@ export class CheckoutService {
             });
           }
 
-          const newAppBalance = Math.round((appWallet.balance + session.amount) * 100) / 100;
-          await tx.wallet.update({
-            where: { id: appWallet.id },
-            data: { balance: newAppBalance },
-          });
-
           await tx.ledgerEntry.create({
             data: {
               walletId: appWallet.id,
-              amount: session.amount,
-              balanceAfter: newAppBalance,
-              type: 'CHECKOUT_RECEIVE',
+              amount: 0,
+              balanceAfter: appWallet.balance,
+              type: 'DIRECT_UPI_SETTLED',
               referenceId: transactionId,
-              description: `Direct UPI payment received for ${session.title}`,
+              description: `Direct UPI payment (${session.currency || 'INR'} ${session.amount}) settled directly to ${payeeVpa}`,
               metadata: {
                 sessionId: session.id,
                 gateway: 'DIRECT_UPI',
+                directAmount: session.amount,
+                currency: session.currency || 'INR',
                 utr: cleanUtr,
                 verificationType,
                 payeeVpa,
@@ -2292,6 +2461,35 @@ export class CheckoutService {
         });
       }
 
+      // Reverse any legacy CHECKOUT_RECEIVE credit if this session had previously incremented appWallet
+      const txId = (session.metadata as any)?.transactionId;
+      if (txId) {
+        const legacyCredit = await tx.ledgerEntry.findFirst({
+          where: { referenceId: txId, type: 'CHECKOUT_RECEIVE', amount: { gt: 0 } },
+        });
+        if (legacyCredit) {
+          const appWallet = await tx.wallet.findUnique({ where: { id: legacyCredit.walletId } });
+          if (appWallet) {
+            const reversedBalance = Math.round((appWallet.balance - legacyCredit.amount) * 100) / 100;
+            await tx.wallet.update({
+              where: { id: appWallet.id },
+              data: { balance: reversedBalance },
+            });
+            await tx.ledgerEntry.create({
+              data: {
+                walletId: appWallet.id,
+                amount: -legacyCredit.amount,
+                balanceAfter: reversedBalance,
+                type: 'DIRECT_UPI_DISPUTED',
+                referenceId: `rev_${txId}`,
+                description: `Dispute reversal for Direct UPI session ${session.id}`,
+                metadata: { sessionId: session.id, reason: reason || 'Merchant dispute' },
+              },
+            });
+          }
+        }
+      }
+
       return await tx.checkoutSession.update({
         where: { id: session.id },
         data: {
@@ -2323,6 +2521,31 @@ export class CheckoutService {
   private static inFlightVerifications = new Map<string, Promise<any>>();
 
   /**
+   * Internal-only capture path invoked exclusively after Razorpay/Stripe webhook HMAC verification.
+   */
+  static async captureFromVerifiedWebhook(input: {
+    sessionId: string;
+    orderId: string;
+    paymentId: string;
+  }): Promise<any> {
+    const { sessionId } = input;
+    if (this.inFlightVerifications.has(sessionId)) {
+      return await this.inFlightVerifications.get(sessionId)!;
+    }
+
+    const verificationPromise = this._doVerifyDirectPayment({
+      ...input,
+      signature: 'verified_webhook',
+      _internalTrustedWebhook: true,
+    }).finally(() => {
+      this.inFlightVerifications.delete(sessionId);
+    });
+
+    this.inFlightVerifications.set(sessionId, verificationPromise);
+    return await verificationPromise;
+  }
+
+  /**
    * Cryptographically verifies payment (Razorpay HMAC or Stripe PaymentIntent) and captures session.
    * Employs atomic in-flight promise deduplication to prevent concurrent transaction deadlocks.
    */
@@ -2337,7 +2560,13 @@ export class CheckoutService {
       return await this.inFlightVerifications.get(sessionId)!;
     }
 
-    const verificationPromise = this._doVerifyDirectPayment(input).finally(() => {
+    const verificationPromise = this._doVerifyDirectPayment({
+      sessionId: input.sessionId,
+      orderId: input.orderId,
+      paymentId: input.paymentId,
+      signature: input.signature,
+      _internalTrustedWebhook: false,
+    }).finally(() => {
       this.inFlightVerifications.delete(sessionId);
     });
 
@@ -2350,8 +2579,9 @@ export class CheckoutService {
     orderId: string;
     paymentId: string;
     signature: string;
+    _internalTrustedWebhook?: boolean;
   }) {
-    const { sessionId, orderId, paymentId, signature } = input;
+    const { sessionId, orderId, paymentId, signature, _internalTrustedWebhook } = input;
 
     let session = await this.getSession(sessionId, undefined, { skipReconcile: true });
 
@@ -2402,7 +2632,7 @@ export class CheckoutService {
         (process.env.NODE_ENV === 'test' || process.env.NODE_ENV !== 'production' || !hasLiveKey) &&
         (orderId?.startsWith('order_sim_') || signature === 'mock_sig_sandbox' || signature?.startsWith('sig_sim_'));
 
-      if (!isTestMock && signature !== 'auto_polled_capture') {
+      if (!isTestMock && !_internalTrustedWebhook) {
         if (!keySecret) {
           throw new Error('Payment gateway key secret not configured');
         }
@@ -2543,10 +2773,9 @@ export class CheckoutService {
 
       let creditedUserBalance: number | null = null;
       if (isTopUp) {
-        let topupUserId = (session.metadata as any)?.userId || (session as any).userId;
+        const topupUserId = (session.metadata as any)?.userId || (session as any).userId;
         if (!topupUserId) {
-          const fallbackUser = await tx.user.findFirst();
-          if (fallbackUser) topupUserId = fallbackUser.id;
+          throw new Error('Wallet top-up session is missing target userId');
         }
 
         if (topupUserId) {
@@ -2716,12 +2945,19 @@ export class CheckoutService {
     }
 
     const { gatewayType, keySecret } = this.resolveGatewayConfig(session.app);
-    const hasLiveGateway = Boolean(keySecret && !keySecret.includes('simulated'));
     const isFreeCheckout = session.amount !== null && session.amount <= 0;
-    if (hasLiveGateway && !isFreeCheckout) {
-      throw new Error(
-        'Direct bypass payment is disabled in live environment. Please complete payment through Razorpay / Stripe gateway.'
-      );
+    if (!isFreeCheckout) {
+      if (gatewayType === 'DIRECT_UPI' || process.env.NODE_ENV === 'production') {
+        throw new Error(
+          'Direct bypass payment is disabled. Please complete payment through the configured payment rail.'
+        );
+      }
+      const hasLiveGateway = Boolean(keySecret && !keySecret.includes('simulated'));
+      if (hasLiveGateway) {
+        throw new Error(
+          'Direct bypass payment is disabled in live environment. Please complete payment through Razorpay / Stripe gateway.'
+        );
+      }
     }
     const resolvedGateway = gatewayType === 'STRIPE' ? 'STRIPE' : '180_SOVEREIGN_PAY';
     const transactionId = `pay_180_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -2875,6 +3111,144 @@ export class CheckoutService {
       gateway: resolvedGateway,
       returnUrl: result.session.returnUrl,
       fulfillment: (result as any).fulfillment,
+    };
+  }
+
+  /**
+   * Unified Bank Credit Verification Engine (Method A Email Alerts & Method B Android Notification Listener).
+   * Parses incoming bank credit alerts, matches the active Direct UPI checkout session, validates NPCI UTR
+   * and anti-replay uniqueness, and automatically captures the session.
+   */
+  static async ingestBankCreditWebhook(input: {
+    appId: string;
+    secret: string;
+    amount?: number;
+    utr?: string;
+    note?: string;
+    rawText?: string;
+    payerVpa?: string;
+  }) {
+    const { appId, secret, rawText, note } = input;
+    if (!appId || !secret) {
+      throw new Error('Missing appId or bank listener secret');
+    }
+
+    const app = await prisma.oAuthApp.findFirst({
+      where: {
+        OR: [
+          { id: String(appId).trim() },
+          { clientId: String(appId).trim() },
+        ],
+      },
+      select: APP_CHECKOUT_SELECT,
+    });
+
+    if (!app) {
+      throw new Error('Application not found');
+    }
+
+    if (!verifyBankListenerSecret(app, secret)) {
+      throw new Error('Unauthorized: Invalid bank listener secret');
+    }
+
+    let parsed: ParsedBankUpiAlert = { isCredit: true };
+    const combinedText = [rawText, note].filter(Boolean).join(' ');
+    if (combinedText.trim()) {
+      parsed = parseIndianBankUpiAlert(combinedText);
+      if (!parsed.isCredit && !input.amount && !input.utr) {
+        throw new Error(parsed.rejectionReason || 'Rejected non-credit bank alert');
+      }
+      if (!parsed.isCredit && (parsed.rejectionReason?.includes('OTP') || parsed.rejectionReason?.includes('debit') || parsed.rejectionReason?.includes('non-success'))) {
+        throw new Error(parsed.rejectionReason);
+      }
+    }
+
+    const effectiveAmount = typeof input.amount === 'number' && input.amount > 0 ? Math.round(input.amount * 100) / 100 : parsed.amount;
+    const effectiveUtr = String(input.utr || parsed.utr || '').trim().replace(/\D/g, '');
+    const effectiveRef = parsed.sessionRef || (note?.match(/180P_([a-zA-Z0-9]{6,20})/i)?.[1]);
+    const effectivePayerVpa = input.payerVpa || parsed.payerVpa;
+
+    if (!effectiveAmount || effectiveAmount <= 0) {
+      throw new Error('Could not determine positive INR credit amount from bank alert');
+    }
+
+    if (!effectiveUtr || effectiveUtr.length !== 12) {
+      throw new Error('Could not extract valid 12-digit NPCI UTR from bank alert');
+    }
+
+    const utrValidation = validateNpciUtr(effectiveUtr);
+    if (!utrValidation.isValid) {
+      throw new Error(utrValidation.reason || 'Invalid NPCI UTR format in bank alert');
+    }
+
+    // Match active PENDING or PENDING_VERIFICATION session for this app
+    const twentyMinutesAgo = new Date(Date.now() - 20 * 60 * 1000);
+    const candidates = await prisma.checkoutSession.findMany({
+      where: {
+        appId: app.id,
+        status: { in: ['PENDING', 'PENDING_VERIFICATION'] },
+        createdAt: { gte: twentyMinutesAgo },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    let matchedSession: any = null;
+
+    // Priority 1: Exact 180P_<shortRef> match
+    if (effectiveRef) {
+      const normalizedRef = effectiveRef.toLowerCase();
+      matchedSession = candidates.find((s) => s.id.replace(/-/g, '').toLowerCase().startsWith(normalizedRef)) || null;
+      if (matchedSession) {
+        const sessionInr = (matchedSession.currency || 'INR').toUpperCase() === 'INR'
+          ? matchedSession.amount
+          : GeoPricingService.convertCurrency(matchedSession.amount, matchedSession.currency || 'USD', 'INR');
+        if (Math.abs(sessionInr - effectiveAmount) > 1.0) {
+          throw new Error(`Amount mismatch for session ${matchedSession.id}: expected INR ${sessionInr}, received INR ${effectiveAmount}`);
+        }
+      }
+    }
+
+    // Priority 2: Unique active session matching exact INR amount within last 20 minutes
+    if (!matchedSession) {
+      const amountMatches = candidates.filter((s) => {
+        const sessionInr = (s.currency || 'INR').toUpperCase() === 'INR'
+          ? s.amount
+          : GeoPricingService.convertCurrency(s.amount, s.currency || 'USD', 'INR');
+        return Math.abs(sessionInr - effectiveAmount) < 0.05;
+      });
+
+      if (amountMatches.length === 0) {
+        throw new Error(`No matching active Direct UPI checkout session found for INR ${effectiveAmount}`);
+      }
+      if (amountMatches.length > 1) {
+        throw new Error(`Ambiguous match: ${amountMatches.length} active sessions for INR ${effectiveAmount} without 180P_ reference note`);
+      }
+      matchedSession = amountMatches[0];
+    }
+
+    const captureResult = await this.autoVerifyDirectUpiPayment({
+      sessionId: matchedSession.id,
+      approvalRefNo: effectiveUtr,
+      responseCode: '00',
+      status: 'SUCCESS',
+      txnRef: matchedSession.id,
+      payerVpa: effectivePayerVpa,
+      rawPayload: {
+        source: 'UPI_BANK_WEBHOOK',
+        note,
+        rawText,
+        parsedAmount: effectiveAmount,
+      },
+    });
+
+    return {
+      success: true,
+      matchedSessionId: matchedSession.id,
+      utr: effectiveUtr,
+      amount: effectiveAmount,
+      transactionId: captureResult.transactionId,
+      status: captureResult.session?.status || 'CAPTURED',
     };
   }
 }

@@ -412,7 +412,9 @@ export function PayOverviewView() {
               </span>
             </div>
             <p className="text-xs text-zinc-600 dark:text-zinc-400">
-              Configure your receiving UPI ID ({((project as any)?.customUpiId || '180core@okaxis')}) or toggle between Direct Native UPI and 180 Pay Gateway processing.
+              {((project as any)?.customUpiId)
+                ? `Receiving UPI ID: ${(project as any).customUpiId}. Configure Direct Native UPI or 180 Pay Gateway processing.`
+                : 'No receiving UPI ID configured yet. Add your UPI ID to accept Direct Native UPI payments or configure 180 Pay Gateway.'}
             </p>
           </div>
         </div>

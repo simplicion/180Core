@@ -935,6 +935,47 @@ export class CheckoutApiController {
   }
 
   /**
+   * POST /api/v1/checkout/upi-bank-webhook
+   * Unified Bank Credit Alert Ingestion (Method A: Bank Email Forwarder, Method B: Android Notification Listener).
+   */
+  static async ingestUpiBankWebhook(req: Request, res: Response) {
+    try {
+      const secret = String(
+        req.headers['x-180-bank-secret'] ||
+        req.body?.secret ||
+        req.query?.secret ||
+        ''
+      ).trim();
+
+      const appId = String(
+        req.body?.appId ||
+        req.body?.clientId ||
+        req.query?.appId ||
+        ''
+      ).trim();
+
+      const { amount, utr, note, rawText, text, body, message, payerVpa } = req.body || {};
+      const combinedRawText = rawText || text || body || message || undefined;
+
+      const result = await CheckoutService.ingestBankCreditWebhook({
+        appId,
+        secret,
+        amount: typeof amount === 'number' ? amount : amount ? Number(amount) : undefined,
+        utr: utr ? String(utr) : undefined,
+        note: note ? String(note) : undefined,
+        rawText: combinedRawText ? String(combinedRawText) : undefined,
+        payerVpa: payerVpa ? String(payerVpa) : undefined,
+      });
+
+      return res.json({ ...result, data: result });
+    } catch (err: any) {
+      const statusCode = err.message?.startsWith('Unauthorized') ? 401 : 400;
+      console.warn('[CheckoutApiController:ingestUpiBankWebhook] Rejected:', err.message);
+      return res.status(statusCode).json({ success: false, error: err.message });
+    }
+  }
+
+  /**
    * POST /api/v1/checkout/sessions/:id/direct-pay
    * POST /api/oauth/checkout/sessions/:id/direct-pay
    * Directly executes and captures payment inside the 180 Pay pop-up/bottom sheet
@@ -1207,12 +1248,11 @@ export class CheckoutApiController {
 
         if (sessionId && paymentId) {
           console.log(`[CheckoutWebhook] Capturing session ${sessionId} for payment ${paymentId}`);
-          await CheckoutService.verifyDirectPayment({
+          await CheckoutService.captureFromVerifiedWebhook({
             sessionId,
             orderId: orderId || `ord_${Date.now()}`,
             paymentId,
-            signature: 'auto_polled_capture',
-          }).catch((e: any) => console.log('[CheckoutWebhook] verifyDirectPayment warning:', e.message));
+          }).catch((e: any) => console.log('[CheckoutWebhook] captureFromVerifiedWebhook warning:', e.message));
 
           // Run full reconciliation to guarantee link views, purchases count, and wallet credits are persisted
           await CheckoutService.reconcileSession(sessionId)

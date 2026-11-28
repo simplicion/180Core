@@ -1630,19 +1630,32 @@ export class DeveloperApiController {
         enablePlatformGateway,
       } = req.body;
 
+      const trimmedUpiId = customUpiId ? String(customUpiId).trim() : null;
+      const isDirectUpiActive = enableDirectUpi !== undefined ? Boolean(enableDirectUpi) : true;
+      if (isDirectUpiActive && trimmedUpiId) {
+        const { isValidUpiVpa } = await import('@workspace/payment-provider');
+        if (!isValidUpiVpa(trimmedUpiId)) {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid UPI ID / VPA format. Expected format like username@bank.',
+          });
+        }
+      }
+
+      const { encryptGatewaySecret } = await import('@workspace/payment-provider');
       const updateData: any = {
         customGatewayType: customGatewayType || 'NONE',
         customGatewayKeyId: customGatewayKeyId || null,
-        customGatewayWebhookSecret: customGatewayWebhookSecret || null,
+        customGatewayWebhookSecret: customGatewayWebhookSecret ? encryptGatewaySecret(String(customGatewayWebhookSecret).trim()) : null,
         customPayDomain: customPayDomain ? String(customPayDomain).toLowerCase().trim() : null,
-        customUpiId: customUpiId ? String(customUpiId).trim() : null,
+        customUpiId: trimmedUpiId,
         customUpiName: customUpiName ? String(customUpiName).trim() : null,
-        enableDirectUpi: enableDirectUpi !== undefined ? Boolean(enableDirectUpi) : true,
+        enableDirectUpi: isDirectUpiActive,
         enablePlatformGateway: enablePlatformGateway !== undefined ? Boolean(enablePlatformGateway) : true,
       };
 
       if (customGatewaySecret) {
-        updateData.customGatewaySecret = customGatewaySecret;
+        updateData.customGatewaySecret = encryptGatewaySecret(String(customGatewaySecret).trim());
       }
 
       const updated = await prisma.oAuthApp.update({
@@ -1696,6 +1709,40 @@ export class DeveloperApiController {
     } catch (err: any) {
       console.error('[DeveloperApiController:disputeUpiTransaction] Error:', err);
       return res.status(400).json({ success: false, error: err.message });
+    }
+  }
+
+  /**
+   * GET /api/v1/developer/apps/:id/bank-listener
+   * Returns the app's Bank Credit Listener webhook URL & secret for Method A / Method B auto-verification
+   */
+  static async getBankListenerConfig(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user?.id;
+      const appId = String(req.params.id);
+      const app = await resolveApp(appId, userId);
+
+      if (!app) {
+        return res.status(404).json({ success: false, error: 'App not found' });
+      }
+
+      const { computeBankListenerSecret } = await import('@workspace/payment-provider');
+      const bankListenerSecret = computeBankListenerSecret(app.id);
+      const apiOrigin = process.env.CORE_BACKEND_PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
+
+      return res.json({
+        success: true,
+        data: {
+          appId: app.id,
+          clientId: app.clientId,
+          webhookUrl: `${apiOrigin}/api/v1/checkout/upi-bank-webhook`,
+          bankListenerSecret,
+          inboundAlertAddress: `upi-${app.clientId}@alerts.180core.cloud`,
+        },
+      });
+    } catch (err: any) {
+      console.error('[DeveloperApiController:getBankListenerConfig] Error:', err);
+      return res.status(500).json({ success: false, error: err.message });
     }
   }
 

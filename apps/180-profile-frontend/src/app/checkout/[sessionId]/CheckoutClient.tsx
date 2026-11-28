@@ -1566,7 +1566,7 @@ export function CheckoutClient({
     }
   };
 
-  const handleDirectPayment = async (preferredRail?: 'UPI' | 'GATEWAY' | React.MouseEvent | unknown) => {
+  const handleDirectPayment = async (preferredRail?: 'UPI' | 'QR' | 'GATEWAY' | React.MouseEvent | unknown) => {
     if (!session || topupLoading) return;
 
     // Free promotional checkout (100% off coupon / 0 charge)
@@ -1700,7 +1700,7 @@ export function CheckoutClient({
     const targetRail = typeof preferredRail === 'string' ? preferredRail : undefined;
     const effectiveUpi = orderInfo?.directUpi || directUpiData;
     const shouldRouteToUpi =
-      (targetRail === 'UPI' && effectiveUpi) ||
+      ((targetRail === 'UPI' || targetRail === 'QR') && effectiveUpi) ||
       (orderInfo?.gatewayType === 'DIRECT_UPI' && !orderInfo?.hasPlatformGateway && effectiveUpi) ||
       (targetRail !== 'GATEWAY' && (orderInfo?.gatewayType === 'DIRECT_UPI' || (!orderInfo?.hasPlatformGateway && effectiveUpi)));
 
@@ -1709,19 +1709,22 @@ export function CheckoutClient({
       setDirectUpiData(effectiveUpi);
       setTopupLoading(false);
 
-      // On mobile: directly trigger OS UPI app chooser (upi://pay?...) and auto-verify on return
-      if (isMobileDevice && effectiveUpi.genericUri) {
+      // On mobile (when not explicitly requesting QR): directly trigger OS UPI app chooser
+      if (isMobileDevice && targetRail !== 'QR' && effectiveUpi.genericUri) {
         handleLaunchDirectUpiApp(effectiveUpi.genericUri);
         return;
       }
 
-      // On Desktop / PC: generate a standard web QR pointing to this 180 Pay page on mobile
+      // Generate a standard web QR pointing to this 180 Pay checkout page
       const targetId = session?.id || sessionId;
-      const mobilePageUrl =
-        typeof window !== 'undefined'
-          ? `${window.location.origin}/checkout/${encodeURIComponent(targetId)}?rail=upi`
-          : effectiveUpi.qrPayload;
+      const qrBaseOrigin =
+        process.env.NEXT_PUBLIC_PUBLIC_CHECKOUT_ORIGIN ||
+        (typeof window !== 'undefined' ? window.location.origin : '');
+      const mobilePageUrl = qrBaseOrigin
+        ? `${qrBaseOrigin.replace(/\/$/, '')}/checkout/${encodeURIComponent(targetId)}?rail=upi`
+        : effectiveUpi.qrPayload;
 
+      setAwaitingUtr(false);
       setShowDirectUpiModal(true);
       if (mobilePageUrl) {
         QRCode.toDataURL(mobilePageUrl, {
@@ -3238,6 +3241,16 @@ export function CheckoutClient({
                       : `Pay ${currencyService.format(activeFinalAmount, activeCurrency)} via UPI (Scan QR)`}
                   </span>
                 </Button>
+
+                <button
+                  type="button"
+                  onClick={() => handleDirectPayment('QR')}
+                  disabled={topupLoading || paying}
+                  className="w-full py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 hover:border-indigo-400 dark:hover:border-indigo-500 bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-800/60 text-slate-700 dark:text-zinc-300 font-semibold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs"
+                >
+                  <QrCode className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                  <span>Show QR Code (Open on Phone)</span>
+                </button>
               </div>
             )}
 
@@ -3353,8 +3366,8 @@ export function CheckoutClient({
               </div>
             </div>
 
-            {/* Desktop QR Code (Opens 180 Pay Mobile Page) */}
-            {!isMobileDevice && directUpiQrUrl && !awaitingUtr && (
+            {/* QR Code (Opens 180 Pay Mobile Page) */}
+            {directUpiQrUrl && !awaitingUtr && (
               <div className="pt-2 flex flex-col items-center text-center space-y-2.5">
                 <span className="text-xs font-bold text-slate-700 dark:text-zinc-200">
                   Scan QR with Google Lens or Phone Camera
