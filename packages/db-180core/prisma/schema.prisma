@@ -92,12 +92,16 @@ model OAuthApp {
   payMobileDefault    String?               @default("bottom_sheet")
 
   // ─── Bring Your Own Gateway (BYOG) & Custom Domain ──────────────────────────
-  customGatewayType           String                @default("NONE") // "NONE" | "RAZORPAY" | "STRIPE"
+  customGatewayType           String                @default("NONE") // "NONE" | "RAZORPAY" | "STRIPE" | "DIRECT_UPI"
   customGatewayKeyId          String?
   customGatewaySecret         String?
   customGatewayWebhookSecret  String?
   customPayDomain             String?               // e.g. "pay.clientbrand.com"
   customDomainStatus          String                @default("PENDING_DNS") // "PENDING_DNS" | "ACTIVE" | "FAILED"
+  customUpiId                 String?               // e.g. "vaishora@okhdfc"
+  customUpiName               String?               // e.g. "Vaishora Retail"
+  enableDirectUpi             Boolean               @default(true)
+  enablePlatformGateway       Boolean               @default(true)
 
   userId           String
   createdAt        DateTime                 @default(now())
@@ -122,6 +126,7 @@ model OAuthApp {
   portalSessions   CustomerPortalSession[]  @relation("AppPortalSessions")
   agenticEnvelopes AgenticBudgetEnvelope[]  @relation("AppAgenticEnvelopes")
   verificationSessions VerificationSession[] @relation("AppVerificationSessions")
+  upiVerifications UpiPaymentVerification[]  @relation("AppUpiVerifications")
 
   @@index([userId])
   @@index([clientId])
@@ -321,6 +326,7 @@ model CheckoutSession {
 
   app              OAuthApp      @relation("AppCheckoutSessions", fields: [appId], references: [id], onDelete: Cascade)
   user             User?         @relation("UserCheckoutSessions", fields: [userId], references: [id], onDelete: SetNull)
+  upiVerification  UpiPaymentVerification? @relation("SessionUpiVerification")
 
   @@index([appId, status])
   @@index([userId])
@@ -716,4 +722,47 @@ model VerificationAuditEvent {
   session     VerificationSession @relation("VerificationSessionEvents", fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DIRECT NATIVE UPI & VERIFICATION LEDGER
+// ─────────────────────────────────────────────────────────────────────────────
+
+model UpiPaymentVerification {
+  id             String          @id @default(uuid())
+  sessionId      String          @unique
+  appId          String
+  utr            String          @unique
+  amount         Float
+  currency       String          @default("INR")
+  payeeVpa       String
+  payerVpa       String?
+  status         String          @default("CAPTURED") // CAPTURED | DISPUTED | REFUNDED
+  responseCode   String?         @default("00")
+  rawPayload     Json?
+  createdAt      DateTime        @default(now())
+  verifiedAt     DateTime        @default(now())
+
+  app            OAuthApp        @relation("AppUpiVerifications", fields: [appId], references: [id], onDelete: Cascade)
+  session        CheckoutSession @relation("SessionUpiVerification", fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([appId, createdAt])
+  @@index([utr])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLATFORM GATEWAY & DIRECT UPI GOVERNANCE SETTINGS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PlatformGatewaySettings {
+  id                                  String    @id @default("global")
+  enableDirectUpi                     Boolean   @default(true)
+  enableRazorpay                      Boolean   @default(true)
+  enableStripe                        Boolean   @default(true)
+  enablePayU                          Boolean   @default(true)
+  defaultGateway                      String    @default("RAZORPAY") // RAZORPAY | STRIPE | PAYU | DIRECT_UPI
+  allowDeveloperByog                  Boolean   @default(true)
+  directUpiAutoCaptureLimit           Float     @default(50000.0)
+  updatedAt                           DateTime  @updatedAt
+  updatedBy                           String?   @default("system_admin")
 }

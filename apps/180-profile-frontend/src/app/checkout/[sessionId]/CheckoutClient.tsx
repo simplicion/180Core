@@ -27,7 +27,10 @@ import {
   Search,
   X,
   Download,
+  QrCode,
+  Smartphone,
 } from 'lucide-react';
+import QRCode from 'qrcode';
 import { Button, LogoLoader, AILogoIcon, AdaptiveSkeleton, MaintenanceLockWall } from '@workspace/ui';
 import toast from 'react-hot-toast';
 import { getCoreApiUrl } from '@/lib/api';
@@ -196,13 +199,24 @@ export function CheckoutClient({
     return pId || '';
   }, [initialSessionId, params?.sessionId, params?.slug]);
 
-  const [sessionId, setSessionId] = useState<string>(getInitialSessionId);
+  const [isMounted, setIsMounted] = useState(false);
+  const [sessionId, setSessionId] = useState<string>(() => {
+    if (initialSessionId && initialSessionId !== 'default') return initialSessionId;
+    const pId = (params?.sessionId || params?.slug) as string;
+    if (pId && pId !== 'default') return pId;
+    return '';
+  });
 
   // 180 Pay Maintenance Mode (disabled by default)
   const isMaintenance = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
   const [isMaintenanceBypassed, setIsMaintenanceBypassed] = useState(false);
 
   useEffect(() => {
+    setIsMounted(true);
+    const resolvedId = getInitialSessionId();
+    if (resolvedId && resolvedId !== sessionId) {
+      setSessionId(resolvedId);
+    }
     try {
       if (typeof window !== 'undefined') {
         const sp = new URLSearchParams(window.location.search);
@@ -212,34 +226,38 @@ export function CheckoutClient({
         } else if (sessionStorage.getItem('__180_maintenance_bypass__') === 'true') {
           setIsMaintenanceBypassed(true);
         }
+
+        // Parse optimistic URL params on client mount to match SSR hydration
+        const optAmount = parseFloat(sp.get('amount') || '') || initialAmount || null;
+        const optTitle = sp.get('title') || null;
+        if (optAmount || optTitle) {
+          setSession((prev: any) => prev || {
+            id: resolvedId || 'pending',
+            amount: optAmount || 0,
+            currency: sp.get('currency') || 'INR',
+            title: optTitle || '180 Checkout',
+            description: sp.get('description') || '',
+            status: 'PENDING',
+            app: {
+              name: sp.get('appName') || '180 Merchant',
+              logoUrl: sp.get('appLogo') || '',
+              isVerified: true,
+            },
+          });
+          setLoading(false);
+        }
       }
     } catch (_) {}
   }, []);
 
-  const [session, setSession] = useState<any>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      const sp = new URLSearchParams(window.location.search);
-      const optAmount = parseFloat(sp.get('amount') || '') || initialAmount || null;
-      const optTitle = sp.get('title') || null;
-      if (optAmount || optTitle) {
-        return {
-          id: getInitialSessionId() || 'pending',
-          amount: optAmount || 0,
-          currency: sp.get('currency') || 'INR',
-          title: optTitle || '180 Checkout',
-          description: sp.get('description') || '',
-          status: 'PENDING',
-          app: {
-            name: sp.get('appName') || '180 Merchant',
-            logoUrl: sp.get('appLogo') || '',
-            isVerified: true,
-          },
-        };
-      }
-    } catch (_) {}
-    return null;
-  });
+  const [directUpiData, setDirectUpiData] = useState<any>(null);
+  const [directUpiQrUrl, setDirectUpiQrUrl] = useState<string>('');
+  const [showDirectUpiModal, setShowDirectUpiModal] = useState<boolean>(false);
+  const [copiedUpiId, setCopiedUpiId] = useState<boolean>(false);
+  const [hasPlatformGateway, setHasPlatformGateway] = useState<boolean | null>(null);
+  const [hasDirectUpi, setHasDirectUpi] = useState<boolean | null>(null);
+
+  const [session, setSession] = useState<any>(null);
 
   useEffect(() => {
     const currentId = getInitialSessionId();
@@ -286,17 +304,7 @@ export function CheckoutClient({
     } catch (_) {}
   }, [session?.id, sessionId, clientSessionId]);
 
-  const [loading, setLoading] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
-    try {
-      const sp = new URLSearchParams(window.location.search);
-      const optAmount = parseFloat(sp.get('amount') || '') || initialAmount || null;
-      const optTitle = sp.get('title') || null;
-      return !(optAmount || optTitle);
-    } catch (_) {
-      return true;
-    }
-  });
+  const [loading, setLoading] = useState<boolean>(true);
   const [wallet, setWallet] = useState<any>(null);
   const [paying, setPaying] = useState(false);
   const [completed, setCompleted] = useState(false);
@@ -498,6 +506,12 @@ export function CheckoutClient({
     currency: string;
     keyId: string;
     amount: number;
+    gatewayType?: string;
+    gatewayBrand?: string;
+    hasDirectUpi?: boolean;
+    hasPlatformGateway?: boolean;
+    directUpi?: any;
+    clientSecret?: string;
   } | null>(null);
   const prewarmingPromiseRef = React.useRef<Promise<any> | null>(null);
 
@@ -730,6 +744,35 @@ export function CheckoutClient({
     if (chargeCurrency === activeCurrency) return activeFinalAmount;
     return Math.max(0, Math.round(currencyService.convert(activeFinalAmount, activeCurrency, chargeCurrency) * 100) / 100);
   }, [chargeCurrency, activeCurrency, activeFinalAmount]);
+
+  const isDirectUpiAvailable = Boolean(
+    isIndia && (
+      directUpiData ||
+      hasDirectUpi === true ||
+      prewarmedOrderRef.current?.hasDirectUpi ||
+      session?.hasDirectUpi ||
+      session?.app?.hasDirectUpi ||
+      (session?.app?.enableDirectUpi !== false)
+    )
+  );
+
+  const isGatewayAvailable = Boolean(
+    hasPlatformGateway !== null
+      ? hasPlatformGateway
+      : prewarmedOrderRef.current?.hasPlatformGateway !== undefined
+      ? prewarmedOrderRef.current.hasPlatformGateway
+      : session?.hasPlatformGateway !== undefined
+      ? session.hasPlatformGateway
+      : session?.app?.enablePlatformGateway === true
+  );
+
+  const activeGatewayBrand = useMemo(() => {
+    return (
+      prewarmedOrderRef.current?.gatewayBrand ||
+      session?.app?.customGatewayType ||
+      'RAZORPAY'
+    ).toUpperCase();
+  }, [session?.app?.customGatewayType]);
 
   // Check if current user is actively logged into a 180 Profile wallet session
   const isAuthenticatedWithWallet = Boolean(
@@ -1128,6 +1171,95 @@ export function CheckoutClient({
     return false;
   }, [session?.id, sessionId, completed, handlePaymentCompletion]);
 
+  const handleLaunchDirectUpiApp = useCallback((uri: string) => {
+    setIsVerifyingPayment(true);
+    setVerifyingText('Opening UPI application... Your purchase will automatically confirm upon completion.');
+
+    // Auto-verify return handler (Zero manual customer typing)
+    let autoVerifyTriggered = false;
+    const triggerAutoVerify = async () => {
+      if (autoVerifyTriggered) return;
+      autoVerifyTriggered = true;
+      setVerifyingText('Verifying payment receipt with bank...');
+      try {
+        const targetId = session?.id || sessionId;
+        const autoRes = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${targetId}/auto-verify`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: 'SUCCESS',
+            responseCode: '00',
+            txnRef: targetId,
+          }),
+        });
+        if (autoRes.ok) {
+          const autoData = await autoRes.json();
+          if (autoData.success) {
+            handlePaymentCompletion({
+              transactionId: autoData.transactionId,
+              customReturnUrl: autoData.returnUrl,
+            });
+            return;
+          }
+        }
+      } catch (_) {}
+    };
+
+    const handleFocusReturn = () => {
+      window.removeEventListener('focus', handleFocusReturn);
+      document.removeEventListener('visibilitychange', handleVisibilityReturn);
+      setTimeout(triggerAutoVerify, 700);
+    };
+
+    const handleVisibilityReturn = () => {
+      if (document.visibilityState === 'visible') {
+        window.removeEventListener('focus', handleFocusReturn);
+        document.removeEventListener('visibilitychange', handleVisibilityReturn);
+        setTimeout(triggerAutoVerify, 700);
+      }
+    };
+
+    window.addEventListener('focus', handleFocusReturn);
+    document.addEventListener('visibilitychange', handleVisibilityReturn);
+
+    // Launch UPI app directly
+    try {
+      window.location.href = uri;
+    } catch (_) {}
+  }, [session?.id, sessionId, handlePaymentCompletion]);
+
+  const handleConfirmCompletedPayment = useCallback(async () => {
+    setIsVerifyingPayment(true);
+    setVerifyingText('Verifying payment receipt with bank...');
+    try {
+      const targetId = session?.id || sessionId;
+      const autoRes = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${targetId}/auto-verify`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'SUCCESS',
+          responseCode: '00',
+          txnRef: targetId,
+        }),
+      });
+      if (autoRes.ok) {
+        const autoData = await autoRes.json();
+        if (autoData.success) {
+          handlePaymentCompletion({
+            transactionId: autoData.transactionId,
+            customReturnUrl: autoData.returnUrl,
+          });
+          return;
+        }
+      }
+      setIsVerifyingPayment(false);
+      toast.error('Payment receipt could not be verified yet. Please try again in a moment.');
+    } catch (_) {
+      setIsVerifyingPayment(false);
+      toast.error('Payment verification failed. Please check your connection.');
+    }
+  }, [session?.id, sessionId, handlePaymentCompletion]);
+
   const fetchSessionAndWallet = async () => {
     try {
       const token =
@@ -1183,6 +1315,16 @@ export function CheckoutClient({
         if (sessionData && sessionData.success) {
           sessionInfo = sessionData.data || sessionData.session;
           setDomainError(null);
+          if (sessionInfo.hasPlatformGateway !== undefined) {
+            setHasPlatformGateway(sessionInfo.hasPlatformGateway);
+          } else if (sessionInfo.app?.enablePlatformGateway !== undefined) {
+            setHasPlatformGateway(sessionInfo.app.enablePlatformGateway);
+          }
+          if (sessionInfo.hasDirectUpi !== undefined) {
+            setHasDirectUpi(sessionInfo.hasDirectUpi);
+          } else if (sessionInfo.app?.enableDirectUpi !== undefined) {
+            setHasDirectUpi(sessionInfo.app.enableDirectUpi);
+          }
         } else if (sessionData && (sessionData.error === 'forbidden_origin' || sessionData.details?.type === 'ORIGIN_NOT_ALLOWED' || sessionData.details?.type === 'REDIRECT_URI_MISMATCH')) {
           const currentOrigin = typeof window !== 'undefined' ? window.location.origin.toLowerCase() : '';
           const isPlatformHost = currentOrigin.includes('localhost:') || currentOrigin.includes('127.0.0.1:') || currentOrigin.includes('180.app') || currentOrigin.includes('180profile.com') || currentOrigin.includes('180core.cloud');
@@ -1340,8 +1482,23 @@ export function CheckoutClient({
             currency: orderInfo.currency || chargeCurrency,
             keyId: orderInfo.keyId,
             amount: chargeAmount,
+            gatewayType: orderInfo.gatewayType,
+            gatewayBrand: orderInfo.gatewayBrand,
+            hasDirectUpi: orderInfo.hasDirectUpi,
+            hasPlatformGateway: orderInfo.hasPlatformGateway,
+            directUpi: orderInfo.directUpi,
+            clientSecret: orderInfo.clientSecret,
           };
           prewarmedOrderRef.current = orderObj;
+          if (orderInfo.directUpi) {
+            setDirectUpiData(orderInfo.directUpi);
+          }
+          if (orderInfo.hasPlatformGateway !== undefined) {
+            setHasPlatformGateway(orderInfo.hasPlatformGateway);
+          }
+          if (orderInfo.hasDirectUpi !== undefined) {
+            setHasDirectUpi(orderInfo.hasDirectUpi);
+          }
           return orderObj;
         }
       } catch (err) {
@@ -1395,7 +1552,7 @@ export function CheckoutClient({
     }
   };
 
-  const handleDirectPayment = async () => {
+  const handleDirectPayment = async (preferredRail?: 'UPI' | 'GATEWAY' | React.MouseEvent | unknown) => {
     if (!session || topupLoading) return;
 
     // Free promotional checkout (100% off coupon / 0 charge)
@@ -1444,7 +1601,7 @@ export function CheckoutClient({
 
 
 
-    let orderInfo = prewarmedOrderRef.current;
+    let orderInfo: any = prewarmedOrderRef.current;
     const directToastId = 'direct-pay-action';
 
     // Zero-Latency Path: If order was pre-warmed during user dwell time, consume immediately!
@@ -1491,7 +1648,22 @@ export function CheckoutClient({
             currency: orderInfo.currency || chargeCurrency,
             keyId: orderInfo.keyId,
             amount: chargeAmount,
+            gatewayType: orderInfo.gatewayType,
+            gatewayBrand: orderInfo.gatewayBrand,
+            hasDirectUpi: orderInfo.hasDirectUpi,
+            hasPlatformGateway: orderInfo.hasPlatformGateway,
+            directUpi: orderInfo.directUpi,
+            clientSecret: orderInfo.clientSecret,
           };
+          if (orderInfo.directUpi) {
+            setDirectUpiData(orderInfo.directUpi);
+          }
+          if (orderInfo.hasPlatformGateway !== undefined) {
+            setHasPlatformGateway(orderInfo.hasPlatformGateway);
+          }
+          if (orderInfo.hasDirectUpi !== undefined) {
+            setHasDirectUpi(orderInfo.hasDirectUpi);
+          }
         }
       } catch (err: any) {
         console.error('[180 Pay] Gateway initialization error:', err);
@@ -1508,6 +1680,30 @@ export function CheckoutClient({
         setTopupLoading(false);
         return;
       }
+    }
+
+    // Direct Native UPI Route (Zero Razorpay SDK / Zero external popup)
+    const targetRail = typeof preferredRail === 'string' ? preferredRail : undefined;
+    const effectiveUpi = orderInfo?.directUpi || directUpiData;
+    const shouldRouteToUpi =
+      (targetRail === 'UPI' && effectiveUpi) ||
+      (targetRail !== 'GATEWAY' && (orderInfo?.gatewayType === 'DIRECT_UPI' || (!orderInfo?.hasPlatformGateway && effectiveUpi)));
+
+    if (shouldRouteToUpi && effectiveUpi) {
+      toast.dismiss(directToastId);
+      setDirectUpiData(effectiveUpi);
+      setShowDirectUpiModal(true);
+      if (effectiveUpi.qrPayload) {
+        QRCode.toDataURL(effectiveUpi.qrPayload, {
+          width: 360,
+          margin: 2,
+          color: { dark: '#0f172a', light: '#ffffff' },
+        })
+          .then(setDirectUpiQrUrl)
+          .catch(() => {});
+      }
+      setTopupLoading(false);
+      return;
     }
 
     // Ensure Razorpay SDK is available
@@ -1792,7 +1988,7 @@ export function CheckoutClient({
     );
   }
 
-  if (loading) {
+  if (!isMounted || loading) {
     return <AdaptiveSkeleton screen="checkout" />;
   }
 
@@ -2971,7 +3167,7 @@ export function CheckoutClient({
 
             <button
               type="button"
-              onClick={handleDirectPayment}
+              onClick={() => handleDirectPayment()}
               disabled={paying || topupLoading}
               className="w-full py-2.5 min-h-[42px] rounded-xl border border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-800/60 text-slate-700 dark:text-zinc-300 font-semibold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
             >
@@ -2979,30 +3175,290 @@ export function CheckoutClient({
               <span>
                 {topupLoading
                   ? 'Opening Gateway...'
-                  : isIndia
-                  ? `Or Pay ${currencyService.format(activeFinalAmount, activeCurrency)} via UPI / Cards / Netbanking`
-                  : `Or Pay ${currencyService.format(chargeAmount, chargeCurrency)} via International Card`}
+                  : isDirectUpiAvailable
+                  ? `Or Pay ${currencyService.format(activeFinalAmount, activeCurrency)} via Direct UPI / Cards`
+                  : `Or Pay ${currencyService.format(chargeAmount, chargeCurrency)} via External Payment`}
               </span>
             </button>
           </>
         ) : (
-          <Button
-            onClick={handleDirectPayment}
-            disabled={topupLoading || paying}
-            className="w-full min-h-[46px] rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-bold text-sm shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
-          >
-            <CreditCard className="w-4 h-4" />
-            <span>
-              {topupLoading
-                ? 'Opening Payment Gateway...'
-                : isIndia
-                ? `Pay ${currencyService.format(activeFinalAmount, activeCurrency)} via UPI / Cards / Netbanking`
-                : `Pay ${currencyService.format(chargeAmount, chargeCurrency)} via Card`}
-            </span>
-          </Button>
+          <div className="space-y-3">
+            {/* Direct Native UPI Rail */}
+            {isDirectUpiAvailable && (
+              <div className="space-y-2">
+                <Button
+                  type="button"
+                  onClick={() => handleDirectPayment('UPI')}
+                  disabled={topupLoading || paying}
+                  className="w-full min-h-[46px] rounded-xl bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white font-bold text-sm shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+                >
+                  <Smartphone className="w-4 h-4" />
+                  <span>
+                    {topupLoading
+                      ? 'Opening UPI...'
+                      : `Pay ${currencyService.format(activeFinalAmount, activeCurrency)} via UPI`}
+                  </span>
+                </Button>
+
+                {/* 1-Tap Quick Apps Bar */}
+                <div className="grid grid-cols-4 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (directUpiData?.gpayUri) {
+                        handleLaunchDirectUpiApp(directUpiData.gpayUri);
+                      } else {
+                        handleDirectPayment('UPI');
+                      }
+                    }}
+                    className="py-2 px-1 rounded-xl border border-slate-200 dark:border-zinc-800 hover:border-indigo-400 dark:hover:border-indigo-500 bg-white dark:bg-zinc-900 text-[11px] font-semibold text-slate-700 dark:text-zinc-300 flex items-center justify-center gap-1 transition-all cursor-pointer shadow-2xs hover:bg-slate-50 dark:hover:bg-zinc-800/60"
+                  >
+                    <span>GPay</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (directUpiData?.phonepeUri) {
+                        handleLaunchDirectUpiApp(directUpiData.phonepeUri);
+                      } else {
+                        handleDirectPayment('UPI');
+                      }
+                    }}
+                    className="py-2 px-1 rounded-xl border border-slate-200 dark:border-zinc-800 hover:border-purple-400 dark:hover:border-purple-500 bg-white dark:bg-zinc-900 text-[11px] font-semibold text-slate-700 dark:text-zinc-300 flex items-center justify-center gap-1 transition-all cursor-pointer shadow-2xs hover:bg-slate-50 dark:hover:bg-zinc-800/60"
+                  >
+                    <span>PhonePe</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (directUpiData?.paytmUri) {
+                        handleLaunchDirectUpiApp(directUpiData.paytmUri);
+                      } else {
+                        handleDirectPayment('UPI');
+                      }
+                    }}
+                    className="py-2 px-1 rounded-xl border border-slate-200 dark:border-zinc-800 hover:border-cyan-400 dark:hover:border-cyan-500 bg-white dark:bg-zinc-900 text-[11px] font-semibold text-slate-700 dark:text-zinc-300 flex items-center justify-center gap-1 transition-all cursor-pointer shadow-2xs hover:bg-slate-50 dark:hover:bg-zinc-800/60"
+                  >
+                    <span>Paytm</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDirectPayment('UPI')}
+                    className="py-2 px-1 rounded-xl border border-slate-200 dark:border-zinc-800 hover:border-emerald-400 dark:hover:border-emerald-500 bg-white dark:bg-zinc-900 text-[11px] font-semibold text-slate-700 dark:text-zinc-300 flex items-center justify-center gap-1 transition-all cursor-pointer shadow-2xs hover:bg-slate-50 dark:hover:bg-zinc-800/60"
+                  >
+                    <QrCode className="w-3.5 h-3.5 text-slate-500" />
+                    <span>QR</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Divider when both rails are enabled */}
+            {isDirectUpiAvailable && isGatewayAvailable && (
+              <div className="relative py-1">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-200 dark:border-zinc-800" />
+                </div>
+                <div className="relative flex justify-center text-[10px] font-medium uppercase tracking-wider text-slate-400 dark:text-zinc-500 bg-white dark:bg-zinc-900 px-2.5">
+                  Or pay with Cards / Netbanking
+                </div>
+              </div>
+            )}
+
+            {/* 180 Pay Gateway Rail */}
+            {isGatewayAvailable && (
+              <Button
+                onClick={() => handleDirectPayment('GATEWAY')}
+                disabled={topupLoading || paying}
+                className={`w-full min-h-[46px] rounded-xl font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99] ${
+                  isDirectUpiAvailable
+                    ? 'border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-800 text-slate-900 dark:text-white shadow-2xs'
+                    : 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 text-white shadow-blue-600/20'
+                }`}
+              >
+                <CreditCard className="w-4 h-4 text-slate-600 dark:text-zinc-400" />
+                <span>
+                  {topupLoading
+                    ? 'Opening Payment Gateway...'
+                    : activeGatewayBrand === 'STRIPE'
+                    ? `Pay ${currencyService.format(chargeAmount, chargeCurrency)} via Stripe (Cards)`
+                    : `Pay ${currencyService.format(activeFinalAmount, activeCurrency)} via Razorpay (Cards / Netbanking)`}
+                </span>
+              </Button>
+            )}
+
+            {/* If neither was marked explicit, fallback safely to standard gateway pay */}
+            {!isDirectUpiAvailable && !isGatewayAvailable && (
+              <Button
+                onClick={() => handleDirectPayment('GATEWAY')}
+                disabled={topupLoading || paying}
+                className="w-full min-h-[46px] rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-bold text-sm shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+              >
+                <CreditCard className="w-4 h-4" />
+                <span>
+                  {topupLoading
+                    ? 'Opening Payment Gateway...'
+                    : `Pay ${currencyService.format(activeFinalAmount, activeCurrency)}`}
+                </span>
+              </Button>
+            )}
+          </div>
         )}
 
       </div>
+
+      {/* Direct Native UPI Modal / Bottom Sheet */}
+      {showDirectUpiModal && directUpiData && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 pointer-events-auto">
+          {/* Backdrop */}
+          <div
+            onClick={() => setShowDirectUpiModal(false)}
+            className="fixed inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-xs transition-opacity"
+          />
+
+          {/* Modal Container */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative z-10 w-full max-w-md bg-white dark:bg-zinc-900 rounded-t-[28px] sm:rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-2xl overflow-hidden p-5 sm:p-6 space-y-4 animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-xs shrink-0">
+                  UPI
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Pay with UPI
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+                    Direct transfer to {directUpiData.payeeName || 'Merchant'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDirectUpiModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-white flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Amount Banner */}
+            <div className="p-3 bg-slate-50 dark:bg-zinc-800/50 rounded-2xl border border-slate-200/80 dark:border-zinc-700/80 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] text-slate-500 dark:text-zinc-400 font-medium block">
+                  Amount to Pay
+                </span>
+                <span className="text-lg font-extrabold text-slate-900 dark:text-white">
+                  ₹{directUpiData.amount}
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-zinc-500 block">
+                  Receiving UPI ID
+                </span>
+                <span className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400 select-all">
+                  {directUpiData.upiId}
+                </span>
+              </div>
+            </div>
+
+            {/* Mobile View: Quick App Action Buttons */}
+            <div className="space-y-2">
+              <span className="text-[10px] font-bold text-slate-600 dark:text-zinc-400 uppercase tracking-wider block">
+                Tap to pay with installed app
+              </span>
+              <div className="grid grid-cols-2 gap-2">
+                {/* Google Pay */}
+                <button
+                  type="button"
+                  onClick={() => handleLaunchDirectUpiApp(directUpiData.gpayUri || directUpiData.genericUri)}
+                  className="p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 hover:border-blue-500 dark:hover:border-blue-500 bg-white dark:bg-zinc-800/80 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 text-slate-900 dark:text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs active:scale-[0.98]"
+                >
+                  <span className="w-2 h-2 rounded-full bg-blue-500" />
+                  <span>Google Pay</span>
+                </button>
+
+                {/* PhonePe */}
+                <button
+                  type="button"
+                  onClick={() => handleLaunchDirectUpiApp(directUpiData.phonepeUri || directUpiData.genericUri)}
+                  className="p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 hover:border-purple-500 dark:hover:border-purple-500 bg-white dark:bg-zinc-800/80 hover:bg-purple-50/50 dark:hover:bg-purple-950/20 text-slate-900 dark:text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs active:scale-[0.98]"
+                >
+                  <span className="w-2 h-2 rounded-full bg-purple-600" />
+                  <span>PhonePe</span>
+                </button>
+
+                {/* Paytm */}
+                <button
+                  type="button"
+                  onClick={() => handleLaunchDirectUpiApp(directUpiData.paytmUri || directUpiData.genericUri)}
+                  className="p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 hover:border-cyan-500 dark:hover:border-cyan-500 bg-white dark:bg-zinc-800/80 hover:bg-cyan-50/50 dark:hover:bg-cyan-950/20 text-slate-900 dark:text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs active:scale-[0.98]"
+                >
+                  <span className="w-2 h-2 rounded-full bg-cyan-500" />
+                  <span>Paytm</span>
+                </button>
+
+                {/* Any UPI */}
+                <button
+                  type="button"
+                  onClick={() => handleLaunchDirectUpiApp(directUpiData.genericUri)}
+                  className="p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 hover:border-emerald-500 dark:hover:border-emerald-500 bg-white dark:bg-zinc-800/80 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 text-slate-900 dark:text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs active:scale-[0.98]"
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span>Any UPI App</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Dynamic QR Canvas */}
+            {directUpiQrUrl && (
+              <div className="pt-2 border-t border-slate-100 dark:border-zinc-800 flex flex-col items-center text-center space-y-2">
+                <span className="text-[10px] font-bold text-slate-500 dark:text-zinc-400">
+                  Or scan QR with any camera or UPI app
+                </span>
+                <div className="p-2 bg-white rounded-2xl border border-slate-200 shadow-xs">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={directUpiQrUrl} alt="UPI QR Code" className="w-40 h-40 object-contain" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-mono text-slate-600 dark:text-zinc-400 bg-slate-100 dark:bg-zinc-800 px-2 py-0.5 rounded-lg">
+                    {directUpiData.upiId}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (navigator.clipboard) {
+                        navigator.clipboard.writeText(directUpiData.upiId);
+                        setCopiedUpiId(true);
+                        toast.success('UPI ID copied');
+                        setTimeout(() => setCopiedUpiId(false), 2000);
+                      }
+                    }}
+                    className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer"
+                  >
+                    {copiedUpiId ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Desktop / Manual Completed Action Button (Zero User Input) */}
+            <div className="pt-1">
+              <Button
+                type="button"
+                onClick={handleConfirmCompletedPayment}
+                className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md active:scale-[0.99]"
+              >
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <span>I Have Completed Payment</span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import express, { Request, Response } from 'express';
 import { corePrisma } from '@workspace/db-180core';
 import { EmailOtpService } from '@workspace/identity-provider';
+import { CheckoutService } from '@workspace/payment-provider';
 
 const router = express.Router();
 
@@ -2599,5 +2600,105 @@ router.patch('/settings/security', async (req: Request, res: Response) => {
   }
 });
 
+
+/**
+ * GET /api/v1/admin/gateways/settings
+ * Retrieves global platform gateway and direct UPI feature flags
+ */
+router.get('/gateways/settings', async (req: Request, res: Response) => {
+  try {
+    let settings = await corePrisma.platformGatewaySettings.findUnique({
+      where: { id: 'global' },
+    });
+
+    if (!settings) {
+      settings = await corePrisma.platformGatewaySettings.create({
+        data: {
+          id: 'global',
+          enableDirectUpi: true,
+          enableRazorpay: true,
+          enableStripe: true,
+          enablePayU: true,
+          defaultGateway: 'RAZORPAY',
+          allowDeveloperByog: true,
+          directUpiAutoCaptureLimit: 50000.0,
+          updatedBy: 'system_default',
+        },
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: settings,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * PUT /api/v1/admin/gateways/settings
+ * Updates global platform gateway and direct UPI feature flags
+ */
+router.put('/gateways/settings', async (req: Request, res: Response) => {
+  try {
+    const {
+      enableDirectUpi,
+      enableRazorpay,
+      enableStripe,
+      enablePayU,
+      defaultGateway,
+      allowDeveloperByog,
+      directUpiAutoCaptureLimit,
+      updatedBy,
+    } = req.body;
+
+    const updated = await corePrisma.platformGatewaySettings.upsert({
+      where: { id: 'global' },
+      create: {
+        id: 'global',
+        enableDirectUpi: enableDirectUpi !== undefined ? Boolean(enableDirectUpi) : true,
+        enableRazorpay: enableRazorpay !== undefined ? Boolean(enableRazorpay) : true,
+        enableStripe: enableStripe !== undefined ? Boolean(enableStripe) : true,
+        enablePayU: enablePayU !== undefined ? Boolean(enablePayU) : true,
+        defaultGateway: defaultGateway || 'RAZORPAY',
+        allowDeveloperByog: allowDeveloperByog !== undefined ? Boolean(allowDeveloperByog) : true,
+        directUpiAutoCaptureLimit: directUpiAutoCaptureLimit ? Number(directUpiAutoCaptureLimit) : 50000.0,
+        updatedBy: updatedBy || 'admin@180core.cloud',
+      },
+      update: {
+        ...(enableDirectUpi !== undefined ? { enableDirectUpi: Boolean(enableDirectUpi) } : {}),
+        ...(enableRazorpay !== undefined ? { enableRazorpay: Boolean(enableRazorpay) } : {}),
+        ...(enableStripe !== undefined ? { enableStripe: Boolean(enableStripe) } : {}),
+        ...(enablePayU !== undefined ? { enablePayU: Boolean(enablePayU) } : {}),
+        ...(defaultGateway ? { defaultGateway: String(defaultGateway) } : {}),
+        ...(allowDeveloperByog !== undefined ? { allowDeveloperByog: Boolean(allowDeveloperByog) } : {}),
+        ...(directUpiAutoCaptureLimit !== undefined ? { directUpiAutoCaptureLimit: Number(directUpiAutoCaptureLimit) } : {}),
+        updatedBy: updatedBy || 'admin@180core.cloud',
+      },
+    });
+
+    try {
+      CheckoutService.invalidatePlatformGatewaySettingsCache();
+    } catch (_) {}
+
+    await recordAuditLog(
+      updatedBy || 'admin@180core.cloud',
+      'UPDATE_GATEWAY_FEATURE_FLAGS',
+      'GATEWAYS',
+      'global',
+      updated,
+      req.ip
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'Global gateway feature flags updated successfully',
+      data: updated,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 export default router;

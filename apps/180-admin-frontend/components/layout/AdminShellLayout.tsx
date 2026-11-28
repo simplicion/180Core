@@ -22,6 +22,7 @@ import {
   RefreshCw,
   Menu,
   X,
+  Sliders,
 } from 'lucide-react';
 import { adminApi } from '@/lib/api';
 import { FloatingSupportWidget } from './FloatingSupportWidget';
@@ -54,7 +55,13 @@ const NAV_ITEMS: NavItem[] = [
     badge: 'Live',
     badgeColor: 'bg-blue-500/10 text-blue-500 border border-blue-500/20',
   },
-  { name: 'Security & Audit Logs', href: '/settings', icon: ShieldCheck },
+  {
+    name: 'Gateways & Feature Flags',
+    href: '/settings',
+    icon: Sliders,
+    badge: 'Flags',
+    badgeColor: 'bg-purple-500/10 text-purple-500 border border-purple-500/20',
+  },
 ];
 
 export default function AdminShellLayout({ children }: { children: React.ReactNode }) {

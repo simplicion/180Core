@@ -20,6 +20,7 @@ import {
   Coins,
   Cpu,
   CheckCircle2,
+  Sliders,
 } from 'lucide-react';
 import { adminApi } from '@/lib/api';
 import { DeveloperOnboardingChart } from '@/components/charts/DeveloperOnboardingChart';
@@ -154,6 +155,14 @@ export default function AdminOverviewPage() {
             <option value="EUR">EUR (€)</option>
             <option value="NPR">NPR (Rs)</option>
           </select>
+
+          <Link
+            href="/settings"
+            className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-zinc-100 dark:bg-zinc-900 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-white/10 shadow-xs transition-all flex items-center gap-1.5 min-h-[40px]"
+          >
+            <Sliders className="h-3.5 w-3.5 text-purple-500" />
+            <span>Gateway Flags</span>
+          </Link>
 
           <Link
             href="/treasury"

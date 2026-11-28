@@ -909,6 +909,32 @@ export class CheckoutApiController {
   }
 
   /**
+   * POST /api/v1/checkout/sessions/:id/auto-verify
+   * Automatically captures and verifies direct native UPI payment without manual customer typing
+   */
+  static async autoVerifyDirectUpi(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id);
+      const { approvalRefNo, responseCode, status, txnRef, payerVpa, rawPayload } = req.body || {};
+
+      const result = await CheckoutService.autoVerifyDirectUpiPayment({
+        sessionId: id,
+        approvalRefNo,
+        responseCode,
+        status,
+        txnRef,
+        payerVpa,
+        rawPayload,
+      });
+
+      return res.json({ success: true, ...result, data: result });
+    } catch (err: any) {
+      console.error('[CheckoutApiController:autoVerifyDirectUpi] Error:', err);
+      return res.status(400).json({ success: false, error: err.message });
+    }
+  }
+
+  /**
    * POST /api/v1/checkout/sessions/:id/direct-pay
    * POST /api/oauth/checkout/sessions/:id/direct-pay
    * Directly executes and captures payment inside the 180 Pay pop-up/bottom sheet

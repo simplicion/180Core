@@ -6,7 +6,7 @@ import { developersPrisma as prisma } from '@workspace/db-180core';
 import {
   DeveloperController as DomainDeveloperController,
 } from '@workspace/identity-provider';
-import { PayoutService } from '@workspace/payment-provider';
+import { PayoutService, CheckoutService } from '@workspace/payment-provider';
 import { uploadBufferToR2, buildR2Key, deleteObjectFromR2 } from '@workspace/integrations';
 import { inspectLogoBuffer, SUPPORTED_LOGO_MIMES } from '../middleware/logo-upload.middleware';
 import axios from 'axios';
@@ -1593,6 +1593,10 @@ export class DeveloperApiController {
           customGatewayWebhookSecret: app.customGatewayWebhookSecret || '',
           customPayDomain: app.customPayDomain || '',
           customDomainStatus: app.customDomainStatus || 'PENDING_DNS',
+          customUpiId: (app as any).customUpiId || '',
+          customUpiName: (app as any).customUpiName || '',
+          enableDirectUpi: (app as any).enableDirectUpi !== false,
+          enablePlatformGateway: (app as any).enablePlatformGateway !== false,
           hasSecret: Boolean(app.customGatewaySecret),
         },
       });
@@ -1620,6 +1624,10 @@ export class DeveloperApiController {
         customGatewaySecret,
         customGatewayWebhookSecret,
         customPayDomain,
+        customUpiId,
+        customUpiName,
+        enableDirectUpi,
+        enablePlatformGateway,
       } = req.body;
 
       const updateData: any = {
@@ -1627,6 +1635,10 @@ export class DeveloperApiController {
         customGatewayKeyId: customGatewayKeyId || null,
         customGatewayWebhookSecret: customGatewayWebhookSecret || null,
         customPayDomain: customPayDomain ? String(customPayDomain).toLowerCase().trim() : null,
+        customUpiId: customUpiId ? String(customUpiId).trim() : null,
+        customUpiName: customUpiName ? String(customUpiName).trim() : null,
+        enableDirectUpi: enableDirectUpi !== undefined ? Boolean(enableDirectUpi) : true,
+        enablePlatformGateway: enablePlatformGateway !== undefined ? Boolean(enablePlatformGateway) : true,
       };
 
       if (customGatewaySecret) {
@@ -1650,6 +1662,35 @@ export class DeveloperApiController {
       return res.json({ success: true, data: updated });
     } catch (err: any) {
       console.error('[DeveloperApiController:saveGatewaySettings] Error:', err);
+      return res.status(400).json({ success: false, error: err.message });
+    }
+  }
+
+  /**
+   * POST /api/v1/developer/apps/:id/sessions/:sessionId/dispute
+   * Allows developer to void/dispute a fraudulent direct UPI transaction
+   */
+  static async disputeUpiTransaction(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user?.id;
+      const appId = String(req.params.id);
+      const sessionId = String(req.params.sessionId);
+      const { reason } = req.body || {};
+
+      const app = await resolveApp(appId, userId);
+      if (!app) {
+        return res.status(404).json({ success: false, error: 'App not found' });
+      }
+
+      const result = await CheckoutService.disputeDirectUpiPayment({
+        appId: app.id,
+        sessionId,
+        reason,
+      });
+
+      return res.json({ success: true, ...result });
+    } catch (err: any) {
+      console.error('[DeveloperApiController:disputeUpiTransaction] Error:', err);
       return res.status(400).json({ success: false, error: err.message });
     }
   }

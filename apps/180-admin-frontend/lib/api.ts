@@ -283,6 +283,18 @@ export const adminApi = {
     });
   },
 
+  // Payment Rails & Gateway Feature Flags
+  getGatewaySettings: async () => {
+    return fetchJson<any>(`${ADMIN_API_URL}/gateways/settings`);
+  },
+
+  updateGatewaySettings: async (data: any) => {
+    return fetchJson<any>(`${ADMIN_API_URL}/gateways/settings`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
   // Audit Logs
   getAuditLogs: async (params?: { action?: string; page?: number; limit?: number }) => {
     const query = new URLSearchParams();

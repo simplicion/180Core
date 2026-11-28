@@ -49,6 +49,7 @@ router.get('/apps/:id/gateway', protect, DeveloperApiController.getGatewaySettin
 router.put('/apps/:id/gateway', protect, DeveloperApiController.saveGatewaySettings);
 router.post('/apps/:id/gateway/verify', protect, DeveloperApiController.verifyGatewayCredentials);
 router.post('/apps/:id/custom-domain/verify', protect, DeveloperApiController.verifyCustomDomain);
+router.post('/apps/:id/sessions/:sessionId/dispute', protect, DeveloperApiController.disputeUpiTransaction);
 
 // ─── Earnings & Manual Payouts ───────────────────────────────────────────────
 router.post('/apps/:appId/payouts', protect, DeveloperApiController.requestPayout);

@@ -35,6 +35,16 @@ export default function SecurityAuditLogsPage() {
     standardFeePercent: 2.0,
     ipWhitelist: '*',
   });
+  const [gatewaySettings, setGatewaySettings] = useState<any>({
+    enableDirectUpi: true,
+    enableRazorpay: true,
+    enableStripe: true,
+    enablePayU: true,
+    defaultGateway: 'RAZORPAY',
+    allowDeveloperByog: true,
+    directUpiAutoCaptureLimit: 50000.0,
+  });
+  const [savingGateways, setSavingGateways] = useState(false);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -56,9 +66,10 @@ export default function SecurityAuditLogsPage() {
   const loadSettingsData = async () => {
     try {
       setLoading(true);
-      const [logsRes, opsRes] = await Promise.all([
+      const [logsRes, opsRes, gwRes] = await Promise.all([
         adminApi.getAuditLogs({ action: search || undefined }),
         adminApi.getOperators().catch(() => ({ success: false })),
+        adminApi.getGatewaySettings().catch(() => ({ success: false })),
       ]);
 
       if (logsRes.success) {
@@ -69,6 +80,9 @@ export default function SecurityAuditLogsPage() {
         if (opsRes.securityConfig) setSecurityConfig(opsRes.securityConfig);
       } else {
         setOperators([]);
+      }
+      if (gwRes && gwRes.success && gwRes.data) {
+        setGatewaySettings(gwRes.data);
       }
     } catch (err) {
       console.error('Failed to load platform governance data', err);
@@ -116,6 +130,22 @@ export default function SecurityAuditLogsPage() {
       toast.error(err.message || 'Failed to save settings');
     } finally {
       setSavingConfig(false);
+    }
+  };
+
+  const handleToggleGatewayFlag = async (field: string, value: any) => {
+    const updated = { ...gatewaySettings, [field]: value };
+    setGatewaySettings(updated);
+    try {
+      setSavingGateways(true);
+      const res = await adminApi.updateGatewaySettings(updated);
+      if (res.success) {
+        toast.success(`Platform setting updated: ${field}`);
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update gateway feature flag');
+    } finally {
+      setSavingGateways(false);
     }
   };
 
@@ -223,6 +253,139 @@ export default function SecurityAuditLogsPage() {
           <div>
             <div className="text-xs font-semibold text-zinc-900 dark:text-white">Webhook Dispatch Queue</div>
             <div className="text-[11px] text-amber-500 font-medium">Active (100% Delivery SLA)</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Payment Rails & Gateway Infrastructure (Feature Flags) */}
+      <div className="rounded-3xl bg-white dark:bg-zinc-950 border border-zinc-200/80 dark:border-white/10 shadow-sm overflow-hidden space-y-6 p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-zinc-100 dark:border-white/5">
+          <div className="flex items-center gap-2.5">
+            <Radio className="h-4 w-4 text-emerald-500" />
+            <div>
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-white">Payment Rails & Gateway Governance (Feature Flags)</h3>
+              <p className="text-[11px] text-zinc-500">Live circuit-breakers and toggles for Direct Native UPI and aggregator payment providers.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-zinc-500 font-medium">Default Active Gateway:</span>
+            <select
+              value={gatewaySettings.defaultGateway || 'RAZORPAY'}
+              onChange={(e) => handleToggleGatewayFlag('defaultGateway', e.target.value)}
+              disabled={savingGateways}
+              className="bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 rounded-xl px-2.5 py-1 text-xs font-bold text-zinc-800 dark:text-zinc-200 focus:outline-hidden"
+            >
+              <option value="RAZORPAY">Razorpay (India Primary)</option>
+              <option value="STRIPE">Stripe (Global Primary)</option>
+              <option value="PAYU">PayU (India Secondary)</option>
+              <option value="DIRECT_UPI">Direct UPI (Native Only)</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Direct UPI Intent Switch */}
+          <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.02] border border-zinc-100 dark:border-white/5 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-xs text-zinc-900 dark:text-white">Direct Native UPI</span>
+              <button
+                type="button"
+                onClick={() => handleToggleGatewayFlag('enableDirectUpi', !gatewaySettings.enableDirectUpi)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                  gatewaySettings.enableDirectUpi ? 'bg-emerald-500' : 'bg-zinc-300 dark:bg-zinc-700'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                    gatewaySettings.enableDirectUpi ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+            <p className="text-[11px] text-zinc-500 leading-relaxed">
+              Allows developers to accept payments directly into their own bank accounts via UPI without aggregator keys.
+            </p>
+            <div className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-200/50 dark:bg-white/5 text-zinc-600 dark:text-zinc-400 w-fit">
+              {gatewaySettings.enableDirectUpi ? 'ENABLED PLATFORM-WIDE' : 'DISABLED'}
+            </div>
+          </div>
+
+          {/* Razorpay Platform Gateway Switch */}
+          <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.02] border border-zinc-100 dark:border-white/5 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-xs text-zinc-900 dark:text-white">Razorpay Gateway</span>
+              <button
+                type="button"
+                onClick={() => handleToggleGatewayFlag('enableRazorpay', !gatewaySettings.enableRazorpay)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                  gatewaySettings.enableRazorpay ? 'bg-blue-500' : 'bg-zinc-300 dark:bg-zinc-700'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                    gatewaySettings.enableRazorpay ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+            <p className="text-[11px] text-zinc-500 leading-relaxed">
+              Provides standard Indian aggregated checkout via cards, netbanking, wallets, and recurring mandate subscriptions.
+            </p>
+            <div className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-200/50 dark:bg-white/5 text-zinc-600 dark:text-zinc-400 w-fit">
+              {gatewaySettings.enableRazorpay ? 'ACTIVE RAZORPAY' : 'SUSPENDED'}
+            </div>
+          </div>
+
+          {/* Stripe Platform Gateway Switch */}
+          <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.02] border border-zinc-100 dark:border-white/5 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-xs text-zinc-900 dark:text-white">Stripe Gateway</span>
+              <button
+                type="button"
+                onClick={() => handleToggleGatewayFlag('enableStripe', !gatewaySettings.enableStripe)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                  gatewaySettings.enableStripe ? 'bg-purple-500' : 'bg-zinc-300 dark:bg-zinc-700'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                    gatewaySettings.enableStripe ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+            <p className="text-[11px] text-zinc-500 leading-relaxed">
+              Provides international multi-currency processing for cross-border cards and global enterprise checkouts.
+            </p>
+            <div className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-200/50 dark:bg-white/5 text-zinc-600 dark:text-zinc-400 w-fit">
+              {gatewaySettings.enableStripe ? 'ACTIVE STRIPE' : 'SUSPENDED'}
+            </div>
+          </div>
+
+          {/* PayU Platform Gateway Switch */}
+          <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.02] border border-zinc-100 dark:border-white/5 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-xs text-zinc-900 dark:text-white">PayU Gateway</span>
+              <button
+                type="button"
+                onClick={() => handleToggleGatewayFlag('enablePayU', !gatewaySettings.enablePayU)}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                  gatewaySettings.enablePayU ? 'bg-emerald-500' : 'bg-zinc-300 dark:bg-zinc-700'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                    gatewaySettings.enablePayU ? 'translate-x-4' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+            <p className="text-[11px] text-zinc-500 leading-relaxed">
+              Secondary payment aggregator for Indian cards, UPI Intent failover, and high-volume merchant processing.
+            </p>
+            <div className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-200/50 dark:bg-white/5 text-zinc-600 dark:text-zinc-400 w-fit">
+              {gatewaySettings.enablePayU ? 'STANDBY PAYU' : 'OFFLINE'}
+            </div>
           </div>
         </div>
       </div>

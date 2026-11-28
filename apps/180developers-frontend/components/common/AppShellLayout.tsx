@@ -33,6 +33,21 @@ export function AppShellLayout({
 }: AppShellLayoutProps) {
   const { project, projectId, loading, isSidebarExpanded, userProfile, refreshProject } = useProject();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const pathname = usePathname();
+
+  const isPaySubpage = pathname.startsWith(`/apps/${projectId}/pay/`);
+  const isIdentitySubpage = pathname.startsWith(`/apps/${projectId}/identity/`);
+  const projectRootHref = isPaySubpage
+    ? `/apps/${projectId}/pay`
+    : isIdentitySubpage
+    ? `/apps/${projectId}/identity/users`
+    : undefined;
+
+  const defaultBreadcrumbs = [
+    { label: 'Projects', href: '/dashboard' },
+    { label: project?.name || 'Project', href: projectRootHref },
+    { label: title },
+  ];
 
   const getBadgeClasses = (color: string) => {
     switch (color) {
@@ -114,20 +129,7 @@ export function AppShellLayout({
     );
   }
 
-  const pathname = usePathname();
-  const isPaySubpage = pathname.startsWith(`/apps/${projectId}/pay/`);
-  const isIdentitySubpage = pathname.startsWith(`/apps/${projectId}/identity/`);
-  const projectRootHref = isPaySubpage
-    ? `/apps/${projectId}/pay`
-    : isIdentitySubpage
-    ? `/apps/${projectId}/identity/users`
-    : undefined;
 
-  const defaultBreadcrumbs = [
-    { label: 'Projects', href: '/dashboard' },
-    { label: project?.name || 'Project', href: projectRootHref },
-    { label: title },
-  ];
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 flex transition-colors duration-200">
