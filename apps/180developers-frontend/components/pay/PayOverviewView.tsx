@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import {
   CreditCard,
   Activity,
@@ -20,6 +21,7 @@ import {
   ShieldCheck,
   Receipt,
   ArrowDown,
+  Landmark,
 } from 'lucide-react';
 import { usePlatformCurrency } from '@workspace/ui';
 import toast from 'react-hot-toast';
@@ -129,6 +131,7 @@ function LazyTransactionsSection() {
 
 export function PayOverviewView() {
   const {
+    projectId,
     project,
     enablePay,
     setEnablePay,
@@ -389,6 +392,40 @@ export function PayOverviewView() {
 
   return (
     <div className="space-y-6">
+      {/* Payment Rails & Receiving UPI Quick Configuration Banner */}
+      <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-r from-purple-500/[0.07] via-indigo-500/[0.04] to-transparent p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+            <Landmark className="w-5 h-5" />
+          </div>
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-zinc-950 dark:text-white">
+                Payment Rails &amp; Direct UPI Setup
+              </span>
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                (project as any)?.enableDirectUpi !== false
+                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                  : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400'
+              }`}>
+                {(project as any)?.enableDirectUpi !== false ? 'Direct UPI Ready' : 'UPI Disabled'}
+              </span>
+            </div>
+            <p className="text-xs text-zinc-600 dark:text-zinc-400">
+              Configure your receiving UPI ID ({((project as any)?.customUpiId || '180core@okaxis')}) or toggle between Direct Native UPI and 180 Pay Gateway processing.
+            </p>
+          </div>
+        </div>
+
+        <Link
+          href={`/apps/${projectId}/pay/gateways`}
+          className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-purple-600/20 transition-all cursor-pointer shrink-0 active:scale-95"
+        >
+          <span>Configure Rails</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
+      </div>
+
       {/* Unified Financial Overview & Conversion Funnel */}
       <div className="rounded-3xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-950 p-6 sm:p-7 space-y-6 shadow-sm dark:shadow-2xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-zinc-200 dark:border-white/10">

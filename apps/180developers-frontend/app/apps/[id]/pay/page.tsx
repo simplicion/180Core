@@ -25,6 +25,7 @@ export default function PayOverviewPage() {
         amount: amt,
         currency: cur,
         appId: project?.id,
+        clientId: project?.clientId,
         title: `${project?.name || 'Developer Project'} Checkout`,
         description: 'Sandbox verification session (Adaptive Sheet)',
         environment: 'development',

@@ -58,6 +58,7 @@ export function PayBottomNav() {
   ];
 
   const moreItems: { label: string; href: string; icon: any; badge?: string }[] = [
+    { label: 'Rails & Direct UPI', href: `/apps/${projectId}/pay/gateways`, icon: Landmark },
     { label: 'Coupons & Promos', href: `/apps/${projectId}/pay/coupons`, icon: Tag },
     { label: 'Payment Links', href: `/apps/${projectId}/pay/links`, icon: Link2 },
   ];

@@ -233,6 +233,7 @@ export function CheckoutClient({
         if (optAmount || optTitle) {
           setSession((prev: any) => prev || {
             id: resolvedId || 'pending',
+            _optimistic: true,
             amount: optAmount || 0,
             currency: sp.get('currency') || 'INR',
             title: optTitle || '180 Checkout',
@@ -287,8 +288,8 @@ export function CheckoutClient({
   }, []);
 
   useEffect(() => {
-    const targetId = session?.id || sessionId;
-    if (!targetId || targetId === 'default') return;
+    const targetId = session?.id;
+    if (!targetId || session?._optimistic || targetId === 'default' || targetId === 'pending') return;
     try {
       fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${targetId}/track-event`), {
         method: 'POST',
@@ -745,17 +746,6 @@ export function CheckoutClient({
     return Math.max(0, Math.round(currencyService.convert(activeFinalAmount, activeCurrency, chargeCurrency) * 100) / 100);
   }, [chargeCurrency, activeCurrency, activeFinalAmount]);
 
-  const isDirectUpiAvailable = Boolean(
-    isIndia && (
-      directUpiData ||
-      hasDirectUpi === true ||
-      prewarmedOrderRef.current?.hasDirectUpi ||
-      session?.hasDirectUpi ||
-      session?.app?.hasDirectUpi ||
-      (session?.app?.enableDirectUpi !== false)
-    )
-  );
-
   const isGatewayAvailable = Boolean(
     hasPlatformGateway !== null
       ? hasPlatformGateway
@@ -764,6 +754,17 @@ export function CheckoutClient({
       : session?.hasPlatformGateway !== undefined
       ? session.hasPlatformGateway
       : session?.app?.enablePlatformGateway === true
+  );
+
+  const isDirectUpiAvailable = Boolean(
+    (isIndia || !isGatewayAvailable) && (
+      directUpiData ||
+      hasDirectUpi === true ||
+      prewarmedOrderRef.current?.hasDirectUpi ||
+      session?.hasDirectUpi ||
+      session?.app?.hasDirectUpi ||
+      (session?.app?.enableDirectUpi === true)
+    )
   );
 
   const activeGatewayBrand = useMemo(() => {
@@ -1445,7 +1446,8 @@ export function CheckoutClient({
 
     const targetId = session?.id || sessionId;
     // Do not pre-warm if session is a pure mock/default or if amount is free/0
-    if (!targetId || targetId === 'default' || targetId.startsWith('sess_demo_') || targetId.startsWith('sess_sandbox_')) return;
+    const hasResolvedApp = Boolean(session?.app?.id || session?.appId);
+    if (!targetId || targetId === 'default' || targetId.startsWith('sess_demo_') || (targetId.startsWith('sess_sandbox_') && !hasResolvedApp)) return;
     if (activeFinalAmount <= 0 || chargeAmount <= 0) return;
 
     // If order already pre-warmed for current charge amount and gateway currency, reuse it
@@ -1687,6 +1689,7 @@ export function CheckoutClient({
     const effectiveUpi = orderInfo?.directUpi || directUpiData;
     const shouldRouteToUpi =
       (targetRail === 'UPI' && effectiveUpi) ||
+      (orderInfo?.gatewayType === 'DIRECT_UPI' && !orderInfo?.hasPlatformGateway && effectiveUpi) ||
       (targetRail !== 'GATEWAY' && (orderInfo?.gatewayType === 'DIRECT_UPI' || (!orderInfo?.hasPlatformGateway && effectiveUpi)));
 
     if (shouldRouteToUpi && effectiveUpi) {
@@ -1702,6 +1705,12 @@ export function CheckoutClient({
           .then(setDirectUpiQrUrl)
           .catch(() => {});
       }
+      setTopupLoading(false);
+      return;
+    }
+
+    if (orderInfo?.hasPlatformGateway === false) {
+      toast.error('Gateway payment is disabled for this app. Please pay via Direct UPI.', { id: directToastId });
       setTopupLoading(false);
       return;
     }
@@ -3167,7 +3176,7 @@ export function CheckoutClient({
 
             <button
               type="button"
-              onClick={() => handleDirectPayment()}
+              onClick={() => handleDirectPayment(isDirectUpiAvailable && !isGatewayAvailable ? 'UPI' : undefined)}
               disabled={paying || topupLoading}
               className="w-full py-2.5 min-h-[42px] rounded-xl border border-slate-200 dark:border-zinc-800 hover:border-slate-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-800/60 text-slate-700 dark:text-zinc-300 font-semibold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
             >
@@ -3175,6 +3184,8 @@ export function CheckoutClient({
               <span>
                 {topupLoading
                   ? 'Opening Gateway...'
+                  : isDirectUpiAvailable && !isGatewayAvailable
+                  ? `Or Pay ${currencyService.format(activeFinalAmount, activeCurrency)} via UPI`
                   : isDirectUpiAvailable
                   ? `Or Pay ${currencyService.format(activeFinalAmount, activeCurrency)} via Direct UPI / Cards`
                   : `Or Pay ${currencyService.format(chargeAmount, chargeCurrency)} via External Payment`}

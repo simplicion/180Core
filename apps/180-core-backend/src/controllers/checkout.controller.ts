@@ -1006,12 +1006,7 @@ export class CheckoutApiController {
         '127.0.0.1';
       const ip = Array.isArray(rawIp) ? rawIp[0] : String(rawIp).split(',')[0].trim();
 
-      let session = await prisma.checkoutSession.findUnique({ where: { id } });
-      if (!session) {
-        try {
-          session = await CheckoutService.getSession(id);
-        } catch (_) {}
-      }
+      const session = await prisma.checkoutSession.findUnique({ where: { id } });
       if (!session) {
         return res.status(200).json({ success: true, ignored: true });
       }

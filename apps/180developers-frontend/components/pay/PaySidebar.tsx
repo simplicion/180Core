@@ -76,6 +76,11 @@ export function PaySidebar({
       exact: true,
     },
     {
+      label: 'Rails & Direct UPI',
+      href: `/apps/${projectId}/pay/gateways`,
+      icon: Landmark,
+    },
+    {
       label: 'Payouts & Balance',
       href: `/apps/${projectId}/pay/payouts`,
       icon: CreditCard,

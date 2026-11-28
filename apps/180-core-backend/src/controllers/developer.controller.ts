@@ -1655,6 +1655,10 @@ export class DeveloperApiController {
           customGatewayWebhookSecret: true,
           customPayDomain: true,
           customDomainStatus: true,
+          customUpiId: true,
+          customUpiName: true,
+          enableDirectUpi: true,
+          enablePlatformGateway: true,
         },
       });
 

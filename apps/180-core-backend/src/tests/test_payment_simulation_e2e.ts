@@ -48,15 +48,29 @@ async function runPaymentSimulation() {
 
   console.log(`✓ Generated Gateway Order: ${order.orderId} (Amount: ${order.amountPaise} paise, Key: ${order.keyId ? order.keyId.slice(0, 10) + '...' : 'none'})`);
 
-  // Step 4: Generate authentic cryptographic signature
+  const isDirectUpiOrder = order.orderId.startsWith('upi_') || order.gatewayType === 'DIRECT_UPI';
+
+  // Step 4: Generate authentic verification payload
   const { keySecret } = CheckoutService.resolveGatewayConfig(app);
   const simPaymentId = `pay_sim_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-  const simSignature = crypto
-    .createHmac('sha256', keySecret || process.env.RAZORPAY_KEY_SECRET || 'fallback_secret')
-    .update(`${order.orderId}|${simPaymentId}`)
-    .digest('hex');
+  let simSignature: string;
 
-  console.log(`✓ Computed Valid HMAC Signature for Payment: ${simPaymentId}`);
+  if (isDirectUpiOrder) {
+    // Generate a valid 12-digit NPCI Julian-date UTR for Direct UPI verification
+    const now = new Date();
+    const yearLastDigit = String(now.getUTCFullYear()).slice(-1);
+    const startOfYear = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+    const julianDay = String(Math.floor((now.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000)) + 1).padStart(3, '0');
+    const seq = String(Math.floor(10000000 + Math.random() * 90000000));
+    simSignature = `${yearLastDigit}${julianDay}${seq}`;
+    console.log(`✓ Generated Valid NPCI Julian-Date UTR for Direct UPI: ${simSignature}`);
+  } else {
+    simSignature = crypto
+      .createHmac('sha256', keySecret || process.env.RAZORPAY_KEY_SECRET || 'fallback_secret')
+      .update(`${order.orderId}|${simPaymentId}`)
+      .digest('hex');
+    console.log(`✓ Computed Valid HMAC Signature for Payment: ${simPaymentId}`);
+  }
 
   // Step 5: Test Concurrent Verification (Simulating frontend direct-verify + status polling collision)
   console.log('\n─── [Concurrency Test] Running 2 Parallel Verifications on Same Session ───');
@@ -82,7 +96,7 @@ async function runPaymentSimulation() {
   console.log(`  - Call 1 result status: ${verifyResult1.status || verifyResult1.session?.status}`);
   console.log(`  - Call 2 result status: ${verifyResult2.status || verifyResult2.session?.status}`);
 
-  // Step 6: Verify Database Ledger & Session State
+  // Step 6: Verify Database Session State
   const capturedSession = await prisma.checkoutSession.findUnique({
     where: { id: testSession.id },
   });
@@ -91,8 +105,15 @@ async function runPaymentSimulation() {
     throw new Error(`Expected session status CAPTURED, but found ${capturedSession?.status}`);
   }
 
+  // Step 7: Verify Ledger Entry (referenceId differs between gateway HMAC and Direct UPI auto-verify)
+  const transactionId = verifyResult1.transactionId || verifyResult2.transactionId;
   const ledger = await prisma.ledgerEntry.findFirst({
-    where: { referenceId: simPaymentId },
+    where: {
+      OR: [
+        { referenceId: simPaymentId },
+        { referenceId: transactionId },
+      ],
+    },
   });
 
   if (!ledger) {
@@ -102,13 +123,14 @@ async function runPaymentSimulation() {
   console.log(`✓ Double-entry Ledger Confirmed: Entry #${ledger.id}, Amount: ${ledger.amount}, BalanceAfter: ${ledger.balanceAfter}`);
   console.log(`✓ Session Status: ${capturedSession.status}, CompletedAt: ${capturedSession.completedAt}`);
 
-  // Step 7: Clean up simulation session
-  await prisma.ledgerEntry.deleteMany({ where: { referenceId: simPaymentId } }).catch(() => {});
+  // Step 8: Clean up simulation session
+  await prisma.upiPaymentVerification.deleteMany({ where: { sessionId: testSession.id } }).catch(() => {});
+  await prisma.ledgerEntry.deleteMany({ where: { OR: [{ referenceId: simPaymentId }, { referenceId: transactionId }] } }).catch(() => {});
   await prisma.checkoutSession.delete({ where: { id: testSession.id } }).catch(() => {});
   console.log('✓ Cleaned up temporary simulation records');
 
   console.log('\n═══════════════════════════════════════════════════════════════════════');
-  console.log('  🎉 PAYMENT SIMULATION & DEDUPLICATION AUDIT: ALL TESTS PASSED!');
+  console.log('  PAYMENT SIMULATION & DEDUPLICATION AUDIT: ALL TESTS PASSED!');
   console.log('═══════════════════════════════════════════════════════════════════════\n');
 }
 

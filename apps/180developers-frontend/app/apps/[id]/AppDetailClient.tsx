@@ -403,6 +403,8 @@ export default function AppDetailClient({ initialView }: AppDetailClientProps) {
     OneEightyPay.openBottomSheet({
       amount: 499,
       currency: 'INR',
+      appId: app?.id,
+      clientId: app?.clientId,
       title: `${app?.name || 'Developer App'} Premium Checkout`,
       description: 'Sandbox verification session',
       onSuccess: (res) => toast.success(`Payment test passed! TxID: ${res.transactionId || res.sessionId}`),

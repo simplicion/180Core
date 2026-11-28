@@ -629,6 +629,7 @@ export class CheckoutService {
               OR: [
                 { id: String(candidateAppId) },
                 { clientId: String(candidateAppId) },
+                { name: { equals: String(candidateAppId), mode: 'insensitive' } },
               ],
             },
             select: APP_CHECKOUT_SELECT,
@@ -2019,6 +2020,30 @@ export class CheckoutService {
     responseCode?: string;
     status?: string;
     txnRef?: string;
+    payerVpa?: string;  
+    rawPayload?: any;
+  }): Promise<any> {
+    const { sessionId } = input;
+
+    // In-flight deduplication to prevent concurrent transaction deadlocks (same as verifyDirectPayment)
+    if (this.inFlightVerifications.has(sessionId)) {
+      return await this.inFlightVerifications.get(sessionId)!;
+    }
+
+    const verificationPromise = this._doAutoVerifyDirectUpi(input).finally(() => {
+      this.inFlightVerifications.delete(sessionId);
+    });
+
+    this.inFlightVerifications.set(sessionId, verificationPromise);
+    return await verificationPromise;
+  }
+
+  private static async _doAutoVerifyDirectUpi(input: {
+    sessionId: string;
+    approvalRefNo?: string;
+    responseCode?: string;
+    status?: string;
+    txnRef?: string;
     payerVpa?: string;
     rawPayload?: any;
   }): Promise<any> {
@@ -2088,6 +2113,10 @@ export class CheckoutService {
     const verificationType = cleanUtr && !isProvisional ? 'NPCI_BANK_UTR' : 'PROVISIONAL_INTENT';
     const riskLevel = isProvisional ? 'MEDIUM' : 'LOW';
 
+    // Security gate: Provisional verifications (no valid UTR) set PENDING_VERIFICATION
+    // Only confirmed NPCI UTR submissions auto-capture and credit wallets
+    const captureStatus = isProvisional ? 'PENDING_VERIFICATION' : 'CAPTURED';
+
     // Atomic database update & verification logging
     let result: any;
     try {
@@ -2102,35 +2131,76 @@ export class CheckoutService {
             currency: session.currency || 'INR',
             payeeVpa,
             payerVpa: payerVpa || null,
-            status: 'CAPTURED',
+            status: captureStatus,
             responseCode: responseCode || '00',
             rawPayload: rawPayload ? JSON.parse(JSON.stringify(rawPayload)) : undefined,
           },
         });
 
-        // Mark session as CAPTURED
+        // Mark session status based on verification strength
         const updatedSession = await tx.checkoutSession.update({
           where: { id: session.id },
           data: {
-            status: 'CAPTURED',
-            completedAt: new Date(),
+            status: captureStatus,
+            completedAt: isProvisional ? undefined : new Date(),
             metadata: {
               ...((session.metadata as any) || {}),
               gateway: 'DIRECT_UPI',
               transactionId,
               utr: cleanUtr,
-              autoCaptured: true,
+              autoCaptured: !isProvisional,
               isProvisional,
               verificationType,
               riskLevel,
               payeeVpa,
-              completedAt: new Date().toISOString(),
+              ...(isProvisional ? { pendingVerificationAt: new Date().toISOString() } : { completedAt: new Date().toISOString() }),
             },
           },
           include: {
             app: { select: APP_CHECKOUT_SELECT },
           },
         });
+
+        // Only credit developer wallet when UTR is verified (not provisional)
+        if (!isProvisional) {
+          let appWallet = await tx.wallet.findUnique({
+            where: { developerAppId: session.appId },
+          });
+
+          if (!appWallet) {
+            appWallet = await tx.wallet.create({
+              data: {
+                developerAppId: session.appId,
+                balance: 0,
+                currency: session.currency || 'INR',
+              },
+            });
+          }
+
+          const newAppBalance = Math.round((appWallet.balance + session.amount) * 100) / 100;
+          await tx.wallet.update({
+            where: { id: appWallet.id },
+            data: { balance: newAppBalance },
+          });
+
+          await tx.ledgerEntry.create({
+            data: {
+              walletId: appWallet.id,
+              amount: session.amount,
+              balanceAfter: newAppBalance,
+              type: 'CHECKOUT_RECEIVE',
+              referenceId: transactionId,
+              description: `Direct UPI payment received for ${session.title}`,
+              metadata: {
+                sessionId: session.id,
+                gateway: 'DIRECT_UPI',
+                utr: cleanUtr,
+                verificationType,
+                payeeVpa,
+              },
+            },
+          });
+        }
 
         return { session: updatedSession, transactionId };
       });
@@ -2141,7 +2211,7 @@ export class CheckoutService {
       throw txErr;
     }
 
-    // Asynchronously dispatch payment.captured webhook to developer app
+    // Asynchronously dispatch webhook to developer app based on verification strength
     const webhookData = {
       sessionId: session.id,
       transactionId: result.transactionId,
@@ -2154,26 +2224,35 @@ export class CheckoutService {
       verificationType,
       isProvisional,
       riskLevel,
-      status: 'CAPTURED',
+      status: captureStatus,
       timestamp: new Date().toISOString(),
     };
 
-    Promise.allSettled([
+    if (isProvisional) {
       this.dispatchPaymentWebhook(session.appId, {
-        event: 'payment.captured',
+        event: 'payment.pending_verification',
         data: webhookData,
-      }),
-      this.dispatchPaymentWebhook(session.appId, {
-        event: 'payment.succeeded',
-        data: webhookData,
-      }),
-    ]).catch((err) => console.warn('[CheckoutService] Failed to dispatch webhook:', err?.message));
+      }).catch((err) => console.warn('[CheckoutService] Failed to dispatch webhook:', err?.message));
+    } else {
+      Promise.allSettled([
+        this.dispatchPaymentWebhook(session.appId, {
+          event: 'payment.captured',
+          data: webhookData,
+        }),
+        this.dispatchPaymentWebhook(session.appId, {
+          event: 'payment.succeeded',
+          data: webhookData,
+        }),
+      ]).catch((err) => console.warn('[CheckoutService] Failed to dispatch webhook:', err?.message));
+    }
 
     return {
       success: true,
       session: result.session,
       transactionId: result.transactionId,
       utr: cleanUtr,
+      isProvisional,
+      status: captureStatus,
       returnUrl: session.returnUrl,
     };
   }
@@ -2268,6 +2347,19 @@ export class CheckoutService {
     let session = await this.getSession(sessionId, undefined, { skipReconcile: true });
 
     const { gatewayType, keyId, keySecret } = this.resolveGatewayConfig(session.app);
+
+    // Direct UPI verification: delegate to the auto-verify engine instead of HMAC
+    if (gatewayType === 'DIRECT_UPI' || orderId.startsWith('upi_')) {
+      return this.autoVerifyDirectUpiPayment({
+        sessionId,
+        approvalRefNo: signature !== 'mock_sig_sandbox' && !signature.startsWith('sig_sim_') ? signature : undefined,
+        responseCode: '00',
+        status: 'SUCCESS',
+        txnRef: orderId,
+        rawPayload: { orderId, paymentId, delegatedFrom: 'verifyDirectPayment' },
+      });
+    }
+
     const isStripe = gatewayType === 'STRIPE' || orderId.startsWith('pi_') || paymentId.startsWith('pi_');
 
     if (isStripe) {
