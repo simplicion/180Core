@@ -2121,9 +2121,10 @@ export class CheckoutService {
     let result: any;
     try {
       result = await prisma.$transaction(async (tx: any) => {
-        // Record verification in UpiPaymentVerification table
-        await tx.upiPaymentVerification.create({
-          data: {
+        // Record or upgrade verification in UpiPaymentVerification table
+        await tx.upiPaymentVerification.upsert({
+          where: { sessionId: session.id },
+          create: {
             sessionId: session.id,
             appId: session.appId,
             utr: cleanUtr,
@@ -2134,6 +2135,14 @@ export class CheckoutService {
             status: captureStatus,
             responseCode: responseCode || '00',
             rawPayload: rawPayload ? JSON.parse(JSON.stringify(rawPayload)) : undefined,
+          },
+          update: {
+            utr: cleanUtr,
+            payerVpa: payerVpa || null,
+            status: captureStatus,
+            responseCode: responseCode || '00',
+            rawPayload: rawPayload ? JSON.parse(JSON.stringify(rawPayload)) : undefined,
+            verifiedAt: new Date(),
           },
         });
 

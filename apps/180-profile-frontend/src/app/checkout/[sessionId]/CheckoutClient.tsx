@@ -29,6 +29,7 @@ import {
   Download,
   QrCode,
   Smartphone,
+  Loader2,
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { Button, LogoLoader, AILogoIcon, AdaptiveSkeleton, MaintenanceLockWall } from '@workspace/ui';
@@ -254,9 +255,16 @@ export function CheckoutClient({
   const [directUpiData, setDirectUpiData] = useState<any>(null);
   const [directUpiQrUrl, setDirectUpiQrUrl] = useState<string>('');
   const [showDirectUpiModal, setShowDirectUpiModal] = useState<boolean>(false);
+  const [awaitingUtr, setAwaitingUtr] = useState<boolean>(false);
+  const [utrInput, setUtrInput] = useState<string>('');
   const [copiedUpiId, setCopiedUpiId] = useState<boolean>(false);
   const [hasPlatformGateway, setHasPlatformGateway] = useState<boolean | null>(null);
   const [hasDirectUpi, setHasDirectUpi] = useState<boolean | null>(null);
+
+  const isMobileDevice = useMemo(() => {
+    if (typeof navigator === 'undefined') return false;
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  }, []);
 
   const [session, setSession] = useState<any>(null);
 
@@ -1172,64 +1180,63 @@ export function CheckoutClient({
     return false;
   }, [session?.id, sessionId, completed, handlePaymentCompletion]);
 
+  // Poll backend status while Direct UPI QR modal is open on Desktop so mobile completion auto-completes Desktop
+  useEffect(() => {
+    if (!showDirectUpiModal || completed) return;
+    const poll = setInterval(() => {
+      checkSessionStatus(true);
+    }, 2500);
+    return () => clearInterval(poll);
+  }, [showDirectUpiModal, completed, checkSessionStatus]);
+
   const handleLaunchDirectUpiApp = useCallback((uri: string) => {
     setIsVerifyingPayment(true);
     setVerifyingText('Opening UPI application... Your purchase will automatically confirm upon completion.');
 
-    // Auto-verify return handler (Zero manual customer typing)
-    let autoVerifyTriggered = false;
-    const triggerAutoVerify = async () => {
-      if (autoVerifyTriggered) return;
-      autoVerifyTriggered = true;
-      setVerifyingText('Verifying payment receipt with bank...');
+    // Return handler: check if backend/native bridge already captured, otherwise prompt for 12-digit UTR (never mark paid on Back press)
+    let returnHandled = false;
+    const handleReturnFromUpiApp = async () => {
+      if (returnHandled) return;
+      returnHandled = true;
+      setVerifyingText('Checking payment status...');
       try {
-        const targetId = session?.id || sessionId;
-        const autoRes = await fetch(getCoreApiUrl(`/api/v1/checkout/sessions/${targetId}/auto-verify`), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            status: 'SUCCESS',
-            responseCode: '00',
-            txnRef: targetId,
-          }),
-        });
-        if (autoRes.ok) {
-          const autoData = await autoRes.json();
-          if (autoData.success) {
-            handlePaymentCompletion({
-              transactionId: autoData.transactionId,
-              customReturnUrl: autoData.returnUrl,
-            });
-            return;
-          }
-        }
+        const alreadyPaid = await checkSessionStatus(true);
+        if (alreadyPaid) return;
       } catch (_) {}
+      setIsVerifyingPayment(false);
+      setAwaitingUtr(true);
+      setShowDirectUpiModal(true);
     };
 
     const handleFocusReturn = () => {
       window.removeEventListener('focus', handleFocusReturn);
       document.removeEventListener('visibilitychange', handleVisibilityReturn);
-      setTimeout(triggerAutoVerify, 700);
+      setTimeout(handleReturnFromUpiApp, 700);
     };
 
     const handleVisibilityReturn = () => {
       if (document.visibilityState === 'visible') {
         window.removeEventListener('focus', handleFocusReturn);
         document.removeEventListener('visibilitychange', handleVisibilityReturn);
-        setTimeout(triggerAutoVerify, 700);
+        setTimeout(handleReturnFromUpiApp, 700);
       }
     };
 
     window.addEventListener('focus', handleFocusReturn);
     document.addEventListener('visibilitychange', handleVisibilityReturn);
 
-    // Launch UPI app directly
+    // Launch OS native UPI intent (shows all installed UPI apps on phone)
     try {
       window.location.href = uri;
     } catch (_) {}
-  }, [session?.id, sessionId, handlePaymentCompletion]);
+  }, [checkSessionStatus]);
 
-  const handleConfirmCompletedPayment = useCallback(async () => {
+  const handleConfirmCompletedPayment = useCallback(async (utrOverride?: string) => {
+    const cleanUtr = (utrOverride ?? utrInput).trim().replace(/\D/g, '');
+    if (cleanUtr && cleanUtr.length !== 12) {
+      toast.error('Please enter a valid 12-digit UPI Reference / UTR number');
+      return;
+    }
     setIsVerifyingPayment(true);
     setVerifyingText('Verifying payment receipt with bank...');
     try {
@@ -1238,28 +1245,33 @@ export function CheckoutClient({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          approvalRefNo: cleanUtr || undefined,
           status: 'SUCCESS',
           responseCode: '00',
           txnRef: targetId,
         }),
       });
-      if (autoRes.ok) {
-        const autoData = await autoRes.json();
-        if (autoData.success) {
+      const autoData = await autoRes.json();
+      if (autoRes.ok && autoData.success) {
+        if (autoData.status === 'CAPTURED') {
           handlePaymentCompletion({
             transactionId: autoData.transactionId,
             customReturnUrl: autoData.returnUrl,
           });
           return;
         }
+        setIsVerifyingPayment(false);
+        setAwaitingUtr(true);
+        toast('Enter your 12-digit UPI Reference / UTR number from your UPI app to finalize verification.');
+        return;
       }
       setIsVerifyingPayment(false);
-      toast.error('Payment receipt could not be verified yet. Please try again in a moment.');
+      toast.error(autoData.error || 'Payment receipt could not be verified yet. Please check your 12-digit UTR.');
     } catch (_) {
       setIsVerifyingPayment(false);
       toast.error('Payment verification failed. Please check your connection.');
     }
-  }, [session?.id, sessionId, handlePaymentCompletion]);
+  }, [session?.id, sessionId, utrInput, handlePaymentCompletion]);
 
   const fetchSessionAndWallet = async () => {
     try {
@@ -1695,9 +1707,24 @@ export function CheckoutClient({
     if (shouldRouteToUpi && effectiveUpi) {
       toast.dismiss(directToastId);
       setDirectUpiData(effectiveUpi);
+      setTopupLoading(false);
+
+      // On mobile: directly trigger OS UPI app chooser (upi://pay?...) and auto-verify on return
+      if (isMobileDevice && effectiveUpi.genericUri) {
+        handleLaunchDirectUpiApp(effectiveUpi.genericUri);
+        return;
+      }
+
+      // On Desktop / PC: generate a standard web QR pointing to this 180 Pay page on mobile
+      const targetId = session?.id || sessionId;
+      const mobilePageUrl =
+        typeof window !== 'undefined'
+          ? `${window.location.origin}/checkout/${encodeURIComponent(targetId)}?rail=upi`
+          : effectiveUpi.qrPayload;
+
       setShowDirectUpiModal(true);
-      if (effectiveUpi.qrPayload) {
-        QRCode.toDataURL(effectiveUpi.qrPayload, {
+      if (mobilePageUrl) {
+        QRCode.toDataURL(mobilePageUrl, {
           width: 360,
           margin: 2,
           color: { dark: '#0f172a', light: '#ffffff' },
@@ -1705,7 +1732,6 @@ export function CheckoutClient({
           .then(setDirectUpiQrUrl)
           .catch(() => {});
       }
-      setTopupLoading(false);
       return;
     }
 
@@ -3203,64 +3229,15 @@ export function CheckoutClient({
                   disabled={topupLoading || paying}
                   className="w-full min-h-[46px] rounded-xl bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white font-bold text-sm shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
                 >
-                  <Smartphone className="w-4 h-4" />
+                  {isMobileDevice ? <Smartphone className="w-4 h-4" /> : <QrCode className="w-4 h-4" />}
                   <span>
                     {topupLoading
                       ? 'Opening UPI...'
-                      : `Pay ${currencyService.format(activeFinalAmount, activeCurrency)} via UPI`}
+                      : isMobileDevice
+                      ? `Pay ${currencyService.format(activeFinalAmount, activeCurrency)} via UPI`
+                      : `Pay ${currencyService.format(activeFinalAmount, activeCurrency)} via UPI (Scan QR)`}
                   </span>
                 </Button>
-
-                {/* 1-Tap Quick Apps Bar */}
-                <div className="grid grid-cols-4 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (directUpiData?.gpayUri) {
-                        handleLaunchDirectUpiApp(directUpiData.gpayUri);
-                      } else {
-                        handleDirectPayment('UPI');
-                      }
-                    }}
-                    className="py-2 px-1 rounded-xl border border-slate-200 dark:border-zinc-800 hover:border-indigo-400 dark:hover:border-indigo-500 bg-white dark:bg-zinc-900 text-[11px] font-semibold text-slate-700 dark:text-zinc-300 flex items-center justify-center gap-1 transition-all cursor-pointer shadow-2xs hover:bg-slate-50 dark:hover:bg-zinc-800/60"
-                  >
-                    <span>GPay</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (directUpiData?.phonepeUri) {
-                        handleLaunchDirectUpiApp(directUpiData.phonepeUri);
-                      } else {
-                        handleDirectPayment('UPI');
-                      }
-                    }}
-                    className="py-2 px-1 rounded-xl border border-slate-200 dark:border-zinc-800 hover:border-purple-400 dark:hover:border-purple-500 bg-white dark:bg-zinc-900 text-[11px] font-semibold text-slate-700 dark:text-zinc-300 flex items-center justify-center gap-1 transition-all cursor-pointer shadow-2xs hover:bg-slate-50 dark:hover:bg-zinc-800/60"
-                  >
-                    <span>PhonePe</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (directUpiData?.paytmUri) {
-                        handleLaunchDirectUpiApp(directUpiData.paytmUri);
-                      } else {
-                        handleDirectPayment('UPI');
-                      }
-                    }}
-                    className="py-2 px-1 rounded-xl border border-slate-200 dark:border-zinc-800 hover:border-cyan-400 dark:hover:border-cyan-500 bg-white dark:bg-zinc-900 text-[11px] font-semibold text-slate-700 dark:text-zinc-300 flex items-center justify-center gap-1 transition-all cursor-pointer shadow-2xs hover:bg-slate-50 dark:hover:bg-zinc-800/60"
-                  >
-                    <span>Paytm</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDirectPayment('UPI')}
-                    className="py-2 px-1 rounded-xl border border-slate-200 dark:border-zinc-800 hover:border-emerald-400 dark:hover:border-emerald-500 bg-white dark:bg-zinc-900 text-[11px] font-semibold text-slate-700 dark:text-zinc-300 flex items-center justify-center gap-1 transition-all cursor-pointer shadow-2xs hover:bg-slate-50 dark:hover:bg-zinc-800/60"
-                  >
-                    <QrCode className="w-3.5 h-3.5 text-slate-500" />
-                    <span>QR</span>
-                  </button>
-                </div>
               </div>
             )}
 
@@ -3376,66 +3353,21 @@ export function CheckoutClient({
               </div>
             </div>
 
-            {/* Mobile View: Quick App Action Buttons */}
-            <div className="space-y-2">
-              <span className="text-[10px] font-bold text-slate-600 dark:text-zinc-400 uppercase tracking-wider block">
-                Tap to pay with installed app
-              </span>
-              <div className="grid grid-cols-2 gap-2">
-                {/* Google Pay */}
-                <button
-                  type="button"
-                  onClick={() => handleLaunchDirectUpiApp(directUpiData.gpayUri || directUpiData.genericUri)}
-                  className="p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 hover:border-blue-500 dark:hover:border-blue-500 bg-white dark:bg-zinc-800/80 hover:bg-blue-50/50 dark:hover:bg-blue-950/20 text-slate-900 dark:text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs active:scale-[0.98]"
-                >
-                  <span className="w-2 h-2 rounded-full bg-blue-500" />
-                  <span>Google Pay</span>
-                </button>
-
-                {/* PhonePe */}
-                <button
-                  type="button"
-                  onClick={() => handleLaunchDirectUpiApp(directUpiData.phonepeUri || directUpiData.genericUri)}
-                  className="p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 hover:border-purple-500 dark:hover:border-purple-500 bg-white dark:bg-zinc-800/80 hover:bg-purple-50/50 dark:hover:bg-purple-950/20 text-slate-900 dark:text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs active:scale-[0.98]"
-                >
-                  <span className="w-2 h-2 rounded-full bg-purple-600" />
-                  <span>PhonePe</span>
-                </button>
-
-                {/* Paytm */}
-                <button
-                  type="button"
-                  onClick={() => handleLaunchDirectUpiApp(directUpiData.paytmUri || directUpiData.genericUri)}
-                  className="p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 hover:border-cyan-500 dark:hover:border-cyan-500 bg-white dark:bg-zinc-800/80 hover:bg-cyan-50/50 dark:hover:bg-cyan-950/20 text-slate-900 dark:text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs active:scale-[0.98]"
-                >
-                  <span className="w-2 h-2 rounded-full bg-cyan-500" />
-                  <span>Paytm</span>
-                </button>
-
-                {/* Any UPI */}
-                <button
-                  type="button"
-                  onClick={() => handleLaunchDirectUpiApp(directUpiData.genericUri)}
-                  className="p-3 rounded-2xl border border-slate-200 dark:border-zinc-700 hover:border-emerald-500 dark:hover:border-emerald-500 bg-white dark:bg-zinc-800/80 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 text-slate-900 dark:text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs active:scale-[0.98]"
-                >
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span>Any UPI App</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Dynamic QR Canvas */}
-            {directUpiQrUrl && (
-              <div className="pt-2 border-t border-slate-100 dark:border-zinc-800 flex flex-col items-center text-center space-y-2">
-                <span className="text-[10px] font-bold text-slate-500 dark:text-zinc-400">
-                  Or scan QR with any camera or UPI app
+            {/* Desktop QR Code (Opens 180 Pay Mobile Page) */}
+            {!isMobileDevice && directUpiQrUrl && !awaitingUtr && (
+              <div className="pt-2 flex flex-col items-center text-center space-y-2.5">
+                <span className="text-xs font-bold text-slate-700 dark:text-zinc-200">
+                  Scan QR with Google Lens or Phone Camera
                 </span>
-                <div className="p-2 bg-white rounded-2xl border border-slate-200 shadow-xs">
+                <p className="text-[11px] text-slate-500 dark:text-zinc-400 max-w-xs leading-relaxed">
+                  Opens 180 Pay on your phone so you can choose any installed UPI app and verify automatically.
+                </p>
+                <div className="p-2.5 bg-white rounded-2xl border border-slate-200 shadow-xs">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={directUpiQrUrl} alt="UPI QR Code" className="w-40 h-40 object-contain" />
+                  <img src={directUpiQrUrl} alt="180 Pay Mobile Checkout QR Code" className="w-44 h-44 object-contain" />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-mono text-slate-600 dark:text-zinc-400 bg-slate-100 dark:bg-zinc-800 px-2 py-0.5 rounded-lg">
+                  <span className="text-[11px] font-mono text-slate-600 dark:text-zinc-400 bg-slate-100 dark:bg-zinc-800 px-2.5 py-1 rounded-lg">
                     {directUpiData.upiId}
                   </span>
                   <button
@@ -3453,19 +3385,68 @@ export function CheckoutClient({
                     {copiedUpiId ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
                 </div>
+                <div className="flex items-center gap-1.5 text-[11px] text-indigo-600 dark:text-indigo-400 font-medium pt-1">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Waiting for mobile payment verification...</span>
+                </div>
               </div>
             )}
 
-            {/* Desktop / Manual Completed Action Button (Zero User Input) */}
-            <div className="pt-1">
-              <Button
-                type="button"
-                onClick={handleConfirmCompletedPayment}
-                className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md active:scale-[0.99]"
-              >
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>I Have Completed Payment</span>
-              </Button>
+            {/* Mobile Re-launch + UTR Verification */}
+            {(isMobileDevice || awaitingUtr) && (
+              <div className="space-y-3 pt-1">
+                {isMobileDevice && directUpiData.genericUri && (
+                  <Button
+                    type="button"
+                    onClick={() => handleLaunchDirectUpiApp(directUpiData.genericUri)}
+                    className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md"
+                  >
+                    <Smartphone className="w-4 h-4" />
+                    <span>Open Installed UPI Apps</span>
+                  </Button>
+                )}
+
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400 uppercase tracking-wider">
+                    12-Digit UPI Reference / UTR Number
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={12}
+                    placeholder="e.g. 633242074393"
+                    value={utrInput}
+                    onChange={(e) => setUtrInput(e.target.value.replace(/\D/g, '').slice(0, 12))}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <span className="text-[11px] text-slate-400 block">
+                    Found on your UPI app payment confirmation screen.
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Verify / Complete Action */}
+            <div className="pt-1 flex flex-col gap-2">
+              {(isMobileDevice || awaitingUtr) ? (
+                <Button
+                  type="button"
+                  onClick={() => handleConfirmCompletedPayment()}
+                  disabled={utrInput.trim().length !== 12}
+                  className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md active:scale-[0.99]"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>Verify UTR &amp; Complete Payment</span>
+                </Button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setAwaitingUtr(true)}
+                  className="w-full py-2 text-[11px] font-semibold text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+                >
+                  Already paid? Enter 12-digit UTR manually
+                </button>
+              )}
             </div>
           </div>
         </div>
