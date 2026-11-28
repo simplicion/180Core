@@ -384,6 +384,10 @@ async function runDirectUpiSimulation() {
     assert(magicSigBlocked, 'Security: verifyDirectPayment rejects auto_polled_capture magic string');
 
     // Suite 5: Active Payment Domain resolution
+    const currentDomainRows: any[] = await prisma.$queryRawUnsafe(
+      'SELECT "paymentDomain" FROM "PlatformGatewaySettings" WHERE id = \'global\''
+    );
+    const savedPaymentDomain = currentDomainRows?.[0]?.paymentDomain ?? null;
     await (prisma.platformGatewaySettings as any).update({
       where: { id: 'global' },
       data: { paymentDomain: 'pay.180trafficdirector.pro' },
@@ -396,7 +400,7 @@ async function runDirectUpiSimulation() {
     );
     await (prisma.platformGatewaySettings as any).update({
       where: { id: 'global' },
-      data: { paymentDomain: (originalSettings as any)?.paymentDomain ?? null },
+      data: { paymentDomain: savedPaymentDomain },
     });
     CheckoutService.invalidatePlatformGatewaySettingsCache();
 

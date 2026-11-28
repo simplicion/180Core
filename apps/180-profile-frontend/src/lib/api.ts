@@ -29,7 +29,24 @@ export function isCustomDomainHost(): boolean {
   return (
     !isLocalOrIpHost(host) &&
     !host.endsWith('180core.cloud') &&
-    !host.endsWith('.pages.dev')
+    !host.endsWith('.pages.dev') &&
+    !isPlatformPaymentHost(host)
+  );
+}
+
+/**
+ * Returns true if the hostname is a known 180 platform payment domain.
+ * These are first-party domains operated by the platform (not third-party merchant custom domains)
+ * and must route API calls to api.180core.cloud rather than the current origin.
+ */
+function isPlatformPaymentHost(host: string): boolean {
+  const platformPaymentSuffixes = [
+    '180trafficdirector.pro',
+    '180pay.com',
+    '180profile.com',
+  ];
+  return platformPaymentSuffixes.some(
+    (s) => host === s || host.endsWith(`.${s}`)
   );
 }
 
