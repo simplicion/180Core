@@ -254,6 +254,7 @@ export function CheckoutClient({
 
   const [directUpiData, setDirectUpiData] = useState<any>(null);
   const [directUpiQrUrl, setDirectUpiQrUrl] = useState<string>('');
+  const [nativeUpiQrUrl, setNativeUpiQrUrl] = useState<string>('');
   const [showDirectUpiModal, setShowDirectUpiModal] = useState<boolean>(false);
   const [awaitingUtr, setAwaitingUtr] = useState<boolean>(false);
   const [utrInput, setUtrInput] = useState<string>('');
@@ -1733,6 +1734,15 @@ export function CheckoutClient({
 
       setAwaitingUtr(false);
       setShowDirectUpiModal(true);
+      if (effectiveUpi.qrPayload) {
+        QRCode.toDataURL(effectiveUpi.qrPayload, {
+          width: 360,
+          margin: 2,
+          color: { dark: '#0f172a', light: '#ffffff' },
+        })
+          .then(setNativeUpiQrUrl)
+          .catch(() => {});
+      }
       if (mobilePageUrl) {
         QRCode.toDataURL(mobilePageUrl, {
           width: 360,
@@ -3412,7 +3422,7 @@ export function CheckoutClient({
               </div>
             )}
 
-            {/* Mobile Re-launch + UTR Verification */}
+            {/* Mobile Re-launch + Personal VPA Fallback (Copy VPA / Save QR) + UTR Verification */}
             {(isMobileDevice || awaitingUtr) && (
               <div className="space-y-3 pt-1">
                 {isMobileDevice && directUpiData.genericUri && (
@@ -3426,9 +3436,50 @@ export function CheckoutClient({
                   </Button>
                 )}
 
+                {/* Fallback for personal VPAs when UPI app blocks direct intent */}
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200 dark:border-zinc-700 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-semibold text-slate-600 dark:text-zinc-300">
+                      App declined intent? Pay via UPI ID or QR:
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (navigator.clipboard) {
+                          navigator.clipboard.writeText(directUpiData.upiId);
+                          setCopiedUpiId(true);
+                          toast.success('UPI ID copied! Open your UPI app and pay ₹' + directUpiData.amount);
+                          setTimeout(() => setCopiedUpiId(false), 2500);
+                        }
+                      }}
+                      className="flex-1 py-2 px-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-[11px] font-mono font-semibold text-slate-800 dark:text-zinc-100 flex items-center justify-center gap-1.5 cursor-pointer hover:border-indigo-400 transition-colors"
+                    >
+                      {copiedUpiId ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5 text-indigo-500" />}
+                      <span className="truncate">Copy {directUpiData.upiId}</span>
+                    </button>
+                    {nativeUpiQrUrl && (
+                      <a
+                        href={nativeUpiQrUrl}
+                        download={`180pay-upi-${directUpiData.amount}.png`}
+                        className="py-2 px-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-[11px] font-semibold text-slate-800 dark:text-zinc-100 flex items-center gap-1.5 hover:border-indigo-400 transition-colors shrink-0"
+                      >
+                        <Download className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>Save QR</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 text-[11px] text-indigo-600 dark:text-indigo-400 font-medium">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                  <span>Listening for automatic bank verification...</span>
+                </div>
+
                 <div className="space-y-1.5">
                   <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400 uppercase tracking-wider">
-                    12-Digit UPI Reference / UTR Number
+                    Or Enter 12-Digit UPI Reference / UTR Number
                   </label>
                   <input
                     type="text"
