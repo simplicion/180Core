@@ -1857,7 +1857,7 @@ export class CheckoutService {
       const formattedAmount = (Math.round(actualAmountInr * 100) / 100).toFixed(2);
       const shortRef = session.id.replace(/-/g, '').slice(0, 16);
 
-      const basePayload = `pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(payeeName)}&am=${formattedAmount}&cu=INR&tr=${session.id}&tn=180P_${shortRef}`;
+      const basePayload = `pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(payeeName)}&am=${formattedAmount}&cu=INR&tn=180P_${shortRef}`;
       directUpiPayload = {
         upiId,
         payeeName,

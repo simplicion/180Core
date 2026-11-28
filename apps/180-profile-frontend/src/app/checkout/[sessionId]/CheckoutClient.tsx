@@ -3476,49 +3476,8 @@ export function CheckoutClient({
                   <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
                   <span>Listening for automatic bank verification...</span>
                 </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-bold text-slate-600 dark:text-zinc-400 uppercase tracking-wider">
-                    Or Enter 12-Digit UPI Reference / UTR Number
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={12}
-                    placeholder="e.g. 633242074393"
-                    value={utrInput}
-                    onChange={(e) => setUtrInput(e.target.value.replace(/\D/g, '').slice(0, 12))}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <span className="text-[11px] text-slate-400 block">
-                    Found on your UPI app payment confirmation screen.
-                  </span>
-                </div>
               </div>
             )}
-
-            {/* Verify / Complete Action */}
-            <div className="pt-1 flex flex-col gap-2">
-              {(isMobileDevice || awaitingUtr) ? (
-                <Button
-                  type="button"
-                  onClick={() => handleConfirmCompletedPayment()}
-                  disabled={utrInput.trim().length !== 12}
-                  className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md active:scale-[0.99]"
-                >
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>Verify UTR &amp; Complete Payment</span>
-                </Button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setAwaitingUtr(true)}
-                  className="w-full py-2 text-[11px] font-semibold text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
-                >
-                  Already paid? Enter 12-digit UTR manually
-                </button>
-              )}
-            </div>
           </div>
         </div>
       )}
