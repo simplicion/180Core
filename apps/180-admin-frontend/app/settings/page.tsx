@@ -43,7 +43,16 @@ export default function SecurityAuditLogsPage() {
     defaultGateway: 'RAZORPAY',
     allowDeveloperByog: true,
     directUpiAutoCaptureLimit: 50000.0,
+    paymentDomain: '',
+    razorpayKeyId: '',
+    hasRazorpaySecret: false,
+    hasRazorpayWebhookSecret: false,
+    payuMerchantKey: '',
+    hasPayuSalt: false,
   });
+  const [razorpayKeySecretInput, setRazorpayKeySecretInput] = useState('');
+  const [razorpayWebhookSecretInput, setRazorpayWebhookSecretInput] = useState('');
+  const [payuMerchantSaltInput, setPayuMerchantSaltInput] = useState('');
   const [savingGateways, setSavingGateways] = useState(false);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -140,10 +149,40 @@ export default function SecurityAuditLogsPage() {
       setSavingGateways(true);
       const res = await adminApi.updateGatewaySettings(updated);
       if (res.success) {
+        if (res.data) setGatewaySettings(res.data);
         toast.success(`Platform setting updated: ${field}`);
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to update gateway feature flag');
+    } finally {
+      setSavingGateways(false);
+    }
+  };
+
+  const handleSaveGatewayCredentials = async () => {
+    try {
+      setSavingGateways(true);
+      const payload: any = {
+        paymentDomain: gatewaySettings.paymentDomain || '',
+        razorpayKeyId: gatewaySettings.razorpayKeyId || '',
+        payuMerchantKey: gatewaySettings.payuMerchantKey || '',
+      };
+      if (razorpayKeySecretInput.trim()) payload.razorpayKeySecret = razorpayKeySecretInput.trim();
+      if (razorpayWebhookSecretInput.trim()) payload.razorpayWebhookSecret = razorpayWebhookSecretInput.trim();
+      if (payuMerchantSaltInput.trim()) payload.payuMerchantSalt = payuMerchantSaltInput.trim();
+
+      const res = await adminApi.updateGatewaySettings(payload);
+      if (res.success) {
+        if (res.data) setGatewaySettings(res.data);
+        setRazorpayKeySecretInput('');
+        setRazorpayWebhookSecretInput('');
+        setPayuMerchantSaltInput('');
+        toast.success('Live gateway credentials & payment domain updated!');
+      } else {
+        toast.error(res.error || 'Failed to save gateway credentials');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save gateway credentials');
     } finally {
       setSavingGateways(false);
     }
@@ -385,6 +424,136 @@ export default function SecurityAuditLogsPage() {
             </p>
             <div className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-200/50 dark:bg-white/5 text-zinc-600 dark:text-zinc-400 w-fit">
               {gatewaySettings.enablePayU ? 'STANDBY PAYU' : 'OFFLINE'}
+            </div>
+          </div>
+        </div>
+
+        {/* Live Gateway Credentials & Active Payment Domain (Failover Controls) */}
+        <div className="pt-4 border-t border-zinc-100 dark:border-white/5 space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h4 className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                <Globe className="h-3.5 w-3.5 text-blue-500" />
+                <span>Live Gateway Credentials &amp; Active Payment Domain (Failover)</span>
+              </h4>
+              <p className="text-[11px] text-zinc-500 mt-0.5">
+                Hot-swap Razorpay, PayU, and the active checkout domain anytime without redeploying. Secrets are AES-256-GCM encrypted at rest.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleSaveGatewayCredentials}
+              disabled={savingGateways}
+              className="px-4 py-2 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-bold text-xs hover:opacity-90 disabled:opacity-50 transition-all cursor-pointer shrink-0"
+            >
+              {savingGateways ? 'Saving...' : 'Save Credentials & Domain'}
+            </button>
+          </div>
+
+          {/* Active Platform Payment Domain */}
+          <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.02] border border-zinc-100 dark:border-white/5 space-y-2">
+            <label className="block text-[11px] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
+              Active Platform Payment Domain
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. pay.180core.cloud or pay.yourdomain.com"
+              value={gatewaySettings.paymentDomain || ''}
+              onChange={(e) => setGatewaySettings({ ...gatewaySettings, paymentDomain: e.target.value })}
+              className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs font-mono text-zinc-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-[11px] text-zinc-500">
+              Whitelisted automatically for 180 Pay checkout sessions. Switch to a new domain anytime if a gateway flags or blocks the previous domain.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Razorpay Live Credentials */}
+            <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.02] border border-zinc-100 dark:border-white/5 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-zinc-900 dark:text-white">Razorpay Live Account</span>
+                <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                  gatewaySettings.hasRazorpaySecret
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                    : 'bg-zinc-200/60 dark:bg-white/5 text-zinc-500'
+                }`}>
+                  {gatewaySettings.hasRazorpaySecret ? 'DB SECRET CONFIGURED' : 'USING ENV FALLBACK'}
+                </span>
+              </div>
+              <div className="space-y-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Key ID</label>
+                  <input
+                    type="text"
+                    placeholder="rzp_live_..."
+                    value={gatewaySettings.razorpayKeyId || ''}
+                    onChange={(e) => setGatewaySettings({ ...gatewaySettings, razorpayKeyId: e.target.value })}
+                    className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs font-mono text-zinc-900 dark:text-white focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">
+                    Key Secret {gatewaySettings.hasRazorpaySecret ? '(leave blank to keep existing)' : ''}
+                  </label>
+                  <input
+                    type="password"
+                    placeholder={gatewaySettings.hasRazorpaySecret ? '••••••••••••••••' : 'Enter Razorpay Key Secret'}
+                    value={razorpayKeySecretInput}
+                    onChange={(e) => setRazorpayKeySecretInput(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs font-mono text-zinc-900 dark:text-white focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">
+                    Webhook Secret {gatewaySettings.hasRazorpayWebhookSecret ? '(configured)' : ''}
+                  </label>
+                  <input
+                    type="password"
+                    placeholder={gatewaySettings.hasRazorpayWebhookSecret ? '••••••••••••••••' : 'Optional Razorpay Webhook Secret'}
+                    value={razorpayWebhookSecretInput}
+                    onChange={(e) => setRazorpayWebhookSecretInput(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs font-mono text-zinc-900 dark:text-white focus:outline-hidden"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* PayU Live Credentials */}
+            <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.02] border border-zinc-100 dark:border-white/5 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-zinc-900 dark:text-white">PayU Live Account</span>
+                <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                  gatewaySettings.hasPayuSalt
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                    : 'bg-zinc-200/60 dark:bg-white/5 text-zinc-500'
+                }`}>
+                  {gatewaySettings.hasPayuSalt ? 'DB SALT CONFIGURED' : 'USING ENV FALLBACK'}
+                </span>
+              </div>
+              <div className="space-y-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">Merchant Key</label>
+                  <input
+                    type="text"
+                    placeholder="Enter PayU Merchant Key"
+                    value={gatewaySettings.payuMerchantKey || ''}
+                    onChange={(e) => setGatewaySettings({ ...gatewaySettings, payuMerchantKey: e.target.value })}
+                    className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs font-mono text-zinc-900 dark:text-white focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-zinc-500 uppercase mb-1">
+                    Merchant Salt {gatewaySettings.hasPayuSalt ? '(leave blank to keep existing)' : ''}
+                  </label>
+                  <input
+                    type="password"
+                    placeholder={gatewaySettings.hasPayuSalt ? '••••••••••••••••' : 'Enter PayU Merchant Salt'}
+                    value={payuMerchantSaltInput}
+                    onChange={(e) => setPayuMerchantSaltInput(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-xs font-mono text-zinc-900 dark:text-white focus:outline-hidden"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>

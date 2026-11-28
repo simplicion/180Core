@@ -1515,6 +1515,10 @@ export class CheckoutService {
     }
   }
 
+  public static getCachedPaymentDomain(): string {
+    return String(this.platformSettingsCache?.settings?.paymentDomain || '').trim().toLowerCase();
+  }
+
   public static invalidatePlatformGatewaySettingsCache(): void {
     this.platformSettingsCache = null;
     this.methodsCache.clear();
@@ -1669,10 +1673,14 @@ export class CheckoutService {
       keyId = process.env.STRIPE_PUBLISHABLE_KEY || process.env.STRIPE_KEY_ID || process.env.NEXT_PUBLIC_STRIPE_KEY || '';
       keySecret = process.env.STRIPE_SECRET_KEY || process.env.STRIPE_KEY_SECRET || '';
       webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
+    } else if (platformGatewayBrand === 'PAYU') {
+      keyId = String(settings?.payuMerchantKey || process.env.PAYU_MERCHANT_KEY || '').trim();
+      keySecret = String(decryptGatewaySecret(settings?.payuMerchantSalt) || process.env.PAYU_MERCHANT_SALT || '').trim();
+      webhookSecret = keySecret;
     } else {
-      keyId = (process.env.RAZORPAY_KEY_ID || '').trim().replace(/^['"]|['"]$/g, '');
-      keySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim().replace(/^['"]|['"]$/g, '');
-      webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || '';
+      keyId = String(settings?.razorpayKeyId || process.env.RAZORPAY_KEY_ID || '').trim().replace(/^['"]|['"]$/g, '');
+      keySecret = String(decryptGatewaySecret(settings?.razorpayKeySecret) || process.env.RAZORPAY_KEY_SECRET || '').trim().replace(/^['"]|['"]$/g, '');
+      webhookSecret = String(decryptGatewaySecret(settings?.razorpayWebhookSecret) || process.env.RAZORPAY_WEBHOOK_SECRET || '').trim();
     }
 
     return {

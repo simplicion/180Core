@@ -763,6 +763,12 @@ model PlatformGatewaySettings {
   defaultGateway                      String    @default("RAZORPAY") // RAZORPAY | STRIPE | PAYU | DIRECT_UPI
   allowDeveloperByog                  Boolean   @default(true)
   directUpiAutoCaptureLimit           Float     @default(50000.0)
+  paymentDomain                       String?   // Active platform payment domain (e.g. pay.180core.cloud)
+  razorpayKeyId                       String?
+  razorpayKeySecret                   String?   // AES-256-GCM encrypted at rest
+  razorpayWebhookSecret               String?   // AES-256-GCM encrypted at rest
+  payuMerchantKey                     String?
+  payuMerchantSalt                    String?   // AES-256-GCM encrypted at rest
   updatedAt                           DateTime  @updatedAt
   updatedBy                           String?   @default("system_admin")
 }

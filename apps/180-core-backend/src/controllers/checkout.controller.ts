@@ -64,6 +64,15 @@ export function isAuthorizedPlatformOrigin(
     return true;
   }
 
+  // 3b. Dynamic Admin-configured active payment domain
+  const activePaymentDomain = CheckoutService.getCachedPaymentDomain();
+  if (
+    activePaymentDomain &&
+    (cleanOrigin === `https://${activePaymentDomain}` || cleanOrigin === `http://${activePaymentDomain}`)
+  ) {
+    return true;
+  }
+
   // 4. Configured platform origins in environment
   const envOrigins = (process.env.CORE_ALLOWED_ORIGINS || '')
     .split(',')

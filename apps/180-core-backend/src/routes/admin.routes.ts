@@ -2629,7 +2629,24 @@ router.get('/gateways/settings', async (req: Request, res: Response) => {
 
     return res.status(200).json({
       success: true,
-      data: settings,
+      data: {
+        id: settings.id,
+        enableDirectUpi: settings.enableDirectUpi,
+        enableRazorpay: settings.enableRazorpay,
+        enableStripe: settings.enableStripe,
+        enablePayU: settings.enablePayU,
+        defaultGateway: settings.defaultGateway,
+        allowDeveloperByog: settings.allowDeveloperByog,
+        directUpiAutoCaptureLimit: settings.directUpiAutoCaptureLimit,
+        paymentDomain: (settings as any).paymentDomain || '',
+        razorpayKeyId: (settings as any).razorpayKeyId || '',
+        hasRazorpaySecret: Boolean((settings as any).razorpayKeySecret),
+        hasRazorpayWebhookSecret: Boolean((settings as any).razorpayWebhookSecret),
+        payuMerchantKey: (settings as any).payuMerchantKey || '',
+        hasPayuSalt: Boolean((settings as any).payuMerchantSalt),
+        updatedAt: settings.updatedAt,
+        updatedBy: settings.updatedBy,
+      },
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
@@ -2638,7 +2655,7 @@ router.get('/gateways/settings', async (req: Request, res: Response) => {
 
 /**
  * PUT /api/v1/admin/gateways/settings
- * Updates global platform gateway and direct UPI feature flags
+ * Updates global platform gateway feature flags, live Razorpay/PayU credentials, and active payment domain
  */
 router.put('/gateways/settings', async (req: Request, res: Response) => {
   try {
@@ -2650,10 +2667,36 @@ router.put('/gateways/settings', async (req: Request, res: Response) => {
       defaultGateway,
       allowDeveloperByog,
       directUpiAutoCaptureLimit,
+      paymentDomain,
+      razorpayKeyId,
+      razorpayKeySecret,
+      razorpayWebhookSecret,
+      payuMerchantKey,
+      payuMerchantSalt,
       updatedBy,
     } = req.body;
 
-    const updated = await corePrisma.platformGatewaySettings.upsert({
+    const { encryptGatewaySecret } = await import('@workspace/payment-provider');
+    const normalizedDomain =
+      paymentDomain !== undefined
+        ? String(paymentDomain).trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '') || null
+        : undefined;
+
+    const credentialUpdates: Record<string, any> = {};
+    if (normalizedDomain !== undefined) credentialUpdates.paymentDomain = normalizedDomain;
+    if (razorpayKeyId !== undefined) credentialUpdates.razorpayKeyId = String(razorpayKeyId).trim() || null;
+    if (razorpayKeySecret && String(razorpayKeySecret).trim()) {
+      credentialUpdates.razorpayKeySecret = encryptGatewaySecret(String(razorpayKeySecret).trim());
+    }
+    if (razorpayWebhookSecret && String(razorpayWebhookSecret).trim()) {
+      credentialUpdates.razorpayWebhookSecret = encryptGatewaySecret(String(razorpayWebhookSecret).trim());
+    }
+    if (payuMerchantKey !== undefined) credentialUpdates.payuMerchantKey = String(payuMerchantKey).trim() || null;
+    if (payuMerchantSalt && String(payuMerchantSalt).trim()) {
+      credentialUpdates.payuMerchantSalt = encryptGatewaySecret(String(payuMerchantSalt).trim());
+    }
+
+    const updated = await (corePrisma as any).platformGatewaySettings.upsert({
       where: { id: 'global' },
       create: {
         id: 'global',
@@ -2664,6 +2707,7 @@ router.put('/gateways/settings', async (req: Request, res: Response) => {
         defaultGateway: defaultGateway || 'RAZORPAY',
         allowDeveloperByog: allowDeveloperByog !== undefined ? Boolean(allowDeveloperByog) : true,
         directUpiAutoCaptureLimit: directUpiAutoCaptureLimit ? Number(directUpiAutoCaptureLimit) : 50000.0,
+        ...credentialUpdates,
         updatedBy: updatedBy || 'admin@180core.cloud',
       },
       update: {
@@ -2674,6 +2718,7 @@ router.put('/gateways/settings', async (req: Request, res: Response) => {
         ...(defaultGateway ? { defaultGateway: String(defaultGateway) } : {}),
         ...(allowDeveloperByog !== undefined ? { allowDeveloperByog: Boolean(allowDeveloperByog) } : {}),
         ...(directUpiAutoCaptureLimit !== undefined ? { directUpiAutoCaptureLimit: Number(directUpiAutoCaptureLimit) } : {}),
+        ...credentialUpdates,
         updatedBy: updatedBy || 'admin@180core.cloud',
       },
     });
@@ -2682,12 +2727,31 @@ router.put('/gateways/settings', async (req: Request, res: Response) => {
       CheckoutService.invalidatePlatformGatewaySettingsCache();
     } catch (_) {}
 
+    const sanitizedResponse = {
+      id: updated.id,
+      enableDirectUpi: updated.enableDirectUpi,
+      enableRazorpay: updated.enableRazorpay,
+      enableStripe: updated.enableStripe,
+      enablePayU: updated.enablePayU,
+      defaultGateway: updated.defaultGateway,
+      allowDeveloperByog: updated.allowDeveloperByog,
+      directUpiAutoCaptureLimit: updated.directUpiAutoCaptureLimit,
+      paymentDomain: updated.paymentDomain || '',
+      razorpayKeyId: updated.razorpayKeyId || '',
+      hasRazorpaySecret: Boolean(updated.razorpayKeySecret),
+      hasRazorpayWebhookSecret: Boolean(updated.razorpayWebhookSecret),
+      payuMerchantKey: updated.payuMerchantKey || '',
+      hasPayuSalt: Boolean(updated.payuMerchantSalt),
+      updatedAt: updated.updatedAt,
+      updatedBy: updated.updatedBy,
+    };
+
     await recordAuditLog(
       updatedBy || 'admin@180core.cloud',
       'UPDATE_GATEWAY_FEATURE_FLAGS',
       'GATEWAYS',
       'global',
-      updated,
+      sanitizedResponse,
       req.ip
     );
 
