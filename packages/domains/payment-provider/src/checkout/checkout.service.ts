@@ -469,7 +469,7 @@ export class CheckoutService {
       });
     }
 
-    const checkoutBase = (process.env.PROFILE_FRONTEND_URL || process.env.NEXT_PUBLIC_PROFILE_URL || 'https://profile.180core.cloud').replace(/\/+$/, '');
+    const checkoutBase = await this.resolvePaymentPublicBase((session as any)?.app?.customPayDomain);
 
     return {
       success: true,
@@ -1517,6 +1517,41 @@ export class CheckoutService {
 
   public static getCachedPaymentDomain(): string {
     return String(this.platformSettingsCache?.settings?.paymentDomain || '').trim().toLowerCase();
+  }
+
+  /**
+   * Resolves the active public payment base URL for Payment Links and hosted Checkout URLs.
+   * Priority:
+   * 1. Verified app-specific customPayDomain (if passed)
+   * 2. Active Admin-configured PlatformGatewaySettings.paymentDomain (e.g. pay.180trafficdirector.pro)
+   * 3. Environment fallbacks (PUBLIC_URL / PROFILE_FRONTEND_URL / NEXT_PUBLIC_PROFILE_URL)
+   * 4. Default 'https://profile.180core.cloud'
+   */
+  public static async resolvePaymentPublicBase(customPayDomain?: string | null): Promise<string> {
+    const cleanCustom = String(customPayDomain || '')
+      .trim()
+      .replace(/^https?:\/\//i, '')
+      .replace(/\/+$/, '');
+    if (cleanCustom) {
+      return `https://${cleanCustom}`;
+    }
+
+    const settings = await this.getPlatformGatewaySettings();
+    const activeDomain = String(settings?.paymentDomain || '')
+      .trim()
+      .replace(/^https?:\/\//i, '')
+      .replace(/\/+$/, '');
+    if (activeDomain) {
+      return `https://${activeDomain}`;
+    }
+
+    return (
+      process.env.PUBLIC_URL ||
+      process.env.NEXT_PUBLIC_PUBLIC_BASE ||
+      process.env.PROFILE_FRONTEND_URL ||
+      process.env.NEXT_PUBLIC_PROFILE_URL ||
+      'https://profile.180core.cloud'
+    ).replace(/\/+$/, '');
   }
 
   public static invalidatePlatformGatewaySettingsCache(): void {

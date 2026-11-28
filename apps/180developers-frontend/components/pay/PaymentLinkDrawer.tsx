@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { PlatformDrawer, Button, CurrencySelectorModal, currencyService } from '@workspace/ui';
 import { toast } from 'react-hot-toast';
-import { getApiBase, getPublicBase, getAuthToken } from '@/lib/api-config';
+import { getApiBase, getPublicBase, fetchPlatformPaymentBase, getAuthToken } from '@/lib/api-config';
 import { MultiPricingConfig } from './MultiPricingDrawer';
 
 export interface PaymentLinkItem {
@@ -49,6 +49,7 @@ export interface PaymentLinkDrawerProps {
   appId: string;
   link?: PaymentLinkItem | null;
   initialTab?: 'LINK' | 'QR';
+  publicBase?: string;
   onLinkSaved?: (savedLink: PaymentLinkItem) => void;
   onOpenMultiPricing?: (config: MultiPricingConfig) => void;
 }
@@ -59,10 +60,21 @@ export function PaymentLinkDrawer({
   appId,
   link,
   initialTab = 'LINK',
+  publicBase: publicBaseProp,
   onLinkSaved,
   onOpenMultiPricing,
 }: PaymentLinkDrawerProps) {
   const [activeTab, setActiveTab] = useState<'LINK' | 'QR'>(initialTab);
+  const [resolvedPublicBase, setResolvedPublicBase] = useState<string>(() => publicBaseProp || getPublicBase());
+
+  useEffect(() => {
+    if (publicBaseProp) {
+      setResolvedPublicBase(publicBaseProp);
+      return;
+    }
+    if (!isOpen) return;
+    fetchPlatformPaymentBase().then(setResolvedPublicBase);
+  }, [isOpen, publicBaseProp]);
 
   // Form State
   const [title, setTitle] = useState('');
@@ -152,7 +164,7 @@ export function PaymentLinkDrawer({
   // Derived effective public link URL & persistence status
   const isSaved = Boolean(currentLink && currentLink.id && currentLink.slug);
   const effectiveSlug = currentLink?.slug || customSlug.trim() || 'preview-link';
-  const effectiveUrl = `${getPublicBase()}/link/${effectiveSlug}`;
+  const effectiveUrl = `${resolvedPublicBase}/link/${effectiveSlug}`;
 
   // Generate QR code whenever URL, theme, or amount changes
   useEffect(() => {

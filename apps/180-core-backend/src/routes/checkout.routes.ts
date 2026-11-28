@@ -7,6 +7,7 @@ import { checkoutVerifyLimiter, checkoutOrderLimiter } from '../middleware/rate-
 
 const router = express.Router();
 
+router.get('/platform-domain', CheckoutApiController.getPlatformDomain);
 router.post('/sessions', checkoutOrderLimiter, optionalAuth, CheckoutApiController.createCheckoutSession);
 router.post('/checkout-session', checkoutOrderLimiter, optionalAuth, CheckoutApiController.createCheckoutSession);
 router.post('/checkout-sessions', checkoutOrderLimiter, optionalAuth, CheckoutApiController.createCheckoutSession);

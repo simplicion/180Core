@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@workspace/ui';
 import { toast } from 'react-hot-toast';
-import { getPublicBase, getApiBase, getAuthToken } from '@/lib/api-config';
+import { getPublicBase, fetchPlatformPaymentBase, getApiBase, getAuthToken } from '@/lib/api-config';
 
 export interface PaymentQRModalProps {
   isOpen: boolean;
@@ -52,6 +52,12 @@ export function PaymentQRModal({
 }: PaymentQRModalProps) {
   // Mode selection: 'GATEWAY_UPI' (Razorpay Dynamic Gateway) or 'LINK' (180 Sovereign Bottom Sheet) or 'CUSTOM'
   const [activeTab, setActiveTab] = useState<'GATEWAY_UPI' | 'LINK' | 'CUSTOM'>('GATEWAY_UPI');
+  const [publicBase, setPublicBase] = useState<string>(() => getPublicBase());
+
+  useEffect(() => {
+    if (!isOpen) return;
+    fetchPlatformPaymentBase().then(setPublicBase);
+  }, [isOpen]);
 
   // Direct Payment Parameters
   const [payeeName, setPayeeName] = useState(defaultAppName);
@@ -162,7 +168,7 @@ export function PaymentQRModal({
   // Determine active payload string
   const getPayloadString = (): string => {
     if (activeTab === 'LINK' && link) {
-      return `${getPublicBase()}/link/${link.slug}`;
+      return `${publicBase}/link/${link.slug}`;
     }
 
     if (activeTab === 'GATEWAY_UPI') {
@@ -177,10 +183,10 @@ export function PaymentQRModal({
         const amountParam = !isNaN(numAmount) && numAmount > 0 ? `&am=${numAmount.toFixed(2)}` : '';
         return `upi://pay?pa=${cleanVpa}&pn=${cleanName}${amountParam}&cu=${currency.toUpperCase()}&tn=${cleanNote}`;
       }
-      return link ? `${getPublicBase()}/link/${link.slug}` : `${getPublicBase()}/pay/${defaultAppId || ''}`;
+      return link ? `${publicBase}/link/${link.slug}` : `${publicBase}/pay/${defaultAppId || ''}`;
     }
 
-    return customUrl.trim() || `${getPublicBase()}`;
+    return customUrl.trim() || `${publicBase}`;
   };
 
   const payloadString = getPayloadString();
@@ -649,7 +655,7 @@ export function PaymentQRModal({
                     <div className="flex items-center justify-between">
                       <span className="text-zinc-500">Hosted URL:</span>
                       <a
-                        href={`${getPublicBase()}/link/${link.slug}`}
+                        href={`${publicBase}/link/${link.slug}`}
                         target="_blank"
                         rel="noreferrer"
                         className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-mono text-[11px]"

@@ -1,7 +1,7 @@
 'use strict';
 
 import { Request, Response } from 'express';
-import { PaymentLinkService } from '@workspace/payment-provider';
+import { PaymentLinkService, CheckoutService } from '@workspace/payment-provider';
 
 export class PaymentLinkApiController {
   /**
@@ -52,8 +52,11 @@ export class PaymentLinkApiController {
       const page = req.query.page ? parseInt(String(req.query.page), 10) : 1;
       const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 20;
 
-      const result = await PaymentLinkService.listPaymentLinks(appId, { page, limit });
-      return res.status(200).json({ success: true, ...result });
+      const [result, publicBase] = await Promise.all([
+        PaymentLinkService.listPaymentLinks(appId, { page, limit }),
+        CheckoutService.resolvePaymentPublicBase(),
+      ]);
+      return res.status(200).json({ success: true, publicBase, ...result });
     } catch (err: any) {
       console.error('[PaymentLinkApiController:listPaymentLinks] Error:', err);
       return res.status(500).json({ success: false, error: err.message });
@@ -69,8 +72,11 @@ export class PaymentLinkApiController {
       const appId = String(req.params.appId);
       const linkId = String(req.params.id);
 
-      const link = await PaymentLinkService.getPaymentLinkById(appId, linkId);
-      return res.status(200).json({ success: true, data: link, link });
+      const [link, publicBase] = await Promise.all([
+        PaymentLinkService.getPaymentLinkById(appId, linkId),
+        CheckoutService.resolvePaymentPublicBase(),
+      ]);
+      return res.status(200).json({ success: true, publicBase, data: link, link });
     } catch (err: any) {
       console.error('[PaymentLinkApiController:getPaymentLinkById] Error:', err);
       return res.status(404).json({ success: false, error: err.message });
@@ -84,8 +90,11 @@ export class PaymentLinkApiController {
   static async createPaymentLink(req: Request, res: Response) {
     try {
       const appId = String(req.params.appId);
-      const link = await PaymentLinkService.createPaymentLink(appId, req.body);
-      return res.status(201).json({ success: true, data: link, link });
+      const [link, publicBase] = await Promise.all([
+        PaymentLinkService.createPaymentLink(appId, req.body),
+        CheckoutService.resolvePaymentPublicBase(),
+      ]);
+      return res.status(201).json({ success: true, publicBase, data: link, link });
     } catch (err: any) {
       console.error('[PaymentLinkApiController:createPaymentLink] Error:', err);
       return res.status(400).json({ success: false, error: err.message });

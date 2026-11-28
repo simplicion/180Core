@@ -31,6 +31,29 @@ export const getPublicBase = (): string => {
 };
 
 /**
+ * Fetches the active platform payment domain (configured in Admin Console -> Settings)
+ * for Payment Links and Checkout URLs, falling back to getPublicBase().
+ */
+export const fetchPlatformPaymentBase = async (): Promise<string> => {
+  const fallback = getPublicBase();
+  if (typeof window === 'undefined') return fallback;
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  if (isLocal) return fallback;
+
+  try {
+    const res = await fetch(`${getApiBase()}/api/v1/checkout/platform-domain`);
+    if (!res.ok) return fallback;
+    const data = await res.json();
+    if (data?.success && typeof data.publicBase === 'string' && data.publicBase.trim()) {
+      return data.publicBase.trim().replace(/\/+$/, '');
+    }
+  } catch {
+    // Fall back to default public base
+  }
+  return fallback;
+};
+
+/**
  * Retrieves the current authentication token across localStorage and cookies.
  */
 export const getAuthToken = (): string | null => {

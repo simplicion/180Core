@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@workspace/ui';
 import { toast } from 'react-hot-toast';
-import { getApiBase, getPublicBase, getAuthToken } from '@/lib/api-config';
+import { getApiBase, getPublicBase, fetchPlatformPaymentBase, getAuthToken } from '@/lib/api-config';
 import { MultiPricingDrawer, MultiPricingConfig } from '@/components/pay/MultiPricingDrawer';
 import { PaymentLinkDrawer, PaymentLinkItem } from '@/components/pay/PaymentLinkDrawer';
 
@@ -49,6 +49,7 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
   });
 
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
+  const [publicBase, setPublicBase] = useState<string>(() => getPublicBase());
 
   const fetchLinks = useCallback(async () => {
     setLoading(true);
@@ -61,6 +62,9 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
       const data = await res.json();
       if (res.ok && data.success) {
         setLinks(data.links || data.data || []);
+        if (typeof data.publicBase === 'string' && data.publicBase.trim()) {
+          setPublicBase(data.publicBase.trim().replace(/\/+$/, ''));
+        }
       }
     } catch {
       toast.error('Failed to load payment links');
@@ -71,6 +75,7 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
 
   useEffect(() => {
     fetchLinks();
+    fetchPlatformPaymentBase().then(setPublicBase);
   }, [fetchLinks]);
 
 
@@ -156,7 +161,7 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
   };
 
   const copyLinkUrl = (slug: string) => {
-    const fullUrl = `${getPublicBase()}/link/${slug}`;
+    const fullUrl = `${publicBase}/link/${slug}`;
     navigator.clipboard.writeText(fullUrl);
     setCopiedSlug(slug);
     toast.success('Payment link copied to clipboard!');
@@ -381,7 +386,7 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
                       )}
                     </button>
                     <a
-                      href={`${getPublicBase()}/link/${link.slug}`}
+                      href={`${publicBase}/link/${link.slug}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="p-2 rounded-xl text-zinc-500 hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors cursor-pointer"
@@ -429,6 +434,7 @@ export function PaymentLinksTab({ appId }: PaymentLinksTabProps) {
         appId={appId}
         link={drawerLink}
         initialTab={drawerInitialTab}
+        publicBase={publicBase}
         onLinkSaved={(saved) => {
           if (saved) {
             setDrawerLink(saved);

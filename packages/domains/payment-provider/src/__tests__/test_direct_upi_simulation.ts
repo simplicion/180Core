@@ -383,6 +383,23 @@ async function runDirectUpiSimulation() {
     }
     assert(magicSigBlocked, 'Security: verifyDirectPayment rejects auto_polled_capture magic string');
 
+    // Suite 5: Active Payment Domain resolution
+    await (prisma.platformGatewaySettings as any).update({
+      where: { id: 'global' },
+      data: { paymentDomain: 'pay.180trafficdirector.pro' },
+    });
+    CheckoutService.invalidatePlatformGatewaySettingsCache();
+    const resolvedBase = await CheckoutService.resolvePaymentPublicBase();
+    assert(
+      resolvedBase === 'https://pay.180trafficdirector.pro',
+      `resolvePaymentPublicBase resolves Admin-configured paymentDomain (got ${resolvedBase})`
+    );
+    await (prisma.platformGatewaySettings as any).update({
+      where: { id: 'global' },
+      data: { paymentDomain: (originalSettings as any)?.paymentDomain ?? null },
+    });
+    CheckoutService.invalidatePlatformGatewaySettingsCache();
+
     // Clean up test sessions & verifications
     await prisma.upiPaymentVerification.deleteMany({
       where: { sessionId: { in: [testSessionA.id, testSessionB.id, testSessionDual.id, testSessionC.id] } },

@@ -743,7 +743,7 @@ export class PaymentLinkService {
     }
 
     // Default: Universal Web Checkout URL
-    const publicBase = (process.env.PUBLIC_URL || process.env.NEXT_PUBLIC_PUBLIC_BASE || process.env.PROFILE_FRONTEND_URL || process.env.NEXT_PUBLIC_PROFILE_URL || 'https://profile.180core.cloud').replace(/\/+$/, '');
+    const publicBase = await CheckoutService.resolvePaymentPublicBase();
     const webUrl = link ? `${publicBase}/link/${link.slug}` : `${publicBase}/pay/${appId}`;
     return {
       qrType: 'UNIVERSAL_WEB_LINK',

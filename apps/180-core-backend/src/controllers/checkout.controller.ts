@@ -98,6 +98,28 @@ export function isAuthorizedPlatformOrigin(
 
 export class CheckoutApiController {
   /**
+   * GET /api/v1/checkout/platform-domain
+   * Public endpoint returning the active Admin-configured payment domain for Payment Links & Checkout URLs.
+   */
+  static async getPlatformDomain(_req: Request, res: Response) {
+    try {
+      const publicBase = await CheckoutService.resolvePaymentPublicBase();
+      const paymentDomain = CheckoutService.getCachedPaymentDomain() || publicBase.replace(/^https?:\/\//i, '');
+      return res.status(200).json({
+        success: true,
+        paymentDomain,
+        publicBase,
+      });
+    } catch (err: any) {
+      return res.status(200).json({
+        success: true,
+        paymentDomain: 'profile.180core.cloud',
+        publicBase: process.env.PROFILE_FRONTEND_URL || 'https://profile.180core.cloud',
+      });
+    }
+  }
+
+  /**
    * POST /api/v1/checkout/sessions
    * 3rd-Party Developer API or Authenticated User checkout initiation
    */
@@ -502,6 +524,7 @@ export class CheckoutApiController {
         });
       }
 
+      const checkoutBase = await CheckoutService.resolvePaymentPublicBase();
       const sessionData = {
         success: true,
         sessionId: checkoutSession.id,
@@ -511,7 +534,7 @@ export class CheckoutApiController {
         couponCode: checkoutSession.couponCode,
         currency: checkoutSession.currency,
         expiresAt: checkoutSession.expiresAt,
-        checkoutUrl: `${process.env.PROFILE_FRONTEND_URL || 'https://profile.180core.cloud'}/checkout/${checkoutSession.id}`,
+        checkoutUrl: `${checkoutBase}/checkout/${checkoutSession.id}`,
       };
 
       return res.status(200).json({
