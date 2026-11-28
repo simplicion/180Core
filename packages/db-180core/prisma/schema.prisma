@@ -92,7 +92,7 @@ model OAuthApp {
   payMobileDefault    String?               @default("bottom_sheet")
 
   // ─── Bring Your Own Gateway (BYOG) & Custom Domain ──────────────────────────
-  customGatewayType           String                @default("NONE") // "NONE" | "RAZORPAY" | "STRIPE" | "DIRECT_UPI"
+  customGatewayType           String                @default("NONE") // "NONE" | "RAZORPAY" | "STRIPE" | "DIRECT_UPI" | "PAYTM_BUSINESS"
   customGatewayKeyId          String?
   customGatewaySecret         String?
   customGatewayWebhookSecret  String?

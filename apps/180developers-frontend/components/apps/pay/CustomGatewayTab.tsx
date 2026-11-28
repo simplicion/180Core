@@ -26,7 +26,7 @@ import { toast } from 'react-hot-toast';
 import { getApiBase, getAuthToken } from '@/lib/api-config';
 
 interface GatewaySettings {
-  customGatewayType: 'NONE' | 'RAZORPAY' | 'STRIPE' | 'DIRECT_UPI';
+  customGatewayType: 'NONE' | 'RAZORPAY' | 'STRIPE' | 'DIRECT_UPI' | 'PAYTM_BUSINESS';
   customGatewayKeyId: string;
   customGatewayWebhookSecret: string;
   customPayDomain: string;
@@ -50,7 +50,7 @@ export function CustomGatewayTab({ appId }: CustomGatewayTabProps) {
 
   const [enableDirectUpi, setEnableDirectUpi] = useState(true);
   const [enablePlatformGateway, setEnablePlatformGateway] = useState(true);
-  const [gatewayType, setGatewayType] = useState<'NONE' | 'RAZORPAY' | 'STRIPE' | 'DIRECT_UPI'>('NONE');
+  const [gatewayType, setGatewayType] = useState<'NONE' | 'RAZORPAY' | 'STRIPE' | 'DIRECT_UPI' | 'PAYTM_BUSINESS'>('NONE');
   const [keyId, setKeyId] = useState('');
   const [keySecret, setKeySecret] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
@@ -129,6 +129,12 @@ export function CustomGatewayTab({ appId }: CustomGatewayTabProps) {
       toast.error('Please enter a valid receiving UPI ID (e.g. username@bank)');
       return;
     }
+    // Paytm auto-verification lives on the Direct UPI rail; turning that rail off also turns Paytm off.
+    const effectiveGatewayType = gatewayType === 'PAYTM_BUSINESS' && !enableDirectUpi ? 'NONE' : gatewayType;
+    if (effectiveGatewayType === 'PAYTM_BUSINESS' && (!keyId.trim() || (!keySecret.trim() && !hasSecret))) {
+      toast.error('Enter your Paytm for Business MID and Merchant Key to enable auto-verification.');
+      return;
+    }
     if (!enableDirectUpi && !enablePlatformGateway) {
       toast.error('At least one payment rail (Direct UPI or 180 Pay Gateway) must be enabled.');
       return;
@@ -144,8 +150,8 @@ export function CustomGatewayTab({ appId }: CustomGatewayTabProps) {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          customGatewayType: gatewayType,
-          customGatewayKeyId: keyId.trim(),
+          customGatewayType: effectiveGatewayType,
+          customGatewayKeyId: effectiveGatewayType === gatewayType ? keyId.trim() : '',
           customGatewaySecret: keySecret.trim() || undefined,
           customGatewayWebhookSecret: webhookSecret.trim(),
           customPayDomain: payDomain.trim(),
@@ -159,6 +165,11 @@ export function CustomGatewayTab({ appId }: CustomGatewayTabProps) {
       const data = await res.json();
       if (res.ok && data.success) {
         toast.success('Gateway & payment rail settings saved successfully!');
+        if (data.warning) toast(data.warning);
+        if (effectiveGatewayType !== gatewayType) {
+          setGatewayType(effectiveGatewayType);
+          setKeyId('');
+        }
         if (keySecret) {
           setHasSecret(true);
           setKeySecret('');
@@ -368,6 +379,89 @@ export function CustomGatewayTab({ appId }: CustomGatewayTabProps) {
                   </span>
                 </div>
 
+                <div className="sm:col-span-2 rounded-xl border border-sky-500/20 bg-sky-500/[0.04] dark:bg-sky-500/[0.06] p-4 space-y-3 mt-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+                      <span className="text-xs font-bold text-zinc-950 dark:text-white">
+                        Paytm for Business auto-verification (recommended)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (gatewayType === 'PAYTM_BUSINESS') {
+                          setGatewayType('NONE');
+                        } else if (gatewayType === 'RAZORPAY' || gatewayType === 'STRIPE') {
+                          toast('Your custom Razorpay/Stripe keys will be replaced: one custom gateway per app.');
+                          setGatewayType('PAYTM_BUSINESS');
+                        } else {
+                          setGatewayType('PAYTM_BUSINESS');
+                        }
+                        setKeyId('');
+                        setKeySecret('');
+                        setHasSecret(false);
+                      }}
+                      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors cursor-pointer ${
+                        gatewayType === 'PAYTM_BUSINESS' ? 'bg-sky-600' : 'bg-zinc-300 dark:bg-zinc-700'
+                      }`}
+                    >
+                      <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                        gatewayType === 'PAYTM_BUSINESS' ? 'translate-x-5' : 'translate-x-1'
+                      }`} />
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                    Requires a Paytm for Business merchant account. Personal UPI IDs have no MID, so they keep using bank-alert verification
+                    below. The checkout QR is addressed to your Paytm Business UPI ID with a unique order reference, and 180 Pay checks
+                    Paytm&apos;s Transaction Status API every few seconds, so payments confirm automatically. Find your Production MID and
+                    Merchant Key in Paytm for Business → Developer Settings → API Keys.
+                  </p>
+                  {gatewayType === 'PAYTM_BUSINESS' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                          Production MID <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. AbCdEf12345678901234"
+                          value={keyId}
+                          onChange={(e) => setKeyId(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-xs font-mono text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
+                          Merchant Key <span className="text-rose-500">*</span>
+                          {hasSecret && <span className="text-emerald-500 ml-2 font-normal">(Configured on server)</span>}
+                        </label>
+                        <input
+                          type="password"
+                          placeholder={hasSecret ? '••••••••••••••••' : '16-character merchant key'}
+                          value={keySecret}
+                          onChange={(e) => setKeySecret(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-xs font-mono text-zinc-950 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        />
+                      </div>
+                      <div className="sm:col-span-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <span className="text-[11px] text-zinc-500">
+                          The receiving UPI ID above must be your Paytm Business UPI ID (printed on your Paytm Business QR).
+                        </span>
+                        <Button
+                          type="button"
+                          onClick={handleVerifyCredentials}
+                          disabled={verifying}
+                          className="bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 shrink-0"
+                        >
+                          {verifying ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />}
+                          <span>Test connection</span>
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {bankListener && (
                   <div className="sm:col-span-2 rounded-xl border border-indigo-500/20 bg-indigo-500/[0.04] dark:bg-indigo-500/[0.06] p-4 space-y-3 mt-1">
                     <div className="flex items-center justify-between gap-2">
@@ -480,16 +574,16 @@ export function CustomGatewayTab({ appId }: CustomGatewayTabProps) {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {/* Managed Processing */}
                   <div
-                    onClick={() => setGatewayType('NONE')}
+                    onClick={() => { if (gatewayType !== 'PAYTM_BUSINESS') setGatewayType('NONE'); }}
                     className={`rounded-xl p-3.5 border cursor-pointer transition-all ${
-                      gatewayType === 'NONE'
+                      gatewayType === 'NONE' || gatewayType === 'PAYTM_BUSINESS'
                         ? 'border-purple-600 bg-purple-500/10 ring-1 ring-purple-600'
                         : 'border-zinc-200 dark:border-white/10 hover:border-zinc-300 bg-white dark:bg-zinc-900'
                     }`}
                   >
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-xs font-bold text-zinc-950 dark:text-white">180 Managed Processing</span>
-                      {gatewayType === 'NONE' && <CheckCircle2 className="w-4 h-4 text-purple-600 shrink-0" />}
+                      {(gatewayType === 'NONE' || gatewayType === 'PAYTM_BUSINESS') && <CheckCircle2 className="w-4 h-4 text-purple-600 shrink-0" />}
                     </div>
                     <p className="text-[11px] text-zinc-500 leading-relaxed">
                       Default. 180 Core collects funds and automatically manages merchant settlements via RazorpayX.
@@ -498,7 +592,13 @@ export function CustomGatewayTab({ appId }: CustomGatewayTabProps) {
 
                   {/* Custom Razorpay */}
                   <div
-                    onClick={() => setGatewayType('RAZORPAY')}
+                    onClick={() => {
+                      if (gatewayType === 'PAYTM_BUSINESS') toast('Paytm for Business auto-verification will be turned off: one custom gateway per app.');
+                      setGatewayType('RAZORPAY');
+                      setKeyId('');
+                      setKeySecret('');
+                      setHasSecret(false);
+                    }}
                     className={`rounded-xl p-3.5 border cursor-pointer transition-all ${
                       gatewayType === 'RAZORPAY'
                         ? 'border-purple-600 bg-purple-500/10 ring-1 ring-purple-600'
@@ -516,7 +616,13 @@ export function CustomGatewayTab({ appId }: CustomGatewayTabProps) {
 
                   {/* Custom Stripe */}
                   <div
-                    onClick={() => setGatewayType('STRIPE')}
+                    onClick={() => {
+                      if (gatewayType === 'PAYTM_BUSINESS') toast('Paytm for Business auto-verification will be turned off: one custom gateway per app.');
+                      setGatewayType('STRIPE');
+                      setKeyId('');
+                      setKeySecret('');
+                      setHasSecret(false);
+                    }}
                     className={`rounded-xl p-3.5 border cursor-pointer transition-all ${
                       gatewayType === 'STRIPE'
                         ? 'border-purple-600 bg-purple-500/10 ring-1 ring-purple-600'

@@ -3,7 +3,7 @@ id: byog-and-custom-domains
 title: Bring Your Own Gateway & Custom Domains
 sidebar_label: BYOG & Custom Domains
 sidebar_position: 5
-description: Connect custom Razorpay or Stripe merchant accounts and whitelist branded custom payment subdomains.
+description: Connect custom Razorpay, Stripe or Paytm for Business merchant accounts and whitelist branded custom payment subdomains.
 ---
 
 # Bring Your Own Gateway & Custom Domains
@@ -14,13 +14,16 @@ Enterprise and high-volume developers can process payments directly through thei
 
 ## 1. Bring Your Own Gateway (BYOG)
 
-In your **[180 Developer Console](https://developer.180core.cloud) -> App Settings -> Custom Gateway**, choose your gateway provider:
+In your **[180 Developer Console](https://developer.180core.cloud) -> your app -> Pay -> Gateways**, choose your gateway provider:
 
 | Gateway Type | Credentials Required | Benefit |
 | :--- | :--- | :--- |
 | **180 Sovereign Vault (Default)** | None | Zero gateway maintenance, 1-click startup, instant payouts. |
 | **Razorpay (India / APAC)** | `Key ID`, `Key Secret`, `Webhook Secret` | Funds deposit directly into your company's own Indian bank account. |
 | **Stripe (Global / US / EU)** | `Publishable Key`, `Secret Key`, `Webhook Secret` | Process credit cards under your company's direct merchant descriptor. |
+| **Paytm for Business (Direct UPI)** | Paytm Business `UPI ID`, Production `MID`, `Merchant Key` | 0% UPI payments straight to your bank, confirmed automatically via Paytm's status API. See [Direct UPI & Paytm Business](./09-direct-upi-and-paytm-business.md). |
+
+One custom gateway can be active per app: Paytm for Business and a custom Razorpay/Stripe account cannot be combined on the same app.
 
 ---
 

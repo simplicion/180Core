@@ -6,6 +6,7 @@ import { developersPrisma as prisma } from '@workspace/db-180core';
 import { IdentityWalletService } from '../wallet/identity-wallet.service';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { GeoPricingService } from '../geo/geo-pricing.service';
+import { buildPaytmOrderId, fetchPaytmOrderStatus } from './paytm-business';
 
 function hashSecret(secret: string): string {
   return crypto.createHash('sha256').update(secret).digest('hex');
@@ -882,7 +883,9 @@ export class CheckoutService {
     if (
       !options?.skipReconcile &&
       session.status !== 'CAPTURED' &&
-      ((session.metadata as any)?.razorpayOrderId || (session.metadata as any)?.stripePaymentIntentId)
+      ((session.metadata as any)?.razorpayOrderId ||
+        (session.metadata as any)?.stripePaymentIntentId ||
+        (session.metadata as any)?.paytmOrderId)
     ) {
       try {
         const reconcileRes = await this.reconcileSession(session.id);
@@ -1090,6 +1093,61 @@ export class CheckoutService {
       }
     }
 
+    // 3. Reconcile Paytm for Business order (dynamic UPI QR with tr=<paytmOrderId>)
+    const paytmOrderId = sessionMeta.paytmOrderId;
+    if (paytmOrderId && session.status !== 'CANCELLED' && !sessionMeta.disputed) {
+      const { paytm } = this.resolveGatewayConfig(session.app);
+      const lastCheck = this.paytmLastStatusCheck.get(session.id) || 0;
+      if (paytm && Date.now() - lastCheck >= 2000) {
+        this.paytmLastStatusCheck.set(session.id, Date.now());
+        if (this.paytmLastStatusCheck.size > 5000) {
+          const cutoff = Date.now() - 60_000;
+          for (const [k, t] of this.paytmLastStatusCheck) if (t < cutoff) this.paytmLastStatusCheck.delete(k);
+        }
+        const result = await fetchPaytmOrderStatus({ mid: paytm.mid, merchantKey: paytm.merchantKey, orderId: paytmOrderId });
+        const expected = Number(sessionMeta.paytmExpectedAmount);
+        if (result.status === 'TXN_SUCCESS') {
+          if (!result.txnAmount || !expected || Math.abs(result.txnAmount - expected) > 0.009) {
+            console.warn(
+              `[CheckoutService:reconcileSession] Paytm amount mismatch for ${session.id}: expected ${expected}, got ${result.txnAmount}`
+            );
+          } else {
+            const capture = await this.autoVerifyDirectUpiPayment({
+              sessionId: session.id,
+              approvalRefNo: result.bankTxnId,
+              gatewayReference: result.txnId || paytmOrderId,
+              gatewayVerified: true,
+              responseCode: '00',
+              status: 'SUCCESS',
+              txnRef: paytmOrderId,
+              rawPayload: {
+                source: 'PAYTM_BUSINESS_STATUS_API',
+                orderId: paytmOrderId,
+                txnId: result.txnId,
+                bankTxnId: result.bankTxnId,
+                txnAmount: result.txnAmount,
+                paymentMode: result.paymentMode,
+                txnDate: result.txnDate,
+              },
+            });
+            return {
+              reconciled: true,
+              alreadyCaptured: Boolean(capture.alreadyCaptured),
+              session: capture.session,
+              transactionId: capture.transactionId,
+            };
+          }
+        } else if (result.status === 'TXN_FAILURE' && !sessionMeta.paytmOrderFailed) {
+          // Flag it so the next createDirectOrder issues a fresh order id for the customer's retry.
+          await prisma.checkoutSession
+            .update({ where: { id: session.id }, data: { metadata: { ...sessionMeta, paytmOrderFailed: true } } })
+            .catch(() => {});
+        } else if (result.status === 'ERROR') {
+          console.warn(`[CheckoutService:reconcileSession] Paytm status error for ${session.id}: ${result.resultCode} ${result.resultMsg}`);
+        }
+      }
+    }
+
     return { reconciled: false, session };
   }
 
@@ -1114,7 +1172,7 @@ export class CheckoutService {
 
     const sessionsWithOrders = candidateSessions.filter((s) => {
       const meta = (s.metadata as any) || {};
-      return Boolean(meta.razorpayOrderId || meta.stripePaymentIntentId);
+      return Boolean(meta.razorpayOrderId || meta.stripePaymentIntentId || meta.paytmOrderId);
     });
 
     let reconciledCount = 0;
@@ -1479,6 +1537,8 @@ export class CheckoutService {
     enableDirectUpi: boolean;
     enablePlatformGateway: boolean;
     platformGatewayBrand: 'RAZORPAY' | 'STRIPE' | 'PAYU';
+    /** Present when the developer connected a Paytm for Business merchant account (auto status polling). */
+    paytm?: { mid: string; merchantKey: string };
   } {
     const settings = platformSettings || this.platformSettingsCache?.settings;
     const globalDirectUpi = settings ? settings.enableDirectUpi !== false : true;
@@ -1507,6 +1567,7 @@ export class CheckoutService {
       appAny.customGatewayType &&
       appAny.customGatewayType !== 'NONE' &&
       appAny.customGatewayType !== 'DIRECT_UPI' &&
+      appAny.customGatewayType !== 'PAYTM_BUSINESS' &&
       appAny.customGatewayKeyId
     );
 
@@ -1530,10 +1591,16 @@ export class CheckoutService {
       platformGatewayBrand = 'PAYU';
     }
 
-    // 0. Direct Native UPI Custom Gateway Choice (Developer selected Direct UPI in app settings)
-    if (appAny.customGatewayType === 'DIRECT_UPI') {
+    // 0a. Paytm for Business merchant account: Direct UPI QR to the merchant VPA + Paytm status API polling
+    const paytmMid = appAny.customGatewayType === 'PAYTM_BUSINESS' ? String(appAny.customGatewayKeyId || '').trim() : '';
+    const paytmKey = paytmMid ? decryptGatewaySecret(appAny.customGatewaySecret) : '';
+    const paytm = paytmMid && paytmKey && rawAppUpi ? { mid: paytmMid, merchantKey: paytmKey } : undefined;
+
+    // 0. Direct Native UPI Custom Gateway Choice (Developer selected Direct UPI or Paytm for Business in app settings)
+    if (appAny.customGatewayType === 'DIRECT_UPI' || (appAny.customGatewayType === 'PAYTM_BUSINESS' && rawAppUpi)) {
       const isDual = Boolean(appAny.enablePlatformGateway && isAnyPlatformGatewayEnabled);
       return {
+        paytm,
         gatewayType: 'DIRECT_UPI',
         keyId: upiId,
         keySecret: '',
@@ -1857,8 +1924,30 @@ export class CheckoutService {
       const formattedAmount = (Math.round(actualAmountInr * 100) / 100).toFixed(2);
       const shortRef = session.id.replace(/-/g, '').slice(0, 16);
 
-      const basePayload = `pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(payeeName)}&am=${formattedAmount}&cu=INR&tn=180P_${shortRef}`;
+      // Merchant VPAs (Paytm for Business) honour `tr`, which is how Paytm links the payment to our orderId.
+      // Personal VPAs keep omitting `tr` (unsigned tr on P2P intents triggers payer-app security declines).
+      // Reuse the current Paytm order id unless Paytm reported it failed, then move to a fresh attempt id.
+      const paytmAttempt = Number(sessionMeta.paytmOrderAttempt || 0) + (sessionMeta.paytmOrderFailed ? 1 : 0);
+      const paytmOrderId = config.paytm ? buildPaytmOrderId(session.id, paytmAttempt) : null;
+      const trParam = paytmOrderId ? `&tr=${paytmOrderId}` : '';
+      const basePayload = `pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(payeeName)}&am=${formattedAmount}&cu=INR${trParam}&tn=180P_${shortRef}`;
+
+      if (paytmOrderId && (sessionMeta.paytmOrderId !== paytmOrderId || sessionMeta.paytmExpectedAmount !== parseFloat(formattedAmount))) {
+        const mergedMeta = {
+          ...sessionMeta,
+          paytmOrderId,
+          paytmOrderAttempt: paytmAttempt,
+          paytmOrderFailed: false,
+          paytmExpectedAmount: parseFloat(formattedAmount),
+          paytmMid: config.paytm!.mid,
+        };
+        await prisma.checkoutSession.update({ where: { id: session.id }, data: { metadata: mergedMeta } }).catch(() => {});
+        Object.assign(sessionMeta, mergedMeta);
+      }
+
       directUpiPayload = {
+        autoVerification: paytmOrderId ? 'PAYTM_BUSINESS_STATUS_API' : 'BANK_ALERT_WEBHOOK',
+        orderReference: paytmOrderId || undefined,
         upiId,
         payeeName,
         amount: parseFloat(formattedAmount),
@@ -2192,8 +2281,13 @@ export class CheckoutService {
     responseCode?: string;
     status?: string;
     txnRef?: string;
-    payerVpa?: string;  
+    payerVpa?: string;
     rawPayload?: any;
+    /** Set only by server-side merchant status checks (e.g. Paytm Business API), never from client input. */
+    gatewayVerified?: boolean;
+    gatewayReference?: string;
+    /** Set only by ingestBankCreditWebhook after its listener-secret check. */
+    _trustedBankAlert?: boolean;
   }): Promise<any> {
     const { sessionId } = input;
 
@@ -2218,8 +2312,12 @@ export class CheckoutService {
     txnRef?: string;
     payerVpa?: string;
     rawPayload?: any;
+    gatewayVerified?: boolean;
+    gatewayReference?: string;
+    /** Set only by ingestBankCreditWebhook after its listener-secret check. */
+    _trustedBankAlert?: boolean;
   }): Promise<any> {
-    const { sessionId, approvalRefNo, responseCode, status, payerVpa, rawPayload } = input;
+    const { sessionId, approvalRefNo, responseCode, status, payerVpa, rawPayload, gatewayVerified, gatewayReference } = input;
     const session = await prisma.checkoutSession.findUnique({
       where: { id: sessionId },
       include: { app: { select: APP_CHECKOUT_SELECT } },
@@ -2233,7 +2331,9 @@ export class CheckoutService {
       throw new Error('This checkout session has been disputed or cancelled and cannot be verified.');
     }
 
-    if (session.status === 'EXPIRED' || (session.expiresAt && session.expiresAt < new Date())) {
+    // A merchant-API-confirmed payment is real money already received, so capture it even if the
+    // customer finished paying after the checkout window closed.
+    if (!gatewayVerified && (session.status === 'EXPIRED' || (session.expiresAt && session.expiresAt < new Date()))) {
       throw new Error('This checkout session has expired. Please create a new checkout session.');
     }
 
@@ -2247,11 +2347,55 @@ export class CheckoutService {
       };
     }
 
+    // Paytm for Business sessions have an authoritative merchant API, so a client-submitted UTR is never
+    // trusted on its own: ask Paytm, and capture only on its TXN_SUCCESS with the exact amount.
+    // (Calls _doAutoVerifyDirectUpi directly, not the public wrapper, to avoid awaiting our own in-flight promise.)
+    const paytmMeta = (session.metadata as any) || {};
+    if (!gatewayVerified && !input._trustedBankAlert && paytmMeta.paytmOrderId) {
+      const { paytm } = this.resolveGatewayConfig(session.app);
+      if (paytm) {
+        const r = await fetchPaytmOrderStatus({ mid: paytm.mid, merchantKey: paytm.merchantKey, orderId: paytmMeta.paytmOrderId });
+        const expected = Number(paytmMeta.paytmExpectedAmount);
+        if (r.status === 'TXN_SUCCESS' && r.txnAmount && expected && Math.abs(r.txnAmount - expected) <= 0.009) {
+          return this._doAutoVerifyDirectUpi({
+            sessionId,
+            approvalRefNo: r.bankTxnId,
+            gatewayVerified: true,
+            gatewayReference: r.txnId || paytmMeta.paytmOrderId,
+            responseCode: '00',
+            status: 'SUCCESS',
+            txnRef: paytmMeta.paytmOrderId,
+            rawPayload: {
+              source: 'PAYTM_BUSINESS_STATUS_API',
+              orderId: paytmMeta.paytmOrderId,
+              txnId: r.txnId,
+              bankTxnId: r.bankTxnId,
+              txnAmount: r.txnAmount,
+              trigger: 'client_verify_request',
+            },
+          });
+        }
+        if (r.status === 'TXN_FAILURE') {
+          await prisma.checkoutSession
+            .update({ where: { id: session.id }, data: { metadata: { ...paytmMeta, paytmOrderFailed: true } } })
+            .catch(() => {});
+          throw new Error('Paytm reports this payment failed. No money was taken; please try again.');
+        }
+        throw new Error('Paytm has not confirmed this payment yet. It will confirm automatically within a few seconds of paying.');
+      }
+    }
+
     // Clean & validate bank approval reference (UTR) if provided
     let cleanUtr = String(approvalRefNo || '').trim().replace(/\D/g, '');
     let isProvisional = false;
 
-    if (cleanUtr) {
+    if (gatewayVerified) {
+      // Merchant account API already confirmed TXN_SUCCESS: use the bank RRN when well-formed,
+      // otherwise the gateway's own transaction id, and never downgrade to provisional.
+      if (!cleanUtr || !validateNpciUtr(cleanUtr).isValid) {
+        cleanUtr = `PTM_${String(gatewayReference || sessionId).replace(/[^A-Za-z0-9]/g, '')}`;
+      }
+    } else if (cleanUtr) {
       const utrCheck = validateNpciUtr(cleanUtr);
       if (!utrCheck.isValid) {
         throw new Error(utrCheck.reason || 'Invalid UPI Reference Number format');
@@ -2282,7 +2426,11 @@ export class CheckoutService {
 
     const payeeVpa = (session.app as any)?.customUpiId || 'merchant@directupi';
     const transactionId = `pay_upi_${cleanUtr}_${Date.now()}`;
-    const verificationType = cleanUtr && !isProvisional ? 'NPCI_BANK_UTR' : 'PROVISIONAL_INTENT';
+    const verificationType = gatewayVerified
+      ? 'PAYTM_BUSINESS_STATUS_API'
+      : cleanUtr && !isProvisional
+      ? 'NPCI_BANK_UTR'
+      : 'PROVISIONAL_INTENT';
     const riskLevel = isProvisional ? 'MEDIUM' : 'LOW';
 
     // Security gate: Provisional verifications (no valid UTR) set PENDING_VERIFICATION
@@ -2519,6 +2667,8 @@ export class CheckoutService {
   }
 
   private static inFlightVerifications = new Map<string, Promise<any>>();
+  /** Per-session throttle so customer polling never calls Paytm more than once every 2s. */
+  private static paytmLastStatusCheck = new Map<string, number>();
 
   /**
    * Internal-only capture path invoked exclusively after Razorpay/Stripe webhook HMAC verification.
@@ -3234,6 +3384,7 @@ export class CheckoutService {
       status: 'SUCCESS',
       txnRef: matchedSession.id,
       payerVpa: effectivePayerVpa,
+      _trustedBankAlert: true,
       rawPayload: {
         source: 'UPI_BANK_WEBHOOK',
         note,

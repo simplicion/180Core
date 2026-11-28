@@ -69,11 +69,27 @@ Every webhook dispatch includes four security headers:
 | Event Name | When Fired | Key Payload Fields |
 | :--- | :--- | :--- |
 | **`payment.captured`** | A one-time payment or checkout session is authorized and captured. | `orderId`, `sessionId`, `transactionId`, `amount`, `currency`, `customerEmail`, `metadata` |
+| **`payment.succeeded`** | Compatibility alias sent alongside every `payment.captured`. Handle one of the two, not both. | Same as `payment.captured` |
+| **`payment.pending_verification`** | Direct UPI only: the customer reported paying but no bank or Paytm confirmation exists yet. **Do not fulfil.** | `sessionId`, `amount`, `gateway`, `isProvisional: true`, `status` |
+| **`payment.revoked`** | A Direct UPI payment was disputed or voided by the developer. | `sessionId`, `status: "REVOKED"`, `reason` |
 | **`subscription.created`** | A new recurring subscription is activated (trial or paid). | `subscriptionId`, `planCode`, `amount`, `currentPeriodEnd`, `customerEmail`, `metadata` |
 | **`subscription.renewed`** | Monthly/annual subscription successfully auto-debited. | `subscriptionId`, `amount`, `nextBillingDate`, `transactionId` |
 | **`subscription.cancelled_by_customer`** | Customer cancels renewal through the customer portal. | `subscriptionId`, `planCode`, `cancelReason`, `currentPeriodEnd` |
 | **`coupon.redeemed`** | A promotional discount code was applied during checkout. | `couponCode`, `discountAmount`, `sessionId` |
 | **`identity.user.revoked`** | A user session was revoked from the Developer Console. | `userId`, `appId`, `revokedAt` |
+
+---
+
+### Direct UPI payload fields
+
+Direct UPI captures (`gateway: "DIRECT_UPI"`) also carry `utr` (bank reference), `payeeVpa`, `isProvisional` and `verificationType`:
+
+| `verificationType` | Confirmed by |
+| :--- | :--- |
+| `PAYTM_BUSINESS_STATUS_API` | Paytm's Transaction Status API for your connected Paytm for Business account |
+| `NPCI_BANK_UTR` | A bank credit alert forwarded to your Bank Listener webhook |
+
+See [Direct UPI & Paytm Business](./09-direct-upi-and-paytm-business.md) for the full flow.
 
 ---
 

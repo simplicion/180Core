@@ -3383,18 +3383,20 @@ export function CheckoutClient({
               </div>
             </div>
 
-            {/* QR Code (Opens 180 Pay Mobile Page) */}
-            {directUpiQrUrl && !awaitingUtr && (
+            {/* Dynamic UPI QR: scanned inside PhonePe / GPay / Paytm / BHIM (no browser intent, so no intent security block) */}
+            {(nativeUpiQrUrl || directUpiQrUrl) && !awaitingUtr && !isMobileDevice && (
               <div className="pt-2 flex flex-col items-center text-center space-y-2.5">
                 <span className="text-xs font-bold text-slate-700 dark:text-zinc-200">
-                  Scan QR with Google Lens or Phone Camera
+                  {nativeUpiQrUrl ? 'Scan with any UPI app' : 'Scan QR with Google Lens or Phone Camera'}
                 </span>
                 <p className="text-[11px] text-slate-500 dark:text-zinc-400 max-w-xs leading-relaxed">
-                  Opens 180 Pay on your phone so you can choose any installed UPI app and verify automatically.
+                  {nativeUpiQrUrl
+                    ? `Open PhonePe, Google Pay, Paytm or BHIM, tap Scan, and pay ₹${directUpiData.amount}. This page updates automatically.`
+                    : 'Opens 180 Pay on your phone so you can choose any installed UPI app and verify automatically.'}
                 </p>
                 <div className="p-2.5 bg-white rounded-2xl border border-slate-200 shadow-xs">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={directUpiQrUrl} alt="180 Pay Mobile Checkout QR Code" className="w-44 h-44 object-contain" />
+                  <img src={nativeUpiQrUrl || directUpiQrUrl} alt="UPI payment QR code" className="w-44 h-44 object-contain" />
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-mono text-slate-600 dark:text-zinc-400 bg-slate-100 dark:bg-zinc-800 px-2.5 py-1 rounded-lg">
@@ -3474,7 +3476,11 @@ export function CheckoutClient({
 
                 <div className="flex items-center gap-1.5 text-[11px] text-indigo-600 dark:text-indigo-400 font-medium">
                   <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
-                  <span>Listening for automatic bank verification...</span>
+                  <span>
+                    {directUpiData.autoVerification === 'PAYTM_BUSINESS_STATUS_API'
+                      ? 'Confirming with Paytm automatically...'
+                      : 'Listening for automatic bank verification...'}
+                  </span>
                 </div>
               </div>
             )}

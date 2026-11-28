@@ -1642,7 +1642,46 @@ export class DeveloperApiController {
         }
       }
 
-      const { encryptGatewaySecret } = await import('@workspace/payment-provider');
+      const {
+        encryptGatewaySecret,
+        decryptGatewaySecret,
+        isValidPaytmMid,
+        isValidPaytmMerchantKey,
+        testPaytmCredentials,
+      } = await import('@workspace/payment-provider');
+
+      // Paytm for Business connector: MID + Merchant Key + the merchant's Paytm Business VPA
+      let paytmWarning: string | undefined;
+      if (customGatewayType === 'PAYTM_BUSINESS') {
+        const mid = String(customGatewayKeyId || '').trim();
+        const switchingType = app.customGatewayType !== 'PAYTM_BUSINESS';
+        const merchantKey = customGatewaySecret
+          ? String(customGatewaySecret).trim()
+          : switchingType
+          ? ''
+          : decryptGatewaySecret((app as any).customGatewaySecret);
+
+        if (!trimmedUpiId) {
+          return res.status(400).json({ success: false, error: 'Enter your Paytm for Business UPI ID (shown on your Paytm Business QR) as the receiving UPI ID.' });
+        }
+        if (!isValidPaytmMid(mid)) {
+          return res.status(400).json({ success: false, error: 'Invalid Paytm MID. Copy the Production MID from Paytm for Business → Developer Settings → API Keys.' });
+        }
+        if (!isValidPaytmMerchantKey(merchantKey)) {
+          return res.status(400).json({ success: false, error: 'Enter your 16-character Paytm Production Merchant Key.' });
+        }
+        const probe = await testPaytmCredentials(mid, merchantKey);
+        if (probe.rejected) {
+          return res.status(400).json({
+            success: false,
+            error: `Paytm rejected these credentials (${probe.resultCode || 'no code'}: ${probe.message || 'unknown error'}). Check the MID and Merchant Key are the Production pair.`,
+          });
+        }
+        if (!probe.ok) {
+          paytmWarning = `Saved, but Paytm could not confirm the credentials right now (${probe.resultCode || 'no code'}: ${probe.message || 'no response'}). Use "Test connection" to retry.`;
+        }
+      }
+
       const updateData: any = {
         customGatewayType: customGatewayType || 'NONE',
         customGatewayKeyId: customGatewayKeyId || null,
@@ -1676,7 +1715,7 @@ export class DeveloperApiController {
       });
 
       invalidateAppResolveCache(app.id);
-      return res.json({ success: true, data: updated });
+      return res.json({ success: true, data: updated, ...(paytmWarning ? { warning: paytmWarning } : {}) });
     } catch (err: any) {
       console.error('[DeveloperApiController:saveGatewaySettings] Error:', err);
       return res.status(400).json({ success: false, error: err.message });
@@ -1764,6 +1803,22 @@ export class DeveloperApiController {
 
       if (!keyId || !resolvedSecret) {
         return res.status(400).json({ success: false, error: 'Both Key ID and Key Secret are required for verification' });
+      }
+
+      const { decryptGatewaySecret, testPaytmCredentials } = await import('@workspace/payment-provider');
+      resolvedSecret = decryptGatewaySecret(resolvedSecret);
+
+      if (gatewayType === 'PAYTM_BUSINESS') {
+        const probe = await testPaytmCredentials(String(keyId).trim(), String(resolvedSecret).trim());
+        if (probe.ok) {
+          return res.json({ success: true, message: 'Paytm for Business credentials verified. Payments will now auto-confirm via Paytm status API.' });
+        }
+        return res.status(400).json({
+          success: false,
+          error: probe.rejected
+            ? `Paytm rejected these credentials (${probe.resultCode || 'no code'}: ${probe.message || 'unknown error'}).`
+            : `Could not confirm with Paytm right now (${probe.resultCode || 'no code'}: ${probe.message || 'no response'}). Please retry.`,
+        });
       }
 
       if (gatewayType === 'RAZORPAY') {

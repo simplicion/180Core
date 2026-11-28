@@ -10,6 +10,7 @@ export * from './subscription/recurring-billing.engine';
 
 // Checkout Sessions & Controller
 export * from './checkout/checkout.service';
+export * from './checkout/paytm-business';
 export * from './checkout/checkout.controller';
 
 // Payouts
